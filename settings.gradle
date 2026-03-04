@@ -22,3 +22,12 @@ dependencyResolutionManagement {
 
 rootProject.name = "FlexMusicPlayer"
 include ':app'
+include ':feature_player'
+include ':feature_transcode'
+include ':feature_search'
+include ':feature_download'
+include ':core_player_sdk'
+include ':core_domain'
+include ':core_data'
+include ':core_network'
+include ':core_database'
