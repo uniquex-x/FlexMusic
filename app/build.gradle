@@ -2,12 +2,12 @@ apply plugin: 'com.android.application'
 
 android {
     namespace 'com.example.flexmusicplayer'
-    compileSdk 28
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.example.flexmusicplayer"
         minSdk 21
-        targetSdk 28
+        targetSdk 33
         versionCode 1
         versionName "1.0"
 
@@ -26,8 +26,9 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+//        coreLibraryDesugaringEnabled true
     }
     buildFeatures {
         viewBinding true
@@ -36,11 +37,13 @@ android {
 }
 
 dependencies {
-
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation libs.appcompat
     implementation libs.material
     implementation libs.constraintlayout
+//    implementation libs.desugar.jdk.libs
     testImplementation libs.junit
+    implementation "androidx.activity:activity:1.7.2"
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
     implementation project(path: ':feature_player')

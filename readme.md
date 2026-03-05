@@ -8,7 +8,7 @@ FlexMusic is a free music player, and support:
 
 ## Architecture
 ```
-                    app (仅依赖 feature 模块)
+                    app (rely on feature module)
                         |
          +-------------+-------------+-------------+
          |             |             |             |
@@ -16,7 +16,7 @@ FlexMusic is a free music player, and support:
          |             |             |             |
          +-------------+-------------+-------------+
                         |
-              core-player-sdk (仅依赖 core-domain)
+              core-player-sdk (rely on core-domain)
                         |
            +------------+------------+-----------+
            |            |            |           |
@@ -24,7 +24,7 @@ FlexMusic is a free music player, and support:
            |            |
            +------------+
                         |
-                  native (.so 库)
+                  native (.so lib)
  ```
 
  ### file dirctroy

@@ -1,3 +1,167 @@
 <resources>
-    <string name="app_name">FlexMusicPlayer</string>
+    <string name="app_name">FlexMusic</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_favorites">Favorites</string>
+    <string name="nav_recent">Recent</string>
+    <string name="nav_local">Local</string>
+    <string name="nav_playlists">Playlists</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home -->
+    <string name="home_title">Discover Music</string>
+    <string name="home_featured">Featured</string>
+    <string name="home_trending">Trending Now</string>
+    <string name="home_new_releases">New Releases</string>
+    <string name="home_recommended_for_you">Recommended for You</string>
+    <string name="home_top_playlists">Top Playlists</string>
+    <string name="home_genres">Genres</string>
+    <string name="home_artists">Artists</string>
+
+    <!-- Favorites -->
+    <string name="favorites_title">My Favorites</string>
+    <string name="favorites_empty">No favorites yet</string>
+    <string name="favorites_empty_description">Like songs to add them to your favorites</string>
+    <string name="added_to_favorites">Added to favorites</string>
+    <string name="removed_from_favorites">Removed from favorites</string>
+
+    <!-- Recent -->
+    <string name="recent_title">Recently Played</string>
+    <string name="recent_empty">No recent plays</string>
+    <string name="recent_empty_description">Start playing music to see your history</string>
+    <string name="recent_today">Today</string>
+    <string name="recent_yesterday">Yesterday</string>
+    <string name="recent_this_week">This Week</string>
+    <string name="recent_this_month">This Month</string>
+    <string name="recent_earlier">Earlier</string>
+
+    <!-- Local -->
+    <string name="local_title">Local Music</string>
+    <string name="local_songs">Songs</string>
+    <string name="local_albums">Albums</string>
+    <string name="local_artists">Artists</string>
+    <string name="local_empty">No local music</string>
+    <string name="local_empty_description">Add music files to your device to see them here</string>
+    <string name="local_scan">Scan for Music</string>
+    <string name="local_scanning">Scanning…</string>
+
+    <!-- Playlists -->
+    <string name="playlists_title">My Playlists</string>
+    <string name="playlists_empty">No playlists</string>
+    <string name="playlists_empty_description">Create a playlist to organize your music</string>
+    <string name="create_playlist">Create Playlist</string>
+    <string name="edit_playlist">Edit Playlist</string>
+    <string name="delete_playlist">Delete Playlist</string>
+    <string name="add_to_playlist">Add to Playlist</string>
+    <string name="playlist_name">Playlist Name</string>
+    <string name="playlist_created">Playlist created</string>
+    <string name="playlist_deleted">Playlist deleted</string>
+    <string name="songs_count">%d songs</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_audio">Audio</string>
+    <string name="settings_transcode">Transcode</string>
+    <string name="settings_download">Download</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_about">About</string>
+
+    <!-- Audio Settings -->
+    <string name="settings_audio_quality">Audio Quality</string>
+    <string name="settings_audio_quality_high">High</string>
+    <string name="settings_audio_quality_medium">Medium</string>
+    <string name="settings_audio_quality_low">Low</string>
+    <string name="settings_equalizer">Equalizer</string>
+    <string name="settings_crossfade">Crossfade</string>
+    <string name="settings_crossfade_off">Off</string>
+    <string name="settings_crossfade_seconds">%d seconds</string>
+
+    <!-- Transcode Settings -->
+    <string name="settings_transcode_enabled">Enable Transcoding</string>
+    <string name="settings_transcode_format">Output Format</string>
+    <string name="settings_transcode_format_mp3">MP3</string>
+    <string name="settings_transcode_format_vorbis">Vorbis</string>
+    <string name="settings_transcode_format_flac">FLAC</string>
+    <string name="settings_transcode_bitrate">Bitrate</string>
+    <string name="settings_transcode_bitrate_128">128 kbps</string>
+    <string name="settings_transcode_bitrate_192">192 kbps</string>
+    <string name="settings_transcode_bitrate_256">256 kbps</string>
+    <string name="settings_transcode_bitrate_320">320 kbps</string>
+    <string name="settings_transcode_sample_rate">Sample Rate</string>
+    <string name="settings_transcode_sample_rate_441">44.1 kHz</string>
+    <string name="settings_transcode_sample_rate_48">48 kHz</string>
+    <string name="settings_transcode_sample_rate_96">96 kHz</string>
+
+    <!-- Download Settings -->
+    <string name="settings_download_enabled">Enable Downloads</string>
+    <string name="settings_download_wifi_only">Download on Wi-Fi Only</string>
+    <string name="settings_download_quality">Download Quality</string>
+    <string name="settings_download_location">Download Location</string>
+    <string name="settings_clear_cache">Clear Cache</string>
+    <string name="settings_cache_size">Cache Size</string>
+
+    <!-- Appearance Settings -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_auto">Auto</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">System</string>
+
+    <!-- About -->
+    <string name="settings_version">Version</string>
+    <string name="settings_rate_app">Rate App</string>
+    <string name="settings_feedback">Send Feedback</string>
+    <string name="settings_privacy_policy">Privacy Policy</string>
+    <string name="settings_terms_of_service">Terms of Service</string>
+
+    <!-- Player -->
+    <string name="player_title">Now Playing</string>
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_next">Next</string>
+    <string name="player_previous">Previous</string>
+    <string name="player_shuffle">Shuffle</string>
+    <string name="player_shuffle_on">Shuffle On</string>
+    <string name="player_repeat">Repeat</string>
+    <string name="player_repeat_off">Repeat Off</string>
+    <string name="player_repeat_all">Repeat All</string>
+    <string name="player_repeat_one">Repeat One</string>
+    <string name="player_queue">Queue</string>
+    <string name="player_add_to_queue">Add to Queue</string>
+    <string name="player_lyrics">Lyrics</string>
+
+    <!-- Common -->
+    <string name="search">Search</string>
+    <string name="search_hint">Search for songs, artists, albums…</string>
+    <string name="more">More</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="download">Download</string>
+    <string name="downloaded">Downloaded</string>
+    <string name="downloading">Downloading…</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="done">Done</string>
+    <string name="loading">Loading…</string>
+    <string name="error">Error</string>
+    <string name="try_again">Try Again</string>
+    <string name="no_results">No results found</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_delete_playlist_title">Delete Playlist?</string>
+    <string name="dialog_delete_playlist_message">This action cannot be undone.</string>
+    <string name="dialog_delete_song_title">Delete Song?</string>
+    <string name="dialog_delete_song_message">This song will be removed from your device.</string>
+    <string name="dialog_clear_cache_title">Clear Cache?</string>
+    <string name="dialog_clear_cache_message">This will free up storage but you may need to download songs again.</string>
+
+    <!-- Time -->
+    <string name="time_seconds">%ds</string>
+    <string name="time_minutes">%d:%02d</string>
+    <string name="time_hours">%d:%02d:%02d</string>
 </resources>

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="140dp"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="12dp"
+    app:cardBackgroundColor="?attr/colorSurface"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="2dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <!-- Album Art -->
+        <ImageView
+            android:id="@+id/album_art"
+            android:layout_width="match_parent"
+            android:layout_height="140dp"
+            android:background="@color/primary_200"
+            android:contentDescription="@string/player_title"
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/Widget.FlexMusicPlayer.AlbumArt" />
+
+        <!-- Song Title -->
+        <TextView
+            android:id="@+id/song_title"
+            style="@style/TextAppearance.FlexMusicPlayer.SongTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            tools:text="Song Title" />
+
+        <!-- Artist Name -->
+        <TextView
+            android:id="@+id/artist_name"
+            style="@style/TextAppearance.FlexMusicPlayer.SongArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            tools:text="Artist Name" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

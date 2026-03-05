@@ -1,10 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <!-- Primary colors -->
+    <color name="primary_50">#E8EAF6</color>
+    <color name="primary_100">#C5CAE9</color>
+    <color name="primary_200">#9FA8DA</color>
+    <color name="primary_300">#7986CB</color>
+    <color name="primary_400">#5C6BC0</color>
+    <color name="primary_500">#3F51B5</color>
+    <color name="primary_600">#3949AB</color>
+    <color name="primary_700">#303F9F</color>
+    <color name="primary_800">#283593</color>
+    <color name="primary_900">#1A237E</color>
+
+    <!-- Secondary colors -->
+    <color name="secondary_50">#FCE4EC</color>
+    <color name="secondary_100">#F8BBD0</color>
+    <color name="secondary_200">#F48FB1</color>
+    <color name="secondary_300">#F06292</color>
+    <color name="secondary_400">#EC407A</color>
+    <color name="secondary_500">#E91E63</color>
+    <color name="secondary_600">#D81B60</color>
+    <color name="secondary_700">#C2185B</color>
+    <color name="secondary_800">#AD1457</color>
+    <color name="secondary_900">#880E4F</color>
+
+    <!-- Neutral colors -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
+    <color name="gray_50">#FAFAFA</color>
+    <color name="gray_100">#F5F5F5</color>
+    <color name="gray_200">#EEEEEE</color>
+    <color name="gray_300">#E0E0E0</color>
+    <color name="gray_400">#BDBDBD</color>
+    <color name="gray_500">#9E9E9E</color>
+    <color name="gray_600">#757575</color>
+    <color name="gray_700">#616161</color>
+    <color name="gray_800">#424242</color>
+    <color name="gray_900">#212121</color>
+
+    <!-- Custom colors -->
+    <color name="accent_color">#FF6D00</color>
+    <color name="success_color">#4CAF50</color>
+    <color name="error_color">#F44336</color>
+    <color name="warning_color">#FF9800</color>
+
+    <!-- Background colors -->
+    <color name="background_light">#FAFAFA</color>
+    <color name="background_dark">#121212</color>
+    <color name="card_background_light">#FFFFFF</color>
+    <color name="card_background_dark">#1E1E1E</color>
+
+    <!-- Text colors -->
+    <color name="text_primary_light">#212121</color>
+    <color name="text_secondary_light">#757575</color>
+    <color name="text_primary_dark">#FFFFFF</color>
+    <color name="text_secondary_dark">#B0B0B0</color>
+
+    <!-- Player mini bar -->
+    <color name="player_bar_background">#1E1E1E</color>
+    <color name="player_bar_gradient_start">#1E1E1E</color>
+    <color name="player_bar_gradient_end">#2C2C2C</color>
+
+    <!-- Divider -->
+    <color name="divider_light">#E0E0E0</color>
+    <color name="divider_dark">#2C2C2C</color>
 </resources>
