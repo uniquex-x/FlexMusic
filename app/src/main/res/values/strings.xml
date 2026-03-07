@@ -2,7 +2,8 @@
     <string name="app_name">FlexMusic</string>
 
     <!-- Navigation -->
-    <string name="nav_home">Home</string>
+    <string name="nav_main_page">首页</string>
+    <string name="nav_my">我的</string>
     <string name="nav_favorites">Favorites</string>
     <string name="nav_recent">Recent</string>
     <string name="nav_local">Local</string>
@@ -13,6 +14,10 @@
     <string name="home_title">Discover Music</string>
     <string name="home_featured">Featured</string>
     <string name="home_trending">Trending Now</string>
+    <string name="home_trending_card">trending</string>
+    <string name="home_daily_recommend">daily\nrecommend</string>
+    <string name="home_top_list">top list</string>
+    <string name="home_recently_played">- recently played</string>
     <string name="home_new_releases">New Releases</string>
     <string name="home_recommended_for_you">Recommended for You</string>
     <string name="home_top_playlists">Top Playlists</string>
@@ -131,6 +136,25 @@
     <string name="player_queue">Queue</string>
     <string name="player_add_to_queue">Add to Queue</string>
     <string name="player_lyrics">Lyrics</string>
+
+    <!-- Main Page -->
+    <string name="main_page_title">My Music</string>
+    <string name="main_page_user_info">User Info</string>
+    <string name="main_page_favorites">Favorites</string>
+    <string name="main_page_recent">Recent</string>
+    <string name="main_page_local">Local</string>
+    <string name="main_page_transcode">Transcode</string>
+    <string name="main_page_playlists_title">My Playlists</string>
+
+    <!-- Local Upload -->
+    <string name="local_upload">Upload Offline Songs</string>
+    <string name="local_upload_success">Upload successful</string>
+    <string name="local_upload_hint">Select audio files to upload</string>
+
+    <!-- Settings - Language -->
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese">简体中文</string>
+    <string name="settings_language_changed">Language changed. Restart the app to apply.</string>
 
     <!-- Common -->
     <string name="search">Search</string>

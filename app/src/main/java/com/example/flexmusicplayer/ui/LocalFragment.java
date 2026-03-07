@@ -5,6 +5,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -17,6 +19,7 @@ import com.example.flexmusicplayer.model.Album;
 import com.example.flexmusicplayer.model.Artist;
 import com.example.flexmusicplayer.model.Song;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayout;
 
 import java.util.ArrayList;
@@ -30,6 +33,7 @@ public class LocalFragment extends Fragment {
 
     private TabLayout tabLayout;
     private MaterialButton scanButton;
+    private MaterialButton uploadButton;
     private RecyclerView songsRecycler;
     private RecyclerView albumsRecycler;
     private RecyclerView artistsRecycler;
@@ -42,11 +46,23 @@ public class LocalFragment extends Fragment {
 
     private int currentTab = TAB_SONGS;
 
+    // File picker launcher for uploading offline songs
+    private ActivityResultLauncher<String[]> filePickerLauncher;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_local, container, false);
+
+        // Register file picker before view is created
+        filePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.OpenMultipleDocuments(),
+                uris -> {
+                    if (uris != null && !uris.isEmpty()) {
+                        handleUploadedFiles(uris);
+                    }
+                });
 
         initViews(view);
         setupClickListeners();
@@ -59,6 +75,7 @@ public class LocalFragment extends Fragment {
     private void initViews(View view) {
         tabLayout = view.findViewById(R.id.tab_layout);
         scanButton = view.findViewById(R.id.scan_button);
+        uploadButton = view.findViewById(R.id.upload_button);
         songsRecycler = view.findViewById(R.id.songs_recycler);
         albumsRecycler = view.findViewById(R.id.albums_recycler);
         artistsRecycler = view.findViewById(R.id.artists_recycler);
@@ -89,6 +106,20 @@ public class LocalFragment extends Fragment {
         scanButton.setOnClickListener(v -> {
             scanForMusic();
         });
+
+        uploadButton.setOnClickListener(v -> {
+            // Open file picker for audio files
+            filePickerLauncher.launch(new String[]{"audio/*"});
+        });
+    }
+
+    private void handleUploadedFiles(java.util.List<android.net.Uri> uris) {
+        // TODO: Implement actual file import logic (copy/index the selected audio files)
+        Snackbar.make(requireView(),
+                getString(R.string.local_upload_success) + " (" + uris.size() + " files)",
+                Snackbar.LENGTH_SHORT).show();
+        // Reload list after import
+        loadLocalMusic();
     }
 
     private void setupTabLayout() {

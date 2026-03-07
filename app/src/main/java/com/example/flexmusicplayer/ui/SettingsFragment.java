@@ -2,6 +2,7 @@ package com.example.flexmusicplayer.ui;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -11,14 +12,25 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
+import androidx.core.os.LocaleListCompat;
 import androidx.fragment.app.Fragment;
 
 import com.example.flexmusicplayer.R;
-import com.example.flexmusicplayer.model.TranscodeSettings;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.snackbar.Snackbar;
 
 public class SettingsFragment extends Fragment {
+
+    private static final String PREFS_NAME = "FlexMusicPrefs";
+    private static final String KEY_THEME = "theme";
+    private static final String KEY_LANGUAGE = "language";
+    private static final String THEME_LIGHT = "light";
+    private static final String THEME_DARK = "dark";
+    private static final String LANG_EN = "en";
+    private static final String LANG_ZH = "zh";
 
     // Audio Settings
     private View audioQualityItem;
@@ -27,38 +39,32 @@ public class SettingsFragment extends Fragment {
     private TextView audioQualityValue;
     private TextView crossfadeValue;
 
-    // Transcode Settings
-    private SwitchCompat transcodeEnabledSwitch;
-    private View transcodeFormatItem;
-    private View transcodeBitrateItem;
-    private View transcodeSampleRateItem;
-    private TextView transcodeFormatValue;
-    private TextView transcodeBitrateValue;
-    private TextView transcodeSampleRateValue;
-
     // Download Settings
     private SwitchCompat downloadEnabledSwitch;
     private SwitchCompat wifiOnlySwitch;
     private TextView cacheSizeValue;
     private MaterialButton clearCacheButton;
 
-    // Appearance Settings
-    private View themeItem;
-    private View languageItem;
+    // Appearance Settings - Theme
+    private MaterialButtonToggleGroup themeToggleGroup;
     private TextView themeValue;
+
+    // Appearance Settings - Language
+    private MaterialButtonToggleGroup languageToggleGroup;
     private TextView languageValue;
 
     // About
     private View rateAppItem;
     private View feedbackItem;
 
-    private TranscodeSettings transcodeSettings;
+    private SharedPreferences prefs;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_settings, container, false);
+        prefs = requireContext().getSharedPreferences(PREFS_NAME, 0);
 
         initViews(view);
         loadSettings();
@@ -75,102 +81,98 @@ public class SettingsFragment extends Fragment {
         audioQualityValue = view.findViewById(R.id.audio_quality_value);
         crossfadeValue = view.findViewById(R.id.crossfade_value);
 
-        // Transcode Settings
-        transcodeEnabledSwitch = view.findViewById(R.id.transcode_enabled_switch);
-        transcodeFormatItem = view.findViewById(R.id.transcode_format_item);
-        transcodeBitrateItem = view.findViewById(R.id.transcode_bitrate_item);
-        transcodeSampleRateItem = view.findViewById(R.id.transcode_sample_rate_item);
-        transcodeFormatValue = view.findViewById(R.id.transcode_format_value);
-        transcodeBitrateValue = view.findViewById(R.id.transcode_bitrate_value);
-        transcodeSampleRateValue = view.findViewById(R.id.transcode_sample_rate_value);
-
         // Download Settings
         downloadEnabledSwitch = view.findViewById(R.id.download_enabled_switch);
         wifiOnlySwitch = view.findViewById(R.id.wifi_only_switch);
         cacheSizeValue = view.findViewById(R.id.cache_size_value);
         clearCacheButton = view.findViewById(R.id.clear_cache_button);
 
-        // Appearance Settings
-        themeItem = view.findViewById(R.id.theme_item);
-        languageItem = view.findViewById(R.id.language_item);
+        // Appearance Settings - Theme
+        themeToggleGroup = view.findViewById(R.id.theme_toggle_group);
         themeValue = view.findViewById(R.id.theme_value);
+
+        // Appearance Settings - Language
+        languageToggleGroup = view.findViewById(R.id.language_toggle_group);
         languageValue = view.findViewById(R.id.language_value);
 
         // About
         rateAppItem = view.findViewById(R.id.rate_app_item);
         feedbackItem = view.findViewById(R.id.feedback_item);
-
-        // Initialize transcode settings
-        transcodeSettings = new TranscodeSettings();
     }
 
     private void loadSettings() {
-        // TODO: Load actual settings from SharedPreferences
-
-        // Audio Quality
+        // Audio
         audioQualityValue.setText("High");
         crossfadeValue.setText("Off");
 
-        // Transcode Settings
-        transcodeEnabledSwitch.setChecked(transcodeSettings.isEnabled());
-        updateTranscodeSettingsUI();
-
-        // Download Settings
-        downloadEnabledSwitch.setChecked(true);
-        wifiOnlySwitch.setChecked(true);
+        // Download
+        downloadEnabledSwitch.setChecked(prefs.getBoolean("download_enabled", true));
+        wifiOnlySwitch.setChecked(prefs.getBoolean("wifi_only", true));
         cacheSizeValue.setText("0 MB");
 
-        // Appearance
-        themeValue.setText("Auto");
-        languageValue.setText("System");
+        // Theme
+        String savedTheme = prefs.getString(KEY_THEME, THEME_LIGHT);
+        if (THEME_DARK.equals(savedTheme)) {
+            themeToggleGroup.check(R.id.theme_dark_btn);
+            themeValue.setText(R.string.settings_theme_dark);
+        } else {
+            themeToggleGroup.check(R.id.theme_light_btn);
+            themeValue.setText(R.string.settings_theme_light);
+        }
+
+        // Language
+        String savedLang = prefs.getString(KEY_LANGUAGE, LANG_EN);
+        if (LANG_ZH.equals(savedLang)) {
+            languageToggleGroup.check(R.id.lang_chinese_btn);
+            languageValue.setText(R.string.settings_language_chinese);
+        } else {
+            languageToggleGroup.check(R.id.lang_english_btn);
+            languageValue.setText(R.string.settings_language_english);
+        }
     }
 
     private void setupClickListeners() {
-        // Audio Settings
+        // Audio
         audioQualityItem.setOnClickListener(v -> showAudioQualityDialog());
-        equalizerItem.setOnClickListener(v -> {
-            // TODO: Open equalizer
-        });
+        equalizerItem.setOnClickListener(v -> { /* TODO: Open equalizer */ });
         crossfadeItem.setOnClickListener(v -> showCrossfadeDialog());
 
-        // Transcode Settings
-        transcodeEnabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            transcodeSettings.setEnabled(isChecked);
-            updateTranscodeSettingsUI();
-            saveTranscodeSettings();
-        });
-
-        transcodeFormatItem.setOnClickListener(v -> showTranscodeFormatDialog());
-        transcodeBitrateItem.setOnClickListener(v -> showTranscodeBitrateDialog());
-        transcodeSampleRateItem.setOnClickListener(v -> showTranscodeSampleRateDialog());
-
-        // Download Settings
-        downloadEnabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            // TODO: Save download enabled setting
-        });
-
-        wifiOnlySwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            // TODO: Save wifi only setting
-        });
-
+        // Download
+        downloadEnabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) ->
+                prefs.edit().putBoolean("download_enabled", isChecked).apply());
+        wifiOnlySwitch.setOnCheckedChangeListener((buttonView, isChecked) ->
+                prefs.edit().putBoolean("wifi_only", isChecked).apply());
         clearCacheButton.setOnClickListener(v -> showClearCacheDialog());
 
-        // Appearance Settings
-        themeItem.setOnClickListener(v -> showThemeDialog());
-        languageItem.setOnClickListener(v -> {
-            // TODO: Show language dialog
+        // Theme toggle
+        themeToggleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            if (checkedId == R.id.theme_light_btn) {
+                applyTheme(THEME_LIGHT);
+            } else if (checkedId == R.id.theme_dark_btn) {
+                applyTheme(THEME_DARK);
+            }
+        });
+
+        // Language toggle
+        languageToggleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            if (checkedId == R.id.lang_english_btn) {
+                applyLanguage(LANG_EN);
+            } else if (checkedId == R.id.lang_chinese_btn) {
+                applyLanguage(LANG_ZH);
+            }
         });
 
         // About
         rateAppItem.setOnClickListener(v -> {
             try {
-                Intent intent = new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("market://details?id=" + requireContext().getPackageName()));
-                startActivity(intent);
+                startActivity(new Intent(Intent.ACTION_VIEW,
+                        Uri.parse("market://details?id=" + requireContext().getPackageName())));
             } catch (Exception e) {
-                Intent intent = new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://play.google.com/store/apps/details?id=" + requireContext().getPackageName()));
-                startActivity(intent);
+                startActivity(new Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://play.google.com/store/apps/details?id="
+                                + requireContext().getPackageName())));
             }
         });
 
@@ -182,153 +184,67 @@ public class SettingsFragment extends Fragment {
         });
     }
 
+    /** 应用主题：Light 或 Dark */
+    private void applyTheme(String theme) {
+        prefs.edit().putString(KEY_THEME, theme).apply();
+        if (THEME_DARK.equals(theme)) {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+            themeValue.setText(R.string.settings_theme_dark);
+        } else {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+            themeValue.setText(R.string.settings_theme_light);
+        }
+    }
+
+    /** 应用语言：en（English）或 zh（简体中文） */
+    private void applyLanguage(String lang) {
+        String previousLang = prefs.getString(KEY_LANGUAGE, LANG_EN);
+        if (previousLang.equals(lang)) return;
+
+        prefs.edit().putString(KEY_LANGUAGE, lang).apply();
+
+        LocaleListCompat appLocale = LANG_ZH.equals(lang)
+                ? LocaleListCompat.forLanguageTags("zh-CN")
+                : LocaleListCompat.forLanguageTags("en");
+        AppCompatDelegate.setApplicationLocales(appLocale);
+
+        if (LANG_ZH.equals(lang)) {
+            languageValue.setText(R.string.settings_language_chinese);
+        } else {
+            languageValue.setText(R.string.settings_language_english);
+        }
+
+        Snackbar.make(requireView(), R.string.settings_language_changed, Snackbar.LENGTH_LONG).show();
+    }
+
     private void showAudioQualityDialog() {
         String[] qualities = {"Low", "Medium", "High"};
-        int currentSelection = 2; // High
-
         new AlertDialog.Builder(requireContext())
                 .setTitle(R.string.settings_audio_quality)
-                .setSingleChoiceItems(qualities, currentSelection, (dialog, which) -> {
+                .setSingleChoiceItems(qualities, 2, (dialog, which) -> {
                     audioQualityValue.setText(qualities[which]);
                     dialog.dismiss();
-                    // TODO: Save setting
                 })
                 .show();
     }
 
     private void showCrossfadeDialog() {
         String[] options = {"Off", "2s", "4s", "6s", "8s", "10s"};
-        int currentSelection = 0; // Off
-
         new AlertDialog.Builder(requireContext())
                 .setTitle(R.string.settings_crossfade)
-                .setSingleChoiceItems(options, currentSelection, (dialog, which) -> {
+                .setSingleChoiceItems(options, 0, (dialog, which) -> {
                     crossfadeValue.setText(options[which]);
                     dialog.dismiss();
-                    // TODO: Save setting
                 })
                 .show();
-    }
-
-    private void updateTranscodeSettingsUI() {
-        boolean enabled = transcodeSettings.isEnabled();
-
-        transcodeFormatItem.setEnabled(enabled);
-        transcodeFormatItem.setAlpha(enabled ? 1.0f : 0.5f);
-        transcodeBitrateItem.setEnabled(enabled);
-        transcodeBitrateItem.setAlpha(enabled ? 1.0f : 0.5f);
-        transcodeSampleRateItem.setEnabled(enabled);
-        transcodeSampleRateItem.setAlpha(enabled ? 1.0f : 0.5f);
-
-        if (enabled) {
-            transcodeFormatValue.setText(getFormatDisplayName(transcodeSettings.getOutputFormat()));
-            transcodeBitrateValue.setText(transcodeSettings.getBitrate().getDisplayName());
-            transcodeSampleRateValue.setText(transcodeSettings.getSampleRate().getDisplayName());
-        }
-    }
-
-    private String getFormatDisplayName(TranscodeSettings.OutputFormat format) {
-        switch (format) {
-            case MP3:
-                return getString(R.string.settings_transcode_format_mp3);
-            case VORBIS:
-                return getString(R.string.settings_transcode_format_vorbis);
-            case FLAC:
-                return getString(R.string.settings_transcode_format_flac);
-            default:
-                return "MP3";
-        }
-    }
-
-    private void showTranscodeFormatDialog() {
-        String[] formats = {
-                getString(R.string.settings_transcode_format_mp3),
-                getString(R.string.settings_transcode_format_vorbis),
-                getString(R.string.settings_transcode_format_flac)
-        };
-        int currentSelection = transcodeSettings.getOutputFormat().ordinal();
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle(R.string.settings_transcode_format)
-                .setSingleChoiceItems(formats, currentSelection, (dialog, which) -> {
-                    TranscodeSettings.OutputFormat format = TranscodeSettings.OutputFormat.values()[which];
-                    transcodeSettings.setOutputFormat(format);
-                    transcodeFormatValue.setText(formats[which]);
-                    dialog.dismiss();
-                    saveTranscodeSettings();
-                })
-                .show();
-    }
-
-    private void showTranscodeBitrateDialog() {
-        TranscodeSettings.Bitrate[] bitrates = TranscodeSettings.Bitrate.values();
-        String[] displayNames = new String[bitrates.length];
-        for (int i = 0; i < bitrates.length; i++) {
-            displayNames[i] = bitrates[i].getDisplayName();
-        }
-        int currentSelection = transcodeSettings.getBitrate().ordinal();
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle(R.string.settings_transcode_bitrate)
-                .setSingleChoiceItems(displayNames, currentSelection, (dialog, which) -> {
-                    transcodeSettings.setBitrate(bitrates[which]);
-                    transcodeBitrateValue.setText(displayNames[which]);
-                    dialog.dismiss();
-                    saveTranscodeSettings();
-                })
-                .show();
-    }
-
-    private void showTranscodeSampleRateDialog() {
-        TranscodeSettings.SampleRate[] sampleRates = TranscodeSettings.SampleRate.values();
-        String[] displayNames = new String[sampleRates.length];
-        for (int i = 0; i < sampleRates.length; i++) {
-            displayNames[i] = sampleRates[i].getDisplayName();
-        }
-        int currentSelection = transcodeSettings.getSampleRate().ordinal();
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle(R.string.settings_transcode_sample_rate)
-                .setSingleChoiceItems(displayNames, currentSelection, (dialog, which) -> {
-                    transcodeSettings.setSampleRate(sampleRates[which]);
-                    transcodeSampleRateValue.setText(displayNames[which]);
-                    dialog.dismiss();
-                    saveTranscodeSettings();
-                })
-                .show();
-    }
-
-    private void saveTranscodeSettings() {
-        // TODO: Save to SharedPreferences
     }
 
     private void showClearCacheDialog() {
         new AlertDialog.Builder(requireContext())
-                .setTitle(R.string.dialog_clear_cache_title)
-                .setMessage(R.string.dialog_clear_cache_message)
-                .setPositiveButton(R.string.confirm, (dialog, which) -> {
-                    // TODO: Clear cache
-                    cacheSizeValue.setText("0 MB");
-                })
+                .setTitle(R.string.settings_clear_cache)
+                .setMessage("Clear all cached data?")
+                .setPositiveButton(R.string.confirm, (dialog, which) -> cacheSizeValue.setText("0 MB"))
                 .setNegativeButton(R.string.cancel, null)
-                .show();
-    }
-
-    private void showThemeDialog() {
-        String[] themes = {
-                getString(R.string.settings_theme_light),
-                getString(R.string.settings_theme_dark),
-                getString(R.string.settings_theme_auto)
-        };
-        int currentSelection = 2; // Auto
-
-        new AlertDialog.Builder(requireContext())
-                .setTitle(R.string.settings_theme)
-                .setSingleChoiceItems(themes, currentSelection, (dialog, which) -> {
-                    themeValue.setText(themes[which]);
-                    dialog.dismiss();
-                    // TODO: Apply theme
-                })
                 .show();
     }
 }

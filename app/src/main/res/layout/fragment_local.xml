@@ -21,16 +21,41 @@
             app:title="@string/local_title"
             app:titleTextColor="?attr/colorOnPrimary">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/scan_button"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="end"
-                android:layout_marginEnd="16dp"
-                android:text="@string/local_scan"
-                app:icon="@drawable/ic_search"
-                app:iconGravity="textStart"
-                style="@style/Widget.MaterialComponents.Button.TextButton" />
+                android:orientation="horizontal"
+                android:layout_marginEnd="8dp">
+
+                <!-- Upload Offline Songs Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/upload_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:text="@string/local_upload"
+                    android:textSize="12sp"
+                    app:icon="@drawable/ic_upload"
+                    app:iconGravity="textStart"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:textColor="?attr/colorOnPrimary"
+                    app:iconTint="?attr/colorOnPrimary" />
+
+                <!-- Scan Music Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/scan_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/local_scan"
+                    android:textSize="12sp"
+                    app:icon="@drawable/ic_search"
+                    app:iconGravity="textStart"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:textColor="?attr/colorOnPrimary"
+                    app:iconTint="?attr/colorOnPrimary" />
+
+            </LinearLayout>
 
         </com.google.android.material.appbar.MaterialToolbar>
 

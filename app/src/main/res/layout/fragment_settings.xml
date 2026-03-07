@@ -137,132 +137,6 @@
             </com.google.android.material.card.MaterialCardView>
 
             <!-- Transcode Settings Section -->
-            <TextView
-                android:id="@+id/transcode_title"
-                style="@style/TextAppearance.FlexMusicPlayer.SectionTitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_marginTop="24dp"
-                android:layout_marginEnd="16dp"
-                android:text="@string/settings_transcode" />
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_margin="8dp"
-                app:cardBackgroundColor="?attr/colorSurface"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="1dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <!-- Enable Transcoding -->
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/transcode_enabled_switch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/settings_transcode_enabled"
-                        android:textColor="?attr/colorOnSurface"
-                        android:textSize="16sp"
-                        app:switchPadding="16dp" />
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginBottom="16dp"
-                        android:background="?attr/dividerVertical" />
-
-                    <!-- Output Format -->
-                    <LinearLayout
-                        android:id="@+id/transcode_format_item"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:orientation="horizontal"
-                        android:padding="8dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_transcode_format"
-                            android:textColor="?attr/colorOnSurface"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/transcode_format_value"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="MP3"
-                            android:textColor="?attr/colorOnSurface"
-                            android:alpha="0.6" />
-
-                    </LinearLayout>
-
-                    <!-- Bitrate -->
-                    <LinearLayout
-                        android:id="@+id/transcode_bitrate_item"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:orientation="horizontal"
-                        android:padding="8dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_transcode_bitrate"
-                            android:textColor="?attr/colorOnSurface"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/transcode_bitrate_value"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="256 kbps"
-                            android:textColor="?attr/colorOnSurface"
-                            android:alpha="0.6" />
-
-                    </LinearLayout>
-
-                    <!-- Sample Rate -->
-                    <LinearLayout
-                        android:id="@+id/transcode_sample_rate_item"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:orientation="horizontal"
-                        android:padding="8dp">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/settings_transcode_sample_rate"
-                            android:textColor="?attr/colorOnSurface"
-                            android:textSize="16sp" />
-
-                        <TextView
-                            android:id="@+id/transcode_sample_rate_value"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="44.1 kHz"
-                            android:textColor="?attr/colorOnSurface"
-                            android:alpha="0.6" />
-
-                    </LinearLayout>
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
             <!-- Download Settings Section -->
             <TextView
                 android:id="@+id/download_title"
@@ -383,25 +257,60 @@
                         android:id="@+id/theme_item"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
                         android:orientation="horizontal"
-                        android:padding="16dp">
+                        android:padding="16dp"
+                        android:gravity="center_vertical">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/settings_theme"
-                            android:textColor="?attr/colorOnSurface"
-                            android:textSize="16sp" />
+                            android:orientation="vertical">
 
-                        <TextView
-                            android:id="@+id/theme_value"
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_theme"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:id="@+id/theme_value"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:alpha="0.6"
+                                android:text="Light"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="13sp" />
+
+                        </LinearLayout>
+
+                        <!-- Theme toggle buttons -->
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/theme_toggle_group"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Auto"
-                            android:textColor="?attr/colorOnSurface"
-                            android:alpha="0.6" />
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/theme_light_btn"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:text="@string/settings_theme_light"
+                                android:textSize="12sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/theme_dark_btn"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:text="@string/settings_theme_dark"
+                                android:textSize="12sp" />
+
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
 
                     </LinearLayout>
 
@@ -410,25 +319,60 @@
                         android:id="@+id/language_item"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
                         android:orientation="horizontal"
-                        android:padding="16dp">
+                        android:padding="16dp"
+                        android:gravity="center_vertical">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/settings_language"
-                            android:textColor="?attr/colorOnSurface"
-                            android:textSize="16sp" />
+                            android:orientation="vertical">
 
-                        <TextView
-                            android:id="@+id/language_value"
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_language"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:id="@+id/language_value"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:alpha="0.6"
+                                android:text="English"
+                                android:textColor="?attr/colorOnSurface"
+                                android:textSize="13sp" />
+
+                        </LinearLayout>
+
+                        <!-- Language toggle buttons -->
+                        <com.google.android.material.button.MaterialButtonToggleGroup
+                            android:id="@+id/language_toggle_group"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="System"
-                            android:textColor="?attr/colorOnSurface"
-                            android:alpha="0.6" />
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/lang_english_btn"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:text="EN"
+                                android:textSize="12sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/lang_chinese_btn"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:text="中文"
+                                android:textSize="12sp" />
+
+                        </com.google.android.material.button.MaterialButtonToggleGroup>
 
                     </LinearLayout>
 

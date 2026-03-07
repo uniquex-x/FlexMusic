@@ -1,23 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:id="@+id/nav_home"
+        android:id="@+id/nav_main_page"
         android:icon="@drawable/ic_home"
-        android:title="@string/nav_home" />
+        android:title="@string/nav_main_page" />
     <item
-        android:id="@+id/nav_favorites"
-        android:icon="@drawable/ic_favorite"
-        android:title="@string/nav_favorites" />
-    <item
-        android:id="@+id/nav_recent"
-        android:icon="@drawable/ic_recent"
-        android:title="@string/nav_recent" />
-    <item
-        android:id="@+id/nav_local"
-        android:icon="@drawable/ic_local"
-        android:title="@string/nav_local" />
-    <item
-        android:id="@+id/nav_playlists"
-        android:icon="@drawable/ic_playlist"
-        android:title="@string/nav_playlists" />
+        android:id="@+id/nav_my"
+        android:icon="@drawable/ic_person"
+        android:title="@string/nav_my" />
 </menu>

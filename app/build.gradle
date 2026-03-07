@@ -46,5 +46,6 @@ dependencies {
     implementation "androidx.activity:activity:1.7.2"
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
-    implementation project(path: ':feature_player')
+    implementation project(":core_player_sdk")
+    implementation project(":feature_player")
 }

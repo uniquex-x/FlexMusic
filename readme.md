@@ -27,8 +27,8 @@ FlexMusic is a free music player, and support:
                   native (.so lib)
  ```
 
- ### file dirctroy
- - java层：
+ ### File Directory
+ - java layer：
  ```
   Android 模块：
 ├── app/                           // 应用壳（仅组装）
@@ -42,7 +42,7 @@ FlexMusic is a free music player, and support:
 ├── core-network/                  // 网络层（API + 网络请求）
 └── core-database/                 // 数据库层（Room）
 ```
-- native层：
+- native layer：
 ```
 native/
  ├── core/                          // 基础设施层
@@ -86,3 +86,6 @@ native/
      └── soxr/                      // 高质量重采样
 ```
 
+## Dependency Library
+- ffmpeg8.0
+- 

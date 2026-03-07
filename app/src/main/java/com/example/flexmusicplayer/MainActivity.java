@@ -1,12 +1,13 @@
 package com.example.flexmusicplayer;
 
-import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
 
@@ -14,17 +15,22 @@ import com.example.flexmusicplayer.databinding.ActivityMainBinding;
 import com.example.flexmusicplayer.ui.FavoritesFragment;
 import com.example.flexmusicplayer.ui.HomeFragment;
 import com.example.flexmusicplayer.ui.LocalFragment;
-import com.example.flexmusicplayer.ui.PlaylistsFragment;
+import com.example.flexmusicplayer.ui.MyFragment;
 import com.example.flexmusicplayer.ui.RecentFragment;
 import com.example.flexmusicplayer.ui.SettingsFragment;
+import com.example.flexmusicplayer.ui.TranscodeFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements MyFragment.NavigationCallback {
 
+    private static final String PREFS_NAME = "FlexMusicPrefs";
     private ActivityMainBinding binding;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // 恢复已保存的主题
+        applySavedTheme();
+
         super.onCreate(savedInstanceState);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
@@ -32,11 +38,27 @@ public class MainActivity extends AppCompatActivity {
         setupBottomNavigation();
         setupToolbar();
 
-        // Load home fragment by default
+        // 默认加载首页
         if (savedInstanceState == null) {
             loadFragment(new HomeFragment());
-            binding.bottomNavigation.setSelectedItemId(R.id.nav_home);
+            binding.bottomNavigation.setSelectedItemId(R.id.nav_main_page);
         }
+    }
+
+    private void applySavedTheme() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, 0);
+        String theme = prefs.getString("theme", "light");
+        if ("dark".equals(theme)) {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+        } else {
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        }
+    }
+
+    private MyFragment createMyFragment() {
+        MyFragment fragment = new MyFragment();
+        fragment.setNavigationCallback(this);
+        return fragment;
     }
 
     private void setupBottomNavigation() {
@@ -46,20 +68,11 @@ public class MainActivity extends AppCompatActivity {
                     public boolean onNavigationItemSelected(@NonNull MenuItem item) {
                         int itemId = item.getItemId();
 
-                        if (itemId == R.id.nav_home) {
+                        if (itemId == R.id.nav_main_page) {
                             loadFragment(new HomeFragment());
                             return true;
-                        } else if (itemId == R.id.nav_favorites) {
-                            loadFragment(new FavoritesFragment());
-                            return true;
-                        } else if (itemId == R.id.nav_recent) {
-                            loadFragment(new RecentFragment());
-                            return true;
-                        } else if (itemId == R.id.nav_local) {
-                            loadFragment(new LocalFragment());
-                            return true;
-                        } else if (itemId == R.id.nav_playlists) {
-                            loadFragment(new PlaylistsFragment());
+                        } else if (itemId == R.id.nav_my) {
+                            loadFragment(createMyFragment());
                             return true;
                         }
 
@@ -96,21 +109,50 @@ public class MainActivity extends AppCompatActivity {
 
     private void openSettings() {
         loadFragment(new SettingsFragment());
-        // Hide bottom navigation when in settings
         binding.bottomNavigation.setVisibility(android.view.View.GONE);
     }
 
     @Override
     public void onBackPressed() {
-        // If in settings, show bottom navigation and go to home
         Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
         if (currentFragment instanceof SettingsFragment) {
             binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
             loadFragment(new HomeFragment());
-            binding.bottomNavigation.setSelectedItemId(R.id.nav_home);
+            binding.bottomNavigation.setSelectedItemId(R.id.nav_main_page);
+        } else if (!(currentFragment instanceof HomeFragment)) {
+            // 非首页时，返回键回到首页
+            binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+            loadFragment(new HomeFragment());
+            binding.bottomNavigation.setSelectedItemId(R.id.nav_main_page);
         } else {
             super.onBackPressed();
         }
+    }
+
+    // ==================== MyFragment.NavigationCallback ====================
+
+    @Override
+    public void navigateToFavorites() {
+        loadFragment(new FavoritesFragment());
+        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+    }
+
+    @Override
+    public void navigateToRecent() {
+        loadFragment(new RecentFragment());
+        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+    }
+
+    @Override
+    public void navigateToLocal() {
+        loadFragment(new LocalFragment());
+        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+    }
+
+    @Override
+    public void navigateToTranscode() {
+        loadFragment(new TranscodeFragment());
+        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
     }
 
     @Override

@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FlexMusic</string>
+
+    <!-- Navigation -->
+    <string name="nav_main_page">首页</string>
+    <string name="nav_my">我的</string>
+    <string name="nav_favorites">喜欢</string>
+    <string name="nav_recent">最近</string>
+    <string name="nav_local">本地</string>
+    <string name="nav_playlists">歌单</string>
+    <string name="nav_settings">设置</string>
+
+    <!-- Main Page -->
+    <string name="main_page_title">我的音乐</string>
+    <string name="main_page_user_info">用户信息</string>
+    <string name="main_page_favorites">喜欢</string>
+    <string name="main_page_recent">最近</string>
+    <string name="main_page_local">本地</string>
+    <string name="main_page_transcode">转码</string>
+    <string name="main_page_playlists_title">我的歌单</string>
+
+    <!-- Home -->
+    <string name="home_title">发现音乐</string>
+    <string name="home_featured">精选</string>
+    <string name="home_trending">热门</string>
+    <string name="home_trending_card">热门</string>
+    <string name="home_daily_recommend">每日推荐</string>
+    <string name="home_top_list">排行榜</string>
+    <string name="home_recently_played">最近播放</string>
+    <string name="home_new_releases">新发布</string>
+    <string name="home_recommended_for_you">为你推荐</string>
+    <string name="home_top_playlists">热门歌单</string>
+    <string name="home_genres">分类</string>
+    <string name="home_artists">歌手</string>
+
+    <!-- Favorites -->
+    <string name="favorites_title">我喜欢的</string>
+    <string name="favorites_empty">暂无喜欢的歌曲</string>
+    <string name="favorites_empty_description">给歌曲点赞即可加入喜欢列表</string>
+    <string name="added_to_favorites">已添加到喜欢</string>
+    <string name="removed_from_favorites">已从喜欢中移除</string>
+
+    <!-- Recent -->
+    <string name="recent_title">最近播放</string>
+    <string name="recent_empty">暂无播放记录</string>
+    <string name="recent_empty_description">开始播放音乐后会显示在这里</string>
+    <string name="recent_today">今天</string>
+    <string name="recent_yesterday">昨天</string>
+    <string name="recent_this_week">本周</string>
+    <string name="recent_this_month">本月</string>
+    <string name="recent_earlier">更早</string>
+
+    <!-- Local -->
+    <string name="local_title">本地音乐</string>
+    <string name="local_songs">歌曲</string>
+    <string name="local_albums">专辑</string>
+    <string name="local_artists">歌手</string>
+    <string name="local_empty">暂无本地音乐</string>
+    <string name="local_empty_description">将音频文件添加到设备后在此显示</string>
+    <string name="local_scan">扫描</string>
+    <string name="local_scanning">扫描中…</string>
+    <string name="local_upload">上传离线歌曲</string>
+    <string name="local_upload_success">上传成功</string>
+    <string name="local_upload_hint">选择要上传的音频文件</string>
+
+    <!-- Playlists -->
+    <string name="playlists_title">我的歌单</string>
+    <string name="playlists_empty">暂无歌单</string>
+    <string name="playlists_empty_description">创建歌单来整理你的音乐</string>
+    <string name="create_playlist">新建歌单</string>
+    <string name="edit_playlist">编辑歌单</string>
+    <string name="delete_playlist">删除歌单</string>
+    <string name="add_to_playlist">添加到歌单</string>
+    <string name="playlist_name">歌单名称</string>
+    <string name="playlist_created">歌单已创建</string>
+    <string name="playlist_deleted">歌单已删除</string>
+    <string name="songs_count">%d 首歌曲</string>
+
+    <!-- Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_audio">音频</string>
+    <string name="settings_transcode">转码</string>
+    <string name="settings_download">下载</string>
+    <string name="settings_appearance">外观</string>
+    <string name="settings_about">关于</string>
+
+    <!-- Audio Settings -->
+    <string name="settings_audio_quality">音质</string>
+    <string name="settings_audio_quality_high">高</string>
+    <string name="settings_audio_quality_medium">中</string>
+    <string name="settings_audio_quality_low">低</string>
+    <string name="settings_equalizer">均衡器</string>
+    <string name="settings_crossfade">淡入淡出</string>
+    <string name="settings_crossfade_off">关闭</string>
+    <string name="settings_crossfade_seconds">%d 秒</string>
+
+    <!-- Download Settings -->
+    <string name="settings_download_enabled">启用下载</string>
+    <string name="settings_download_wifi_only">仅在 Wi-Fi 下下载</string>
+    <string name="settings_download_quality">下载质量</string>
+    <string name="settings_download_location">下载位置</string>
+    <string name="settings_clear_cache">清除缓存</string>
+    <string name="settings_cache_size">缓存大小</string>
+
+    <!-- Appearance Settings -->
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_auto">自动</string>
+    <string name="settings_language">语言</string>
+    <string name="settings_language_system">跟随系统</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese">简体中文</string>
+    <string name="settings_language_changed">语言已切换，重启应用后生效</string>
+
+    <!-- About -->
+    <string name="settings_version">版本</string>
+    <string name="settings_rate_app">给应用评分</string>
+    <string name="settings_feedback">发送反馈</string>
+    <string name="settings_privacy_policy">隐私政策</string>
+    <string name="settings_terms_of_service">服务条款</string>
+
+    <!-- Player -->
+    <string name="player_title">正在播放</string>
+    <string name="player_play">播放</string>
+    <string name="player_pause">暂停</string>
+    <string name="player_next">下一首</string>
+    <string name="player_previous">上一首</string>
+    <string name="player_shuffle">随机播放</string>
+    <string name="player_shuffle_on">随机播放开启</string>
+    <string name="player_repeat">循环</string>
+    <string name="player_repeat_off">关闭循环</string>
+    <string name="player_repeat_all">列表循环</string>
+    <string name="player_repeat_one">单曲循环</string>
+    <string name="player_queue">播放队列</string>
+    <string name="player_add_to_queue">添加到队列</string>
+    <string name="player_lyrics">歌词</string>
+
+    <!-- Common -->
+    <string name="search">搜索</string>
+    <string name="search_hint">搜索歌曲、歌手、专辑…</string>
+    <string name="more">更多</string>
+    <string name="play">播放</string>
+    <string name="pause">暂停</string>
+    <string name="download">下载</string>
+    <string name="downloaded">已下载</string>
+    <string name="downloading">下载中…</string>
+    <string name="delete">删除</string>
+    <string name="edit">编辑</string>
+    <string name="save">保存</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确认</string>
+    <string name="done">完成</string>
+    <string name="loading">加载中…</string>
+</resources>
