@@ -1,9 +1,11 @@
 package com.example.flexmusicplayer.ui;
 
 import android.os.Bundle;
+import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -12,8 +14,10 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Song;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 
 import java.text.SimpleDateFormat;
@@ -46,15 +50,14 @@ public class RecentFragment extends Fragment {
     }
 
     private void initViews(View view) {
+        ImageButton backButton = view.findViewById(R.id.btn_back);
         recentRecycler = view.findViewById(R.id.recent_recycler);
         emptyState = view.findViewById(R.id.empty_state);
         browseButton = view.findViewById(R.id.browse_button);
+        backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
 
-        // Setup RecyclerView
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         recentRecycler.setLayoutManager(layoutManager);
-
-        // Initialize adapter
         recentSongs = new ArrayList<>();
         recentAdapter = new RecentAdapter(recentSongs);
         recentRecycler.setAdapter(recentAdapter);
@@ -62,12 +65,12 @@ public class RecentFragment extends Fragment {
 
     private void setupClickListeners() {
         browseButton.setOnClickListener(v -> {
-            // TODO: Navigate to home
+            BottomNavigationView navigationView = requireActivity().findViewById(R.id.bottom_navigation);
+            navigationView.setSelectedItemId(R.id.nav_main_page);
         });
     }
 
     private void loadRecentSongs() {
-        // TODO: Load actual recent songs from database
         List<Song> songs = createMockRecentSongs();
 
         if (songs.isEmpty()) {
@@ -100,7 +103,6 @@ public class RecentFragment extends Fragment {
             }
         }
 
-        // Convert to display format
         for (Map.Entry<Long, List<Song>> entry : groupedByDate.entrySet()) {
             String dateLabel = getDateLabel(entry.getKey());
             for (Song song : entry.getValue()) {
@@ -139,20 +141,26 @@ public class RecentFragment extends Fragment {
         List<Song> songs = new ArrayList<>();
         Calendar cal = Calendar.getInstance();
 
-        // Today's songs
-        Song song1 = new Song(1, "Recent Song 1", "Artist 1", "Album 1", (3 * 60 + 30) * 1000, "url1.mp3");
+        Song song1 = new Song(1, "Starlight", "The Midnight", "Heroes", (3 * 60 + 30) * 1000, "url1.mp3");
         song1.setLastPlayedDate(cal.getTimeInMillis());
         songs.add(song1);
 
-        song1 = new Song(2, "Recent Song 2", "Artist 2", "Album 2", (4 * 60 + 15) * 1000, "url2.mp3");
-        song1.setLastPlayedDate(cal.getTimeInMillis() - 3600000); // 1 hour ago
+        song1 = new Song(2, "Blinding Lights", "The Weeknd", "After Hours", (4 * 60 + 15) * 1000, "url2.mp3");
+        song1.setLastPlayedDate(cal.getTimeInMillis() - (15 * 60 * 1000L));
         songs.add(song1);
 
-        // Yesterday's song
+        song1 = new Song(3, "Levitating", "Dua Lipa", "Future Nostalgia", (3 * 60 + 23) * 1000, "url4.mp3");
+        song1.setLastPlayedDate(cal.getTimeInMillis() - (60 * 60 * 1000L));
+        songs.add(song1);
+
         cal.add(Calendar.DAY_OF_YEAR, -1);
-        Song song2 = new Song(3, "Recent Song 3", "Artist 3", "Album 3", (5 * 60 + 20) * 1000, "url3.mp3");
+        Song song2 = new Song(4, "After Hours", "The Weeknd", "After Hours", (5 * 60 + 20) * 1000, "url3.mp3");
         song2.setLastPlayedDate(cal.getTimeInMillis());
         songs.add(song2);
+
+        Song song3 = new Song(5, "Nightcall", "Kavinsky", "OutRun", (4 * 60 + 14) * 1000, "url5.mp3");
+        song3.setLastPlayedDate(cal.getTimeInMillis() - (2 * 60 * 60 * 1000L));
+        songs.add(song3);
 
         return songs;
     }
@@ -178,14 +186,16 @@ public class RecentFragment extends Fragment {
         @Override
         public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.item_song_with_date, parent, false);
+                    .inflate(R.layout.item_recent_song, parent, false);
             return new ViewHolder(view);
         }
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             SongWithDate item = items.get(position);
-            holder.bind(item);
+            boolean showDateLabel = position == 0
+                    || !item.dateLabel.equals(items.get(position - 1).dateLabel);
+            holder.bind(item, buildQueue(), position, showDateLabel);
         }
 
         @Override
@@ -197,26 +207,45 @@ public class RecentFragment extends Fragment {
             TextView dateLabel;
             TextView songTitle;
             TextView artistName;
-            TextView duration;
+            TextView timeAgo;
 
             public ViewHolder(@NonNull View itemView) {
                 super(itemView);
                 dateLabel = itemView.findViewById(R.id.date_label);
                 songTitle = itemView.findViewById(R.id.song_title);
                 artistName = itemView.findViewById(R.id.artist_name);
-                duration = itemView.findViewById(R.id.duration);
+                timeAgo = itemView.findViewById(R.id.time_ago);
             }
 
-            public void bind(SongWithDate item) {
+            public void bind(SongWithDate item, List<Song> queue, int position, boolean showDateLabel) {
                 dateLabel.setText(item.dateLabel);
+                dateLabel.setVisibility(showDateLabel ? View.VISIBLE : View.GONE);
                 songTitle.setText(item.song.getTitle());
                 artistName.setText(item.song.getArtist());
-                duration.setText(item.song.getFormattedDuration());
+                timeAgo.setText(getRelativeTimeLabel(item.song.getLastPlayedDate()));
 
                 itemView.setOnClickListener(v -> {
-                    // TODO: Play song
+                    if (itemView.getContext() instanceof MainActivity) {
+                        ((MainActivity) itemView.getContext()).onSongPlaybackRequested(item.song, queue, position);
+                    }
                 });
             }
         }
+
+        private List<Song> buildQueue() {
+            List<Song> queue = new ArrayList<>();
+            for (SongWithDate item : items) {
+                queue.add(item.song);
+            }
+            return queue;
+        }
+    }
+
+    private CharSequence getRelativeTimeLabel(long lastPlayedDate) {
+        return DateUtils.getRelativeTimeSpanString(
+                lastPlayedDate,
+                System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS,
+                DateUtils.FORMAT_ABBREV_RELATIVE);
     }
 }

@@ -58,7 +58,7 @@
     <color name="text_secondary_dark">#B0B0B0</color>
 
     <!-- Player mini bar -->
-    <color name="player_bar_background">#1E1E1E</color>
+    <color name="player_bar_background">#5B39B6</color>
     <color name="player_bar_gradient_start">#1E1E1E</color>
     <color name="player_bar_gradient_end">#2C2C2C</color>
 

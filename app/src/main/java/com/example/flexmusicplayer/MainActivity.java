@@ -2,8 +2,7 @@ package com.example.flexmusicplayer;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -12,12 +11,16 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.example.flexmusicplayer.databinding.ActivityMainBinding;
+import com.example.flexmusicplayer.model.PlayerState;
+import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.player.PlaybackController;
 import com.example.flexmusicplayer.ui.FavoritesFragment;
-import com.example.flexmusicplayer.ui.HomeFragment;
 import com.example.flexmusicplayer.ui.LocalFragment;
+import com.example.flexmusicplayer.ui.MainPageFragment;
 import com.example.flexmusicplayer.ui.MyFragment;
 import com.example.flexmusicplayer.ui.RecentFragment;
 import com.example.flexmusicplayer.ui.SettingsFragment;
+import com.example.flexmusicplayer.ui.SleepFragment;
 import com.example.flexmusicplayer.ui.TranscodeFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
@@ -25,23 +28,26 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
 
     private static final String PREFS_NAME = "FlexMusicPrefs";
     private ActivityMainBinding binding;
+    private PlaybackController playbackController;
+    private final PlaybackController.Listener playbackListener = this::renderMiniPlayer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // 恢复已保存的主题
         applySavedTheme();
 
         super.onCreate(savedInstanceState);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        playbackController = PlaybackController.getInstance(this);
 
         setupBottomNavigation();
-        setupToolbar();
+        setupMiniPlayer();
 
-        // 默认加载首页
         if (savedInstanceState == null) {
-            loadFragment(new HomeFragment());
             binding.bottomNavigation.setSelectedItemId(R.id.nav_main_page);
+            loadRootFragment(new MainPageFragment());
+        } else {
+            updateChromeForFragment(getSupportFragmentManager().findFragmentById(R.id.fragment_container));
         }
     }
 
@@ -55,109 +61,155 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         }
     }
 
+    private void setupBottomNavigation() {
+        binding.bottomNavigation.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.nav_main_page) {
+                loadRootFragment(new MainPageFragment());
+                return true;
+            }
+            if (itemId == R.id.nav_my) {
+                loadRootFragment(createMyFragment());
+                return true;
+            }
+            if (itemId == R.id.nav_sleep) {
+                loadRootFragment(new SleepFragment());
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private void setupMiniPlayer() {
+        renderMiniPlayer(playbackController.getPlayerState());
+        binding.playerPlayPause.setOnClickListener(v -> playbackController.togglePlayPause());
+        binding.playerPrevious.setOnClickListener(v -> playbackController.skipPrevious());
+        binding.playerNext.setOnClickListener(v -> playbackController.skipNext());
+        binding.playerMiniBar.setOnClickListener(v -> openPlayerScreen());
+    }
+
+    public void onSongPlaybackRequested(@NonNull Song song) {
+        playbackController.playSong(song);
+    }
+
+    public void onSongPlaybackRequested(@NonNull Song song, @NonNull java.util.List<Song> queue, int startIndex) {
+        playbackController.playQueue(queue, startIndex);
+    }
+
+    private void renderMiniPlayer(@NonNull PlayerState state) {
+        if (binding == null) {
+            return;
+        }
+        Song currentSong = state.getCurrentSong();
+        binding.playerSongTitle.setText(currentSong != null ? currentSong.getTitle() : getString(R.string.mock_player_title));
+        binding.playerArtistName.setText(currentSong != null ? currentSong.getArtist() : getString(R.string.mock_player_artist));
+        binding.playerPlayPause.setImageResource(state.isPlaying() ? R.drawable.ic_pause : R.drawable.ic_play);
+        binding.playerPlayPause.setContentDescription(getString(state.isPlaying() ? R.string.player_pause : R.string.player_play));
+        Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
+        updateChromeForFragment(currentFragment);
+    }
+
     private MyFragment createMyFragment() {
         MyFragment fragment = new MyFragment();
         fragment.setNavigationCallback(this);
         return fragment;
     }
 
-    private void setupBottomNavigation() {
-        binding.bottomNavigation.setOnNavigationItemSelectedListener(
-                new BottomNavigationView.OnNavigationItemSelectedListener() {
-                    @Override
-                    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                        int itemId = item.getItemId();
-
-                        if (itemId == R.id.nav_main_page) {
-                            loadFragment(new HomeFragment());
-                            return true;
-                        } else if (itemId == R.id.nav_my) {
-                            loadFragment(createMyFragment());
-                            return true;
-                        }
-
-                        return false;
-                    }
-                });
+    private void loadRootFragment(@NonNull Fragment fragment) {
+        replaceFragment(fragment);
     }
 
-    private void setupToolbar() {
-        setSupportActionBar(binding.toolbar);
-        getSupportActionBar().setDisplayHomeAsUpEnabled(false);
+    private void loadSecondaryFragment(@NonNull Fragment fragment) {
+        replaceFragment(fragment);
     }
 
-    private void loadFragment(Fragment fragment) {
+    private void replaceFragment(@NonNull Fragment fragment) {
         FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
         transaction.replace(R.id.fragment_container, fragment);
         transaction.commit();
+        updateChromeForFragment(fragment);
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.settings_menu, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == R.id.action_settings) {
-            openSettings();
-            return true;
+    private void restoreSelectedRoot() {
+        int selectedId = binding.bottomNavigation.getSelectedItemId();
+        if (selectedId == R.id.nav_my) {
+            loadRootFragment(createMyFragment());
+        } else if (selectedId == R.id.nav_sleep) {
+            loadRootFragment(new SleepFragment());
+        } else {
+            loadRootFragment(new MainPageFragment());
         }
-        return super.onOptionsItemSelected(item);
     }
 
-    private void openSettings() {
-        loadFragment(new SettingsFragment());
-        binding.bottomNavigation.setVisibility(android.view.View.GONE);
+    private void updateChromeForFragment(Fragment fragment) {
+        boolean showMiniPlayer = fragment instanceof MainPageFragment
+                || fragment instanceof MyFragment
+                || fragment instanceof SleepFragment
+                || fragment instanceof FavoritesFragment
+                || fragment instanceof LocalFragment;
+        boolean hasSong = playbackController.getPlayerState().getCurrentSong() != null;
+        binding.playerMiniBar.setVisibility(showMiniPlayer && hasSong ? View.VISIBLE : View.GONE);
+    }
+
+    private void openPlayerScreen() {
+        if (playbackController.getPlayerState().getCurrentSong() != null) {
+            startActivity(PlayerActivity.createIntent(this));
+        }
+    }
+
+    public void openSettings() {
+        loadSecondaryFragment(new SettingsFragment());
     }
 
     @Override
     public void onBackPressed() {
         Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
-        if (currentFragment instanceof SettingsFragment) {
-            binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
-            loadFragment(new HomeFragment());
-            binding.bottomNavigation.setSelectedItemId(R.id.nav_main_page);
-        } else if (!(currentFragment instanceof HomeFragment)) {
-            // 非首页时，返回键回到首页
-            binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
-            loadFragment(new HomeFragment());
-            binding.bottomNavigation.setSelectedItemId(R.id.nav_main_page);
-        } else {
-            super.onBackPressed();
+        if (currentFragment instanceof SettingsFragment
+                || currentFragment instanceof FavoritesFragment
+                || currentFragment instanceof RecentFragment
+                || currentFragment instanceof LocalFragment
+                || currentFragment instanceof TranscodeFragment) {
+            restoreSelectedRoot();
+            return;
         }
+        super.onBackPressed();
     }
-
-    // ==================== MyFragment.NavigationCallback ====================
 
     @Override
     public void navigateToFavorites() {
-        loadFragment(new FavoritesFragment());
-        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+        loadSecondaryFragment(new FavoritesFragment());
     }
 
     @Override
     public void navigateToRecent() {
-        loadFragment(new RecentFragment());
-        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+        loadSecondaryFragment(new RecentFragment());
     }
 
     @Override
     public void navigateToLocal() {
-        loadFragment(new LocalFragment());
-        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+        loadSecondaryFragment(new LocalFragment());
     }
 
     @Override
     public void navigateToTranscode() {
-        loadFragment(new TranscodeFragment());
-        binding.bottomNavigation.setVisibility(android.view.View.VISIBLE);
+        loadSecondaryFragment(new TranscodeFragment());
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         binding = null;
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        playbackController.addListener(playbackListener);
+    }
+
+    @Override
+    protected void onStop() {
+        playbackController.removeListener(playbackListener);
+        super.onStop();
     }
 }

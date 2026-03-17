@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -12,18 +13,13 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Playlist;
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 我的 Fragment - 个人导航中心
- * 提供喜欢、最近、本地、转码的快捷入口，以及收藏歌单列表
- */
 public class MyFragment extends Fragment {
 
     public interface NavigationCallback {
@@ -34,13 +30,8 @@ public class MyFragment extends Fragment {
     }
 
     private NavigationCallback navigationCallback;
-    private MaterialCardView searchBarContainer;
-    private MaterialButton btnFavorites;
-    private MaterialButton btnRecent;
-    private MaterialButton btnLocal;
-    private MaterialButton btnTranscode;
     private RecyclerView playlistsRecycler;
-    private PlaylistVerticalAdapter playlistsAdapter;
+    private PlaylistAdapter playlistAdapter;
 
     public void setNavigationCallback(NavigationCallback callback) {
         this.navigationCallback = callback;
@@ -50,117 +41,80 @@ public class MyFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_main_page, container, false);
+        View view = inflater.inflate(R.layout.fragment_my, container, false);
 
-        initViews(view);
-        setupClickListeners();
-        loadPlaylists();
+        ImageButton settingsButton = view.findViewById(R.id.btn_settings);
+        View favoritesCard = view.findViewById(R.id.card_favorites);
+        View recentCard = view.findViewById(R.id.card_recent);
+        View localCard = view.findViewById(R.id.card_local);
+        View transcodeCard = view.findViewById(R.id.card_transcode);
+        View createButton = view.findViewById(R.id.btn_create_playlist);
+        playlistsRecycler = view.findViewById(R.id.playlists_recycler);
+
+        settingsButton.setOnClickListener(v -> openSettings());
+        favoritesCard.setOnClickListener(v -> navigateFavorites());
+        recentCard.setOnClickListener(v -> navigateRecent());
+        localCard.setOnClickListener(v -> navigateLocal());
+        transcodeCard.setOnClickListener(v -> navigateTranscode());
+        createButton.setOnClickListener(v -> { /* UI-only placeholder. */ });
+
+        playlistsRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
+        playlistsRecycler.setNestedScrollingEnabled(false);
+        playlistAdapter = new PlaylistAdapter(createMockPlaylists());
+        playlistsRecycler.setAdapter(playlistAdapter);
 
         return view;
     }
 
-    private void initViews(View view) {
-        searchBarContainer = view.findViewById(R.id.search_bar_container);
-        btnFavorites = view.findViewById(R.id.btn_favorites);
-        btnRecent = view.findViewById(R.id.btn_recent);
-        btnLocal = view.findViewById(R.id.btn_local);
-        btnTranscode = view.findViewById(R.id.btn_transcode);
-        playlistsRecycler = view.findViewById(R.id.playlists_recycler);
-
-        LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
-        playlistsRecycler.setLayoutManager(layoutManager);
-
-        playlistsAdapter = new PlaylistVerticalAdapter(new ArrayList<>());
-        playlistsRecycler.setAdapter(playlistsAdapter);
+    private void openSettings() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).openSettings();
+        }
     }
 
-    private void setupClickListeners() {
-        searchBarContainer.setOnClickListener(v -> {
-            // Navigate to search/home fragment
-            if (getActivity() instanceof NavigationCallback) {
-                // handled in activity
-            }
-            requireActivity().getSupportFragmentManager()
-                    .beginTransaction()
-                    .replace(R.id.fragment_container, new HomeFragment())
-                    .addToBackStack(null)
-                    .commit();
-        });
-
-        btnFavorites.setOnClickListener(v -> {
-            if (navigationCallback != null) {
-                navigationCallback.navigateToFavorites();
-            } else {
-                requireActivity().getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragment_container, new FavoritesFragment())
-                        .addToBackStack(null)
-                        .commit();
-            }
-        });
-
-        btnRecent.setOnClickListener(v -> {
-            if (navigationCallback != null) {
-                navigationCallback.navigateToRecent();
-            } else {
-                requireActivity().getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragment_container, new RecentFragment())
-                        .addToBackStack(null)
-                        .commit();
-            }
-        });
-
-        btnLocal.setOnClickListener(v -> {
-            if (navigationCallback != null) {
-                navigationCallback.navigateToLocal();
-            } else {
-                requireActivity().getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragment_container, new LocalFragment())
-                        .addToBackStack(null)
-                        .commit();
-            }
-        });
-
-        btnTranscode.setOnClickListener(v -> {
-            if (navigationCallback != null) {
-                navigationCallback.navigateToTranscode();
-            } else {
-                // TODO: Navigate to transcode feature
-                requireActivity().getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragment_container, new TranscodeFragment())
-                        .addToBackStack(null)
-                        .commit();
-            }
-        });
+    private void navigateFavorites() {
+        if (navigationCallback != null) {
+            navigationCallback.navigateToFavorites();
+        }
     }
 
-    private void loadPlaylists() {
-        // TODO: Load actual playlists from database
-        List<Playlist> playlists = createMockPlaylists();
-        playlistsAdapter.setPlaylists(playlists);
+    private void navigateRecent() {
+        if (navigationCallback != null) {
+            navigationCallback.navigateToRecent();
+        }
+    }
+
+    private void navigateLocal() {
+        if (navigationCallback != null) {
+            navigationCallback.navigateToLocal();
+        }
+    }
+
+    private void navigateTranscode() {
+        if (navigationCallback != null) {
+            navigationCallback.navigateToTranscode();
+        }
     }
 
     private List<Playlist> createMockPlaylists() {
         List<Playlist> playlists = new ArrayList<>();
-        playlists.add(new Playlist(1, "收藏歌单1", ""));
-        playlists.add(new Playlist(2, "收藏歌单2", ""));
-        playlists.add(new Playlist(3, "收藏歌单3", ""));
+        playlists.add(createPlaylist(1, "Late Night Vibes", "Created by you • 24 songs"));
+        playlists.add(createPlaylist(2, "Focus Flow", "Created by you • 56 songs"));
+        playlists.add(createPlaylist(3, "Starry Night", "Created by you • 18 songs"));
         return playlists;
     }
 
-    private class PlaylistVerticalAdapter extends RecyclerView.Adapter<PlaylistVerticalAdapter.ViewHolder> {
-        private List<Playlist> items;
+    private Playlist createPlaylist(long id, String name, String description) {
+        Playlist playlist = new Playlist(id, name, description);
+        playlist.setDescription(description);
+        return playlist;
+    }
 
-        public PlaylistVerticalAdapter(List<Playlist> items) {
-            this.items = items;
-        }
+    private static class PlaylistAdapter extends RecyclerView.Adapter<PlaylistAdapter.ViewHolder> {
+        private final List<Playlist> playlists;
 
-        public void setPlaylists(List<Playlist> items) {
-            this.items = items;
-            notifyDataSetChanged();
+        PlaylistAdapter(List<Playlist> playlists) {
+            this.playlists = playlists;
         }
 
         @NonNull
@@ -173,28 +127,27 @@ public class MyFragment extends Fragment {
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            holder.bind(items.get(position));
+            holder.bind(playlists.get(position));
         }
 
         @Override
         public int getItemCount() {
-            return items.size();
+            return playlists.size();
         }
 
-        class ViewHolder extends RecyclerView.ViewHolder {
-            TextView playlistName;
-            TextView songCount;
+        static class ViewHolder extends RecyclerView.ViewHolder {
+            private final TextView playlistName;
+            private final TextView playlistMeta;
 
-            public ViewHolder(@NonNull View itemView) {
+            ViewHolder(@NonNull View itemView) {
                 super(itemView);
                 playlistName = itemView.findViewById(R.id.playlist_name);
-                songCount = itemView.findViewById(R.id.song_count);
+                playlistMeta = itemView.findViewById(R.id.song_count);
             }
 
-            public void bind(Playlist playlist) {
+            void bind(Playlist playlist) {
                 playlistName.setText(playlist.getName());
-                songCount.setText(getString(R.string.songs_count, playlist.getSongCount()));
-                itemView.setOnClickListener(v -> { /* TODO: Open playlist */ });
+                playlistMeta.setText(playlist.getDescription());
             }
         }
     }

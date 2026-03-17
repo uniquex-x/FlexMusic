@@ -1,24 +1,31 @@
 package com.example.flexmusicplayer.ui;
 
+import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Album;
 import com.example.flexmusicplayer.model.Artist;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.storage.LocalMusicStore;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayout;
 
@@ -27,12 +34,20 @@ import java.util.List;
 
 public class LocalFragment extends Fragment {
 
-    private static final int TAB_SONGS = 0;
-    private static final int TAB_ALBUMS = 1;
-    private static final int TAB_ARTISTS = 2;
+    private static final int TAB_ARTIST = 0;
+    private static final int TAB_ALBUM = 1;
+    private static final int TAB_FOLDER = 2;
+    private static final int TAB_PLAYLISTS = 3;
+    private static final int[] ART_COLORS = {
+            Color.parseColor("#5A21C9"),
+            Color.parseColor("#7E684B"),
+            Color.parseColor("#0D5474"),
+            Color.parseColor("#6A461B"),
+            Color.parseColor("#16232D")
+    };
 
     private TabLayout tabLayout;
-    private MaterialButton scanButton;
+    private View scanButton;
     private MaterialButton uploadButton;
     private RecyclerView songsRecycler;
     private RecyclerView albumsRecycler;
@@ -44,18 +59,14 @@ public class LocalFragment extends Fragment {
     private AlbumGridAdapter albumsAdapter;
     private ArtistGridAdapter artistsAdapter;
 
-    private int currentTab = TAB_SONGS;
+    private int currentTab = TAB_ARTIST;
 
-    // File picker launcher for uploading offline songs
     private ActivityResultLauncher<String[]> filePickerLauncher;
+    private LocalMusicStore localMusicStore;
 
-    @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
-                             @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_local, container, false);
-
-        // Register file picker before view is created
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
         filePickerLauncher = registerForActivityResult(
                 new ActivityResultContracts.OpenMultipleDocuments(),
                 uris -> {
@@ -63,6 +74,13 @@ public class LocalFragment extends Fragment {
                         handleUploadedFiles(uris);
                     }
                 });
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+                             @Nullable Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.fragment_local, container, false);
 
         initViews(view);
         setupClickListeners();
@@ -73,6 +91,7 @@ public class LocalFragment extends Fragment {
     }
 
     private void initViews(View view) {
+        ImageButton backButton = view.findViewById(R.id.btn_back);
         tabLayout = view.findViewById(R.id.tab_layout);
         scanButton = view.findViewById(R.id.scan_button);
         uploadButton = view.findViewById(R.id.upload_button);
@@ -81,18 +100,13 @@ public class LocalFragment extends Fragment {
         artistsRecycler = view.findViewById(R.id.artists_recycler);
         emptyState = view.findViewById(R.id.empty_state);
         loadingState = view.findViewById(R.id.loading_state);
+        backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        localMusicStore = new LocalMusicStore(requireContext());
 
-        // Setup RecyclerViews
-        LinearLayoutManager songsLayoutManager = new LinearLayoutManager(requireContext());
-        songsRecycler.setLayoutManager(songsLayoutManager);
+        songsRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
+        albumsRecycler.setLayoutManager(new GridLayoutManager(requireContext(), 2));
+        artistsRecycler.setLayoutManager(new GridLayoutManager(requireContext(), 2));
 
-        GridLayoutManager albumsLayoutManager = new GridLayoutManager(requireContext(), 2);
-        albumsRecycler.setLayoutManager(albumsLayoutManager);
-
-        GridLayoutManager artistsLayoutManager = new GridLayoutManager(requireContext(), 2);
-        artistsRecycler.setLayoutManager(artistsLayoutManager);
-
-        // Initialize adapters
         songsAdapter = new SongVerticalAdapter(new ArrayList<>());
         albumsAdapter = new AlbumGridAdapter(new ArrayList<>());
         artistsAdapter = new ArtistGridAdapter(new ArrayList<>());
@@ -103,22 +117,24 @@ public class LocalFragment extends Fragment {
     }
 
     private void setupClickListeners() {
-        scanButton.setOnClickListener(v -> {
-            scanForMusic();
-        });
+        scanButton.setOnClickListener(v -> scanForMusic());
 
-        uploadButton.setOnClickListener(v -> {
-            // Open file picker for audio files
-            filePickerLauncher.launch(new String[]{"audio/*"});
-        });
+        uploadButton.setOnClickListener(v -> filePickerLauncher.launch(new String[]{"audio/*"}));
     }
 
     private void handleUploadedFiles(java.util.List<android.net.Uri> uris) {
-        // TODO: Implement actual file import logic (copy/index the selected audio files)
+        for (android.net.Uri uri : uris) {
+            try {
+                requireContext().getContentResolver().takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (SecurityException ignored) {
+            }
+        }
+        localMusicStore.addSongs(uris);
         Snackbar.make(requireView(),
                 getString(R.string.local_upload_success) + " (" + uris.size() + " files)",
                 Snackbar.LENGTH_SHORT).show();
-        // Reload list after import
         loadLocalMusic();
     }
 
@@ -141,14 +157,14 @@ public class LocalFragment extends Fragment {
     }
 
     private void switchTab(int tab) {
-        songsRecycler.setVisibility(tab == TAB_SONGS ? View.VISIBLE : View.GONE);
-        albumsRecycler.setVisibility(tab == TAB_ALBUMS ? View.VISIBLE : View.GONE);
-        artistsRecycler.setVisibility(tab == TAB_ARTISTS ? View.VISIBLE : View.GONE);
+        songsRecycler.setVisibility(tab == TAB_ARTIST || tab == TAB_PLAYLISTS ? View.VISIBLE : View.GONE);
+        albumsRecycler.setVisibility(tab == TAB_ALBUM ? View.VISIBLE : View.GONE);
+        artistsRecycler.setVisibility(tab == TAB_FOLDER ? View.VISIBLE : View.GONE);
     }
 
     private void loadLocalMusic() {
-        // TODO: Load actual local music from database
-        List<Song> songs = createMockSongs();
+        List<Song> storedSongs = localMusicStore.loadSongs();
+        List<Song> songs = storedSongs.isEmpty() ? createMockSongs() : storedSongs;
         List<Album> albums = createMockAlbums();
         List<Artist> artists = createMockArtists();
 
@@ -164,12 +180,7 @@ public class LocalFragment extends Fragment {
 
     private void scanForMusic() {
         showLoading();
-
-        // TODO: Implement actual music scanning
-        // For now, just simulate loading
-        songsRecycler.postDelayed(() -> {
-            loadLocalMusic();
-        }, 2000);
+        songsRecycler.postDelayed(this::loadLocalMusic, 1200);
     }
 
     private void showEmptyState() {
@@ -196,48 +207,54 @@ public class LocalFragment extends Fragment {
 
     private List<Song> createMockSongs() {
         List<Song> songs = new ArrayList<>();
-        for (int i = 1; i <= 10; i++) {
-            Song song = new Song(
-                    i,
-                    "Local Song " + i,
-                    "Local Artist " + i,
-                    "Local Album " + i,
-                    (3 * 60 + i * 10) * 1000,
-                    "file:///sdcard/Music/song" + i + ".mp3"
-            );
-            song.setLocal(true);
-            songs.add(song);
-        }
+        songs.add(createLocalSong(1, "Starlight", "Muse", "Will of the People", 242000, false, true));
+        songs.add(createLocalSong(2, "Midnight City", "M83", "Hurry Up, We're Dreaming", 243000, true, true));
+        songs.add(createLocalSong(3, "Blinding Lights", "The Weeknd", "After Hours", 200000, false, true));
+        songs.add(createLocalSong(4, "Do I Wanna Know?", "Arctic Monkeys", "AM", 272000, false, false));
+        songs.add(createLocalSong(5, "Lateralus", "Tool", "Lateralus", 564000, false, true));
         return songs;
+    }
+
+    private Song createLocalSong(long id,
+                                 String title,
+                                 String artist,
+                                 String album,
+                                 int duration,
+                                 boolean favorite,
+                                 boolean downloaded) {
+        Song song = new Song(id, title, artist, album, duration, "file:///sdcard/Music/" + title + ".mp3");
+        song.setLocal(true);
+        song.setFavorite(favorite);
+        song.setDownloaded(downloaded);
+        return song;
     }
 
     private List<Album> createMockAlbums() {
         List<Album> albums = new ArrayList<>();
-        for (int i = 1; i <= 6; i++) {
-            Album album = new Album(i, "Local Album " + i, "Local Artist " + i);
-            albums.add(album);
-        }
+        albums.add(new Album(1, "After Hours", "The Weeknd"));
+        albums.add(new Album(2, "Future Nostalgia", "Dua Lipa"));
+        albums.add(new Album(3, "AM", "Arctic Monkeys"));
+        albums.add(new Album(4, "Fine Line", "Harry Styles"));
         return albums;
     }
 
     private List<Artist> createMockArtists() {
         List<Artist> artists = new ArrayList<>();
-        for (int i = 1; i <= 4; i++) {
-            Artist artist = new Artist(i, "Local Artist " + i);
-            artists.add(artist);
-        }
+        artists.add(new Artist(1, "Muse"));
+        artists.add(new Artist(2, "The Weeknd"));
+        artists.add(new Artist(3, "Arctic Monkeys"));
+        artists.add(new Artist(4, "Tool"));
         return artists;
     }
 
-    // Adapter for songs
     private static class SongVerticalAdapter extends RecyclerView.Adapter<SongVerticalAdapter.ViewHolder> {
         private List<Song> songs;
 
-        public SongVerticalAdapter(List<Song> songs) {
+        SongVerticalAdapter(List<Song> songs) {
             this.songs = songs;
         }
 
-        public void setSongs(List<Song> songs) {
+        void setSongs(List<Song> songs) {
             this.songs = songs;
             notifyDataSetChanged();
         }
@@ -246,14 +263,13 @@ public class LocalFragment extends Fragment {
         @Override
         public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.item_song_vertical, parent, false);
+                    .inflate(R.layout.item_local_track, parent, false);
             return new ViewHolder(view);
         }
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            Song song = songs.get(position);
-            holder.bind(song);
+            holder.bind(songs.get(position), songs, position);
         }
 
         @Override
@@ -262,38 +278,68 @@ public class LocalFragment extends Fragment {
         }
 
         static class ViewHolder extends RecyclerView.ViewHolder {
-            android.widget.TextView songTitle;
-            android.widget.TextView artistName;
-            android.widget.TextView duration;
+            private final MaterialCardView albumArtCard;
+            private final android.widget.TextView songTitle;
+            private final android.widget.TextView songMeta;
+            private final android.widget.ImageButton favoriteButton;
+            private final android.widget.ImageButton downloadButton;
 
-            public ViewHolder(@NonNull View itemView) {
+            ViewHolder(@NonNull View itemView) {
                 super(itemView);
+                albumArtCard = itemView.findViewById(R.id.album_art_card);
                 songTitle = itemView.findViewById(R.id.song_title);
-                artistName = itemView.findViewById(R.id.artist_name);
-                duration = itemView.findViewById(R.id.duration);
+                songMeta = itemView.findViewById(R.id.song_meta);
+                favoriteButton = itemView.findViewById(R.id.favorite_button);
+                downloadButton = itemView.findViewById(R.id.download_button);
             }
 
-            public void bind(Song song) {
+            void bind(Song song, List<Song> queue, int position) {
                 songTitle.setText(song.getTitle());
-                artistName.setText(song.getArtist());
-                duration.setText(song.getFormattedDuration());
+                songMeta.setText(song.getArtist() + " • " + song.getFormattedDuration());
+                albumArtCard.setCardBackgroundColor(ART_COLORS[position % ART_COLORS.length]);
+                updateFavorite(song);
+                updateDownload(song);
 
                 itemView.setOnClickListener(v -> {
-                    // TODO: Play song
+                    if (itemView.getContext() instanceof MainActivity) {
+                        ((MainActivity) itemView.getContext()).onSongPlaybackRequested(song, queue, position);
+                    }
                 });
+
+                favoriteButton.setOnClickListener(v -> {
+                    song.setFavorite(!song.isFavorite());
+                    updateFavorite(song);
+                });
+
+                downloadButton.setOnClickListener(v -> {
+                    song.setDownloaded(!song.isDownloaded());
+                    updateDownload(song);
+                });
+            }
+
+            private void updateFavorite(Song song) {
+                int tint = ContextCompat.getColor(itemView.getContext(),
+                        song.isFavorite() ? R.color.player_bar_background : R.color.gray_400);
+                favoriteButton.setImageTintList(android.content.res.ColorStateList.valueOf(tint));
+            }
+
+            private void updateDownload(Song song) {
+                int tint = ContextCompat.getColor(itemView.getContext(),
+                        song.isDownloaded() ? R.color.gray_500 : R.color.gray_300);
+                downloadButton.setImageResource(song.isDownloaded() ? R.drawable.ic_check_small : R.drawable.ic_download);
+                downloadButton.setImageTintList(android.content.res.ColorStateList.valueOf(tint));
             }
         }
     }
 
-    // Adapter for albums
     private static class AlbumGridAdapter extends RecyclerView.Adapter<AlbumGridAdapter.ViewHolder> {
         private List<Album> albums;
 
-        public AlbumGridAdapter(List<Album> albums) {
+        AlbumGridAdapter(List<Album> albums) {
             this.albums = albums;
         }
 
-        public void setAlbums(List<Album> albums) {
+        void setAlbums(List<Album> albums) {
             this.albums = albums;
             notifyDataSetChanged();
         }
@@ -321,32 +367,27 @@ public class LocalFragment extends Fragment {
             android.widget.TextView albumName;
             android.widget.TextView artistName;
 
-            public ViewHolder(@NonNull View itemView) {
+            ViewHolder(@NonNull View itemView) {
                 super(itemView);
                 albumName = itemView.findViewById(R.id.album_name);
                 artistName = itemView.findViewById(R.id.artist_name);
             }
 
-            public void bind(Album album) {
+            void bind(Album album) {
                 albumName.setText(album.getName());
                 artistName.setText(album.getArtist());
-
-                itemView.setOnClickListener(v -> {
-                    // TODO: Open album
-                });
             }
         }
     }
 
-    // Adapter for artists
     private static class ArtistGridAdapter extends RecyclerView.Adapter<ArtistGridAdapter.ViewHolder> {
         private List<Artist> artists;
 
-        public ArtistGridAdapter(List<Artist> artists) {
+        ArtistGridAdapter(List<Artist> artists) {
             this.artists = artists;
         }
 
-        public void setArtists(List<Artist> artists) {
+        void setArtists(List<Artist> artists) {
             this.artists = artists;
             notifyDataSetChanged();
         }
@@ -374,19 +415,15 @@ public class LocalFragment extends Fragment {
             android.widget.TextView artistName;
             android.widget.TextView songCount;
 
-            public ViewHolder(@NonNull View itemView) {
+            ViewHolder(@NonNull View itemView) {
                 super(itemView);
                 artistName = itemView.findViewById(R.id.artist_name);
                 songCount = itemView.findViewById(R.id.song_count);
             }
 
-            public void bind(Artist artist) {
+            void bind(Artist artist) {
                 artistName.setText(artist.getName());
                 songCount.setText(artist.getSongCount() + " songs");
-
-                itemView.setOnClickListener(v -> {
-                    // TODO: Open artist
-                });
             }
         }
     }

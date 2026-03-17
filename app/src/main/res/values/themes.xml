@@ -105,4 +105,11 @@
         <item name="cardCornerRadius">0dp</item>
         <item name="android:foreground">?attr/selectableItemBackground</item>
     </style>
+    <style name="TextAppearance.FlexMusicPlayer.SectionEyebrow" parent="TextAppearance.MaterialComponents.Overline">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textColor">@color/primary_400</item>
+    </style>
 </resources>

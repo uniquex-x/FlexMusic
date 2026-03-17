@@ -2,8 +2,8 @@
     <string name="app_name">FlexMusic</string>
 
     <!-- Navigation -->
-    <string name="nav_main_page">首页</string>
-    <string name="nav_my">我的</string>
+    <string name="nav_main_page">Home</string>
+    <string name="nav_my">My</string>
     <string name="nav_favorites">Favorites</string>
     <string name="nav_recent">Recent</string>
     <string name="nav_local">Local</string>
@@ -25,16 +25,26 @@
     <string name="home_artists">Artists</string>
 
     <!-- Favorites -->
-    <string name="favorites_title">My Favorites</string>
+    <string name="favorites_title">Favorites</string>
+    <string name="favorites_subtitle">Tracks you liked and revisit often</string>
+    <string name="favorites_card_title">Your liked songs collection</string>
     <string name="favorites_empty">No favorites yet</string>
     <string name="favorites_empty_description">Like songs to add them to your favorites</string>
+    <string name="favorites_discover">Discover Music</string>
+    <string name="favorites_search_hint">Search liked songs</string>
+    <string name="favorites_tab_songs">Songs</string>
+    <string name="favorites_tab_albums">Albums</string>
+    <string name="favorites_tab_artists">Artists</string>
     <string name="added_to_favorites">Added to favorites</string>
     <string name="removed_from_favorites">Removed from favorites</string>
 
     <!-- Recent -->
-    <string name="recent_title">Recently Played</string>
+    <string name="recent_title">Recent</string>
+    <string name="recent_subtitle">Your playback footprint by day</string>
+    <string name="recent_card_title">Playback history timeline</string>
     <string name="recent_empty">No recent plays</string>
     <string name="recent_empty_description">Start playing music to see your history</string>
+    <string name="recent_browse">Browse Music</string>
     <string name="recent_today">Today</string>
     <string name="recent_yesterday">Yesterday</string>
     <string name="recent_this_week">This Week</string>
@@ -43,13 +53,20 @@
 
     <!-- Local -->
     <string name="local_title">Local Music</string>
+    <string name="local_subtitle">Manage songs from your device storage</string>
     <string name="local_songs">Songs</string>
     <string name="local_albums">Albums</string>
     <string name="local_artists">Artists</string>
     <string name="local_empty">No local music</string>
     <string name="local_empty_description">Add music files to your device to see them here</string>
     <string name="local_scan">Scan for Music</string>
+    <string name="local_upload_short">Upload Files</string>
     <string name="local_scanning">Scanning…</string>
+    <string name="local_scan_secondary">Scan device</string>
+    <string name="local_tab_artist">Artist</string>
+    <string name="local_tab_album">Album</string>
+    <string name="local_tab_folder">Folder</string>
+    <string name="local_tab_playlists">Playlists</string>
 
     <!-- Playlists -->
     <string name="playlists_title">My Playlists</string>
@@ -136,6 +153,22 @@
     <string name="player_queue">Queue</string>
     <string name="player_add_to_queue">Add to Queue</string>
     <string name="player_lyrics">Lyrics</string>
+    <string name="player_now_playing_header">NOW PLAYING</string>
+    <string name="player_lyrics_header">LYRICS</string>
+    <string name="player_action_like">LIKE</string>
+    <string name="player_action_save">SAVE</string>
+    <string name="player_action_chat">CHAT</string>
+    <string name="player_queue_placeholder">Queue management is not connected yet.</string>
+    <string name="player_save_placeholder">Save action is reserved for download / playlist logic.</string>
+    <string name="player_playback_error">Unable to play this source right now.</string>
+    <string name="player_no_lyrics">No synced lyrics available for this song.</string>
+    <string name="player_unknown_artist">Unknown Artist</string>
+    <string name="player_unknown_album">Unknown Album</string>
+    <string name="player_demo_line_one">Waiting in a car</string>
+    <string name="player_demo_line_two">Waiting for a ride in the dark</string>
+    <string name="player_demo_line_three">The night city grows</string>
+    <string name="player_demo_line_four">Look at the horizon line</string>
+    <string name="player_demo_line_five">The stars are out tonight</string>
 
     <!-- Main Page -->
     <string name="main_page_title">My Music</string>
@@ -144,6 +177,37 @@
     <string name="main_page_recent">Recent</string>
     <string name="main_page_local">Local</string>
     <string name="main_page_transcode">Transcode</string>
+    <string name="transcode_subtitle">Convert audio format with one click</string>
+    <string name="transcode_start_title">Ready to transcode</string>
+    <string name="transcode_no_file_selected">No file selected yet</string>
+    <string name="transcode_unknown_file">Unknown audio file</string>
+    <string name="transcode_select_file">Select Audio File</string>
+    <string name="transcode_select_files">Select Files</string>
+    <string name="transcode_start_action">Start Transcoding</string>
+    <string name="transcode_result_title">Transcode Completed</string>
+    <string name="transcode_result_source">Source: %1$s</string>
+    <string name="transcode_result_target">Output: %1$s</string>
+    <string name="transcode_result_meta">Bitrate: %1$s  •  Duration: %2$s</string>
+    <string name="transcode_again">Transcode Another File</string>
+    <string name="transcode_add_audio_files">Add Audio Files</string>
+    <string name="transcode_drag_hint">Drag and drop audio files here or browse your local storage</string>
+    <string name="transcode_selected_files">Selected Files</string>
+    <string name="transcode_selected_count">%1$d files selected</string>
+    <string name="transcode_target_format">Target Format</string>
+    <string name="transcode_bitrate_section">Bitrate</string>
+    <string name="transcode_channel_value">Stereo</string>
+    <string name="transcode_bitrate_value">320 kbps (High Quality)</string>
+    <string name="transcode_start_helper">Select at least one file to begin conversion</string>
+    <string name="transcode_section_in_progress">In Progress</string>
+    <string name="transcode_section_completed">Completed</string>
+    <string name="transcode_section_failed">Failed</string>
+    <string name="transcode_active_badge">2 Active</string>
+    <string name="transcode_target_short">Target: %1$s</string>
+    <string name="transcode_status_done">DONE</string>
+    <string name="transcode_error_unreadable">Error: Source file unreadable</string>
+    <string name="transcode_format_aac">AAC</string>
+    <string name="transcode_format_wav">WAV</string>
+    <string name="transcode_remove_selected_file">Remove selected file</string>
     <string name="main_page_playlists_title">My Playlists</string>
 
     <!-- Local Upload -->
@@ -188,4 +252,83 @@
     <string name="time_seconds">%ds</string>
     <string name="time_minutes">%d:%02d</string>
     <string name="time_hours">%d:%02d:%02d</string>
+
+    <string name="nav_sleep">Sleep</string>
+    <string name="back">Back</string>
+
+    <string name="home_notifications">Notifications</string>
+    <string name="home_mock_query">Midnight Melodies</string>
+    <string name="home_daily_recommend_tab">Daily Recommend</string>
+    <string name="home_trending_tab">Trending</string>
+    <string name="home_top_list_tab">Top List</string>
+    <string name="home_weekly_discovery">Weekly Discovery</string>
+    <string name="home_weekly_discovery_subtitle">Based on your taste</string>
+    <string name="home_modern_jazz">Modern Jazz Essentials</string>
+    <string name="home_modern_jazz_subtitle">What’s hot right now</string>
+    <string name="home_browse_categories">Browse Categories</string>
+    <string name="home_view_all">View All</string>
+    <string name="home_category_pop">Pop</string>
+    <string name="home_category_rock">Rock</string>
+    <string name="home_category_electronic">Electronic</string>
+    <string name="home_category_hits">Global Hits</string>
+    <string name="home_search_results">Search Results</string>
+    <string name="home_search_results_count">12 songs found</string>
+
+    <string name="my_title">My Music</string>
+    <string name="my_profile_name">MusicLover99</string>
+    <string name="my_premium">PREMIUM</string>
+    <string name="my_online_status">Online</string>
+    <string name="my_favorites_meta">128 liked tracks</string>
+    <string name="my_recent_meta">45 plays this week</string>
+    <string name="my_local_meta">320 files scanned</string>
+    <string name="my_transcode_meta">2 active tasks</string>
+    <string name="my_playlists_title">My Playlists</string>
+    <string name="my_create_playlist">+ Create</string>
+
+    <string name="sleep_title">Sleep Mode</string>
+    <string name="sleep_ambience_title">Ambience Mixer</string>
+    <string name="sleep_reset_all">Reset All</string>
+    <string name="sleep_track_rain">Rainfall</string>
+    <string name="sleep_track_ocean">Ocean Waves</string>
+    <string name="sleep_track_wind">Night Wind</string>
+    <string name="sleep_track_forest">Deep Forest</string>
+    <string name="sleep_timer_title">Sleep Timer</string>
+    <string name="sleep_custom_time">Custom time</string>
+    <string name="sleep_fade_out">Fade Out</string>
+    <string name="sleep_fade_out_hint">Gradually lower volume at end</string>
+    <string name="sleep_radio_title">Sleep Radio</string>
+    <string name="sleep_search_hint">Search stations or artists…</string>
+    <string name="sleep_radio_light_music">Light Music</string>
+    <string name="sleep_radio_meditation">Meditation</string>
+    <string name="sleep_radio_asmr">ASMR</string>
+    <string name="sleep_staff_pick">STAFF PICK</string>
+    <string name="sleep_feature_title">Midnight Piano</string>
+    <string name="sleep_feature_subtitle">Gentle keys for deep resting</string>
+
+    <string name="settings_general_section">GENERAL SETTINGS</string>
+    <string name="settings_playback_section">PLAYBACK SETTINGS</string>
+    <string name="settings_download_section">DOWNLOAD SETTINGS</string>
+    <string name="settings_dark_mode">Dark Mode</string>
+    <string name="settings_streaming_quality">Streaming Quality</string>
+    <string name="settings_quality_low">Low</string>
+    <string name="settings_quality_medium">Med</string>
+    <string name="settings_quality_high">High</string>
+    <string name="settings_equalizer_subtitle">Rock / Pop / Custom</string>
+    <string name="settings_playback_mode">Playback Mode</string>
+    <string name="settings_playback_mode_sequential">Sequential</string>
+    <string name="settings_playback_mode_loop">Loop</string>
+    <string name="settings_playback_mode_random">Random</string>
+    <string name="settings_storage_path">Storage Path</string>
+    <string name="settings_storage_path_value">Internal Storage /FlexMusic/Offline</string>
+    <string name="settings_download_quality_value">Very High (FLAC)</string>
+    <string name="settings_version_value">v2.4.12-pro</string>
+    <string name="settings_user_agreement">User Agreement</string>
+    <string name="settings_logout">Log Out</string>
+    <string name="settings_cache_size_mock">Currently using 245.8 MB</string>
+    <string name="settings_cache_size_empty">Currently using 0 MB</string>
+    <string name="settings_placeholder_message">UI placeholder only. Logic not connected yet.</string>
+
+    <string name="mock_player_title">Midnight Melodies</string>
+    <string name="mock_player_artist">The Echo Collective</string>
+
 </resources>
