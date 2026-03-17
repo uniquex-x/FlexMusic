@@ -23,6 +23,7 @@ import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Album;
 import com.example.flexmusicplayer.model.Artist;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 import com.example.flexmusicplayer.storage.LocalMusicStore;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -63,6 +64,7 @@ public class LocalFragment extends Fragment {
 
     private ActivityResultLauncher<String[]> filePickerLauncher;
     private LocalMusicStore localMusicStore;
+    private FavoriteSongsStore favoriteSongsStore;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -102,6 +104,7 @@ public class LocalFragment extends Fragment {
         loadingState = view.findViewById(R.id.loading_state);
         backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
         localMusicStore = new LocalMusicStore(requireContext());
+        favoriteSongsStore = new FavoriteSongsStore(requireContext());
 
         songsRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
         albumsRecycler.setLayoutManager(new GridLayoutManager(requireContext(), 2));
@@ -165,6 +168,7 @@ public class LocalFragment extends Fragment {
     private void loadLocalMusic() {
         List<Song> storedSongs = localMusicStore.loadSongs();
         List<Song> songs = storedSongs.isEmpty() ? createMockSongs() : storedSongs;
+        favoriteSongsStore.applyFavoriteFlags(songs);
         List<Album> albums = createMockAlbums();
         List<Artist> artists = createMockArtists();
 
@@ -307,7 +311,7 @@ public class LocalFragment extends Fragment {
                 });
 
                 favoriteButton.setOnClickListener(v -> {
-                    song.setFavorite(!song.isFavorite());
+                    song.setFavorite(new FavoriteSongsStore(itemView.getContext()).toggleFavorite(song));
                     updateFavorite(song);
                 });
 

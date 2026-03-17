@@ -11,7 +11,9 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -21,6 +23,7 @@ import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.player.LyricsLine;
 import com.example.flexmusicplayer.player.LyricsRepository;
 import com.example.flexmusicplayer.player.PlaybackController;
+import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +39,11 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     private LyricsAdapter lyricsAdapter;
     private boolean showingLyrics = false;
     private boolean userSeeking = false;
+    private final List<LyricsLine> currentLyrics = new ArrayList<>();
+    private long currentLyricsSongId = Long.MIN_VALUE;
+    private int currentActiveLyricIndex = RecyclerView.NO_POSITION;
+    private String currentFavoriteSongKey = "";
+    private FavoriteSongsStore favoriteSongsStore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,19 +52,27 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         setContentView(binding.getRoot());
 
         playbackController = PlaybackController.getInstance(this);
-        lyricsAdapter = new LyricsAdapter();
+        favoriteSongsStore = new FavoriteSongsStore(this);
+        lyricsAdapter = new LyricsAdapter(this::showNowPlayingScreen);
 
         binding.lyricsRecycler.setLayoutManager(new LinearLayoutManager(this));
         binding.lyricsRecycler.setAdapter(lyricsAdapter);
+        if (binding.lyricsRecycler.getItemAnimator() instanceof DefaultItemAnimator) {
+            ((DefaultItemAnimator) binding.lyricsRecycler.getItemAnimator()).setSupportsChangeAnimations(false);
+        }
 
         binding.btnCollapseNowPlaying.setOnClickListener(v -> finish());
         binding.btnCollapseLyrics.setOnClickListener(v -> showNowPlayingScreen());
-        binding.btnMoreNowPlaying.setOnClickListener(v -> showToast(getString(R.string.player_queue_placeholder)));
-        binding.btnMoreLyrics.setOnClickListener(v -> showToast(getString(R.string.player_queue_placeholder)));
+        binding.btnMoreNowPlaying.setOnClickListener(v -> showPlaybackQueueDialog());
+        binding.btnMoreLyrics.setOnClickListener(v -> showPlaybackQueueDialog());
 
         binding.actionLike.setOnClickListener(v -> toggleFavorite());
         binding.actionSave.setOnClickListener(v -> showToast(getString(R.string.player_save_placeholder)));
-        binding.actionLyrics.setOnClickListener(v -> showLyricsScreen());
+        binding.actionLyrics.setOnClickListener(v -> togglePlayerSurface());
+        binding.albumDisc.setOnClickListener(v -> showLyricsScreen());
+        binding.lyricsContent.setOnClickListener(v -> showNowPlayingScreen());
+        binding.lyricsSongTitle.setOnClickListener(v -> showNowPlayingScreen());
+        binding.lyricsSongSubtitle.setOnClickListener(v -> showNowPlayingScreen());
 
         binding.btnShuffle.setOnClickListener(v -> playbackController.toggleShuffle());
         binding.btnPreviousLarge.setOnClickListener(v -> playbackController.skipPrevious());
@@ -66,7 +82,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
             if (showingLyrics) {
                 playbackController.toggleRepeat();
             } else {
-                showToast(getString(R.string.player_queue_placeholder));
+                showPlaybackQueueDialog();
             }
         });
         binding.playerSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -125,6 +141,11 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         if (currentSong == null) {
             return;
         }
+        String songKey = buildSongKey(currentSong);
+        if (!songKey.equals(currentFavoriteSongKey)) {
+            currentFavoriteSongKey = songKey;
+            currentSong.setFavorite(favoriteSongsStore.isFavorite(currentSong));
+        }
 
         String artist = !TextUtils.isEmpty(currentSong.getArtist())
                 ? currentSong.getArtist()
@@ -173,16 +194,26 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     }
 
     private void updateLyrics(@NonNull PlayerState state) {
-        List<LyricsLine> lyrics = LyricsRepository.getLyrics(this, state.getCurrentSong());
-        int activeIndex = resolveActiveLyricIndex(lyrics, state.getCurrentPosition());
-        lyricsAdapter.submit(lyrics, activeIndex);
-        if (showingLyrics && activeIndex >= 0) {
-            binding.lyricsRecycler.post(() -> {
-                RecyclerView.LayoutManager layoutManager = binding.lyricsRecycler.getLayoutManager();
-                if (layoutManager instanceof LinearLayoutManager) {
-                    ((LinearLayoutManager) layoutManager).scrollToPositionWithOffset(activeIndex, binding.lyricsRecycler.getHeight() / 3);
-                }
-            });
+        Song currentSong = state.getCurrentSong();
+        if (currentSong == null) {
+            return;
+        }
+        if (currentSong.getId() != currentLyricsSongId) {
+            currentLyricsSongId = currentSong.getId();
+            currentLyrics.clear();
+            currentLyrics.addAll(LyricsRepository.getLyrics(this, currentSong));
+            lyricsAdapter.submitLyrics(currentLyrics);
+            currentActiveLyricIndex = RecyclerView.NO_POSITION;
+        }
+
+        int activeIndex = resolveActiveLyricIndex(currentLyrics, state.getCurrentPosition());
+        if (activeIndex != currentActiveLyricIndex) {
+            int previousIndex = currentActiveLyricIndex;
+            currentActiveLyricIndex = activeIndex;
+            lyricsAdapter.updateActiveIndex(previousIndex, activeIndex);
+            if (showingLyrics) {
+                scrollActiveLyricIntoView(activeIndex);
+            }
         }
     }
 
@@ -203,18 +234,58 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         if (currentSong == null) {
             return;
         }
-        currentSong.setFavorite(!currentSong.isFavorite());
+        boolean isFavorite = favoriteSongsStore.toggleFavorite(currentSong);
+        currentSong.setFavorite(isFavorite);
+        currentFavoriteSongKey = buildSongKey(currentSong);
         onPlaybackStateChanged(playbackController.getPlayerState());
+        showToast(getString(isFavorite ? R.string.added_to_favorites : R.string.removed_from_favorites));
+    }
+
+    private void showPlaybackQueueDialog() {
+        List<Song> queue = playbackController.getQueueSnapshot();
+        if (queue.isEmpty()) {
+            showToast(getString(R.string.player_queue_empty));
+            return;
+        }
+
+        String[] items = new String[queue.size()];
+        for (int i = 0; i < queue.size(); i++) {
+            Song song = queue.get(i);
+            String artist = TextUtils.isEmpty(song.getArtist())
+                    ? getString(R.string.player_unknown_artist)
+                    : song.getArtist();
+            items[i] = song.getTitle() + " • " + artist;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.player_queue_title)
+                .setSingleChoiceItems(items, playbackController.getCurrentIndex(), (dialog, which) -> {
+                    playbackController.playQueueIndex(which);
+                    dialog.dismiss();
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
     private void showLyricsScreen() {
         showingLyrics = true;
         updateScreenMode(playbackController.getPlayerState());
+        if (currentActiveLyricIndex != RecyclerView.NO_POSITION) {
+            scrollActiveLyricIntoView(currentActiveLyricIndex);
+        }
     }
 
     private void showNowPlayingScreen() {
         showingLyrics = false;
         updateScreenMode(playbackController.getPlayerState());
+    }
+
+    private void togglePlayerSurface() {
+        if (showingLyrics) {
+            showNowPlayingScreen();
+        } else {
+            showLyricsScreen();
+        }
     }
 
     private void updateScreenMode(@NonNull PlayerState state) {
@@ -223,6 +294,17 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         binding.headerLyrics.setVisibility(showingLyrics ? android.view.View.VISIBLE : android.view.View.GONE);
         binding.lyricsContent.setVisibility(showingLyrics ? android.view.View.VISIBLE : android.view.View.GONE);
         updateControlChrome(state);
+    }
+
+    private void scrollActiveLyricIntoView(int activeIndex) {
+        binding.lyricsRecycler.post(() -> {
+            RecyclerView.LayoutManager layoutManager = binding.lyricsRecycler.getLayoutManager();
+            if (layoutManager instanceof LinearLayoutManager) {
+                ((LinearLayoutManager) layoutManager).scrollToPositionWithOffset(
+                        activeIndex,
+                        Math.max(binding.lyricsRecycler.getHeight() / 3, 0));
+            }
+        });
     }
 
     private void showToast(String message) {
@@ -235,15 +317,40 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         return minutes + ":" + String.format(java.util.Locale.getDefault(), "%02d", seconds % 60);
     }
 
-    private static class LyricsAdapter extends RecyclerView.Adapter<LyricsAdapter.ViewHolder> {
-        private final List<LyricsLine> lyrics = new ArrayList<>();
-        private int activeIndex = 0;
+    private String buildSongKey(@NonNull Song song) {
+        if (!TextUtils.isEmpty(song.getAudioUrl())) {
+            return song.getAudioUrl();
+        }
+        return song.getTitle() + "|" + song.getArtist() + "|" + song.getAlbum();
+    }
 
-        void submit(@NonNull List<LyricsLine> lines, int activeIndex) {
+    private static class LyricsAdapter extends RecyclerView.Adapter<LyricsAdapter.ViewHolder> {
+        interface OnLyricTapListener {
+            void onLyricTap();
+        }
+
+        private final List<LyricsLine> lyrics = new ArrayList<>();
+        private final OnLyricTapListener onLyricTapListener;
+        private int activeIndex = RecyclerView.NO_POSITION;
+
+        LyricsAdapter(@NonNull OnLyricTapListener onLyricTapListener) {
+            this.onLyricTapListener = onLyricTapListener;
+        }
+
+        void submitLyrics(@NonNull List<LyricsLine> lines) {
             lyrics.clear();
             lyrics.addAll(lines);
-            this.activeIndex = activeIndex;
             notifyDataSetChanged();
+        }
+
+        void updateActiveIndex(int previousIndex, int newIndex) {
+            if (previousIndex >= 0 && previousIndex < lyrics.size()) {
+                notifyItemChanged(previousIndex);
+            }
+            if (newIndex >= 0 && newIndex < lyrics.size()) {
+                notifyItemChanged(newIndex);
+            }
+            activeIndex = newIndex;
         }
 
         @NonNull
@@ -256,7 +363,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
 
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            holder.bind(lyrics.get(position), Math.abs(position - activeIndex));
+            holder.bind(lyrics.get(position), Math.abs(position - activeIndex), onLyricTapListener);
         }
 
         @Override
@@ -272,7 +379,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 lyricText = itemView.findViewById(R.id.lyric_text);
             }
 
-            void bind(LyricsLine line, int distanceFromActive) {
+            void bind(LyricsLine line, int distanceFromActive, OnLyricTapListener onLyricTapListener) {
                 lyricText.setText(line.getText());
                 if (distanceFromActive == 0) {
                     lyricText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.player_bar_background));
@@ -284,6 +391,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                     lyricText.setTextColor(0xFFC5CAD5);
                     lyricText.setTextSize(12);
                 }
+                itemView.setOnClickListener(v -> onLyricTapListener.onLyricTap());
             }
         }
     }

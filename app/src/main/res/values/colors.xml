@@ -50,6 +50,7 @@
     <color name="background_dark">#121212</color>
     <color name="card_background_light">#FFFFFF</color>
     <color name="card_background_dark">#1E1E1E</color>
+    <color name="card_stroke">#ECE7F7</color>
 
     <!-- Text colors -->
     <color name="text_primary_light">#212121</color>

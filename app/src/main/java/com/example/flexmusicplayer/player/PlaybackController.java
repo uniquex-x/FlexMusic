@@ -166,6 +166,14 @@ public final class PlaybackController {
         prepareCurrentSong();
     }
 
+    public synchronized void playQueueIndex(int index) {
+        if (queue.isEmpty()) {
+            return;
+        }
+        currentIndex = Math.max(0, Math.min(index, queue.size() - 1));
+        prepareCurrentSong();
+    }
+
     public synchronized void togglePlayPause() {
         if (playerState.getCurrentSong() == null) {
             return;
@@ -184,6 +192,23 @@ public final class PlaybackController {
                 return;
             }
             dispatchState();
+        } catch (IllegalStateException e) {
+            playerState.setState(PlayerState.State.ERROR);
+            dispatchState();
+        }
+    }
+
+    public synchronized void pause() {
+        if (!prepared) {
+            return;
+        }
+        try {
+            if (mediaPlayer.isPlaying()) {
+                mediaPlayer.pause();
+                playerState.setState(PlayerState.State.PAUSED);
+                stopProgressTicker();
+                dispatchState();
+            }
         } catch (IllegalStateException e) {
             playerState.setState(PlayerState.State.ERROR);
             dispatchState();
@@ -243,6 +268,15 @@ public final class PlaybackController {
 
     public synchronized boolean hasPrevious() {
         return hasPreviousInternal();
+    }
+
+    @NonNull
+    public synchronized List<Song> getQueueSnapshot() {
+        return new ArrayList<>(queue);
+    }
+
+    public synchronized int getCurrentIndex() {
+        return currentIndex;
     }
 
     private void prepareCurrentSong() {

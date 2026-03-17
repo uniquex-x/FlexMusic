@@ -118,13 +118,15 @@
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/timer_toggle_group"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    app:selectionRequired="true"
+                    app:selectionRequired="false"
                     app:singleSelection="true">
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/timer_button_15"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
@@ -132,13 +134,15 @@
                         android:text="15m" />
 
                     <com.google.android.material.button.MaterialButton
-                        style="@style/Widget.MaterialComponents.Button"
+                        android:id="@+id/timer_button_30"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
                         android:layout_weight="1"
                         android:text="30m" />
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/timer_button_60"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
@@ -162,9 +166,10 @@
                         android:textSize="15sp" />
 
                     <TextView
+                        android:id="@+id/timer_value_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="01:20:00"
+                        android:text="@string/sleep_timer_not_set"
                         android:textColor="@color/primary_500"
                         android:textSize="15sp"
                         android:textStyle="bold" />
@@ -201,6 +206,7 @@
                     </LinearLayout>
 
                     <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/fade_out_switch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:checked="true" />
@@ -219,6 +225,7 @@
             android:textStyle="bold" />
 
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/search_card"
             android:layout_width="match_parent"
             android:layout_height="50dp"
             android:layout_marginTop="14dp"
@@ -243,12 +250,20 @@
                     android:src="@drawable/ic_search"
                     app:tint="#9D98B8" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <EditText
+                    android:id="@+id/search_input"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
-                    android:text="@string/sleep_search_hint"
-                    android:textColor="#9D98B8"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:hint="@string/sleep_search_hint"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:padding="0dp"
+                    android:textColor="?attr/colorOnBackground"
+                    android:textColorHint="#9D98B8"
                     android:textSize="14sp" />
             </LinearLayout>
 
@@ -266,6 +281,7 @@
                 android:orientation="horizontal">
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/radio_category_light_music"
                     android:layout_width="84dp"
                     android:layout_height="84dp"
                     android:layout_marginEnd="10dp"
@@ -298,6 +314,7 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/radio_category_meditation"
                     android:layout_width="84dp"
                     android:layout_height="84dp"
                     android:layout_marginEnd="10dp"
@@ -330,6 +347,7 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/radio_category_asmr"
                     android:layout_width="84dp"
                     android:layout_height="84dp"
                     android:layout_marginEnd="10dp"
@@ -408,6 +426,7 @@
                         android:orientation="vertical">
 
                         <TextView
+                            android:id="@+id/sleep_feature_title_text"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/sleep_feature_title"
@@ -416,6 +435,7 @@
                             android:textStyle="bold" />
 
                         <TextView
+                            android:id="@+id/sleep_feature_subtitle_text"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
@@ -425,6 +445,7 @@
                     </LinearLayout>
 
                     <ImageButton
+                        android:id="@+id/feature_play_button"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:background="@drawable/bg_play_circle"
@@ -436,6 +457,48 @@
             </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:id="@+id/recent_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/sleep_recent_title"
+            android:textColor="?attr/colorOnBackground"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/recent_sessions_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/radio_results_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/sleep_results_title"
+            android:textColor="?attr/colorOnBackground"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/radio_results_empty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/sleep_no_results"
+            android:textColor="#8B88A1"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/radio_results_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
 
     </LinearLayout>
 

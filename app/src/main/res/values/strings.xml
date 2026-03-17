@@ -158,6 +158,8 @@
     <string name="player_action_like">LIKE</string>
     <string name="player_action_save">SAVE</string>
     <string name="player_action_chat">CHAT</string>
+    <string name="player_queue_title">Now Playing Queue</string>
+    <string name="player_queue_empty">No songs in the current queue.</string>
     <string name="player_queue_placeholder">Queue management is not connected yet.</string>
     <string name="player_save_placeholder">Save action is reserved for download / playlist logic.</string>
     <string name="player_playback_error">Unable to play this source right now.</string>
@@ -304,6 +306,23 @@
     <string name="sleep_staff_pick">STAFF PICK</string>
     <string name="sleep_feature_title">Midnight Piano</string>
     <string name="sleep_feature_subtitle">Gentle keys for deep resting</string>
+    <string name="sleep_default_mix_title">Default Sleep Mix</string>
+    <string name="sleep_default_mix_subtitle">Offline white-noise blend for quick rest</string>
+    <string name="sleep_offline_ready">Offline ambience loop</string>
+    <string name="sleep_timer_not_set">Not set</string>
+    <string name="sleep_recent_title">Recent Sessions</string>
+    <string name="sleep_results_title">Radio Results</string>
+    <string name="sleep_no_results">No matching stations in the current sample catalog.</string>
+    <string name="sleep_playing">PLAYING</string>
+    <string name="sleep_play">PLAY</string>
+    <string name="sleep_stop">STOP</string>
+    <string name="sleep_recent_empty">Your recent sleep sounds and stations will appear here.</string>
+    <string name="sleep_session_idle">Tap play to start the offline default sleep mix.</string>
+    <string name="sleep_session_timer">Timer: %1$s</string>
+    <string name="sleep_session_volume">Fade volume %1$d%%</string>
+    <string name="sleep_radio_error">Unable to load this station right now.</string>
+    <string name="sleep_source_official">Official</string>
+    <string name="sleep_source_sample">Sample Catalog</string>
 
     <string name="settings_general_section">GENERAL SETTINGS</string>
     <string name="settings_playback_section">PLAYBACK SETTINGS</string>

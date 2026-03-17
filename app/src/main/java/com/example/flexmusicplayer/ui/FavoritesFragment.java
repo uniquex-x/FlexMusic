@@ -6,6 +6,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -17,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -39,6 +41,7 @@ public class FavoritesFragment extends Fragment {
     private View emptyState;
     private MaterialButton discoverButton;
     private SongVerticalAdapter favoritesAdapter;
+    private FavoriteSongsStore favoriteSongsStore;
 
     @Nullable
     @Override
@@ -59,6 +62,7 @@ public class FavoritesFragment extends Fragment {
         emptyState = view.findViewById(R.id.empty_state);
         discoverButton = view.findViewById(R.id.discover_button);
         backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        favoriteSongsStore = new FavoriteSongsStore(requireContext());
 
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         favoritesRecycler.setLayoutManager(layoutManager);
@@ -74,8 +78,7 @@ public class FavoritesFragment extends Fragment {
     }
 
     private void loadFavorites() {
-        // TODO: Load actual favorites from database
-        List<Song> favorites = createMockFavorites();
+        List<Song> favorites = favoriteSongsStore.loadFavorites();
 
         if (favorites.isEmpty()) {
             favoritesRecycler.setVisibility(View.GONE);
@@ -87,37 +90,24 @@ public class FavoritesFragment extends Fragment {
         }
     }
 
-    private List<Song> createMockFavorites() {
-        List<Song> favorites = new ArrayList<>();
-        favorites.add(createFavoriteSong(1, "Midnight City", "M83", "Hurry Up, We're Dreaming"));
-        favorites.add(createFavoriteSong(2, "Levitating", "Dua Lipa", "Future Nostalgia"));
-        favorites.add(createFavoriteSong(3, "Starboy", "The Weeknd", "Starboy"));
-        favorites.add(createFavoriteSong(4, "Blinding Lights", "The Weeknd", "After Hours"));
-        favorites.add(createFavoriteSong(5, "Good Days", "SZA", "SOS"));
-        favorites.add(createFavoriteSong(6, "Watermelon Sugar", "Harry Styles", "Fine Line"));
-
-        return favorites;
-    }
-
-    private Song createFavoriteSong(long id, String title, String artist, String album) {
-        Song song = new Song(id, title, artist, album, (3 * 60 + 20) * 1000, "");
-        song.setFavorite(true);
-        return song;
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadFavorites();
     }
 
     public void refreshFavorites() {
         loadFavorites();
     }
 
-    // Adapter for favorite songs list
-    private static class SongVerticalAdapter extends RecyclerView.Adapter<SongVerticalAdapter.ViewHolder> {
+    private class SongVerticalAdapter extends RecyclerView.Adapter<SongVerticalAdapter.ViewHolder> {
         private List<Song> songs;
 
-        public SongVerticalAdapter(List<Song> songs) {
+        SongVerticalAdapter(List<Song> songs) {
             this.songs = songs;
         }
 
-        public void setSongs(List<Song> songs) {
+        void setSongs(List<Song> songs) {
             this.songs = songs;
             notifyDataSetChanged();
         }
@@ -133,7 +123,7 @@ public class FavoritesFragment extends Fragment {
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             Song song = songs.get(position);
-            holder.bind(song, songs, position);
+            holder.bind(song, position);
         }
 
         @Override
@@ -141,7 +131,7 @@ public class FavoritesFragment extends Fragment {
             return songs.size();
         }
 
-        static class ViewHolder extends RecyclerView.ViewHolder {
+        class ViewHolder extends RecyclerView.ViewHolder {
             private final MaterialCardView albumArtCard;
             private final android.widget.TextView songTitle;
             private final android.widget.TextView artistName;
@@ -155,7 +145,7 @@ public class FavoritesFragment extends Fragment {
                 favoriteButton = itemView.findViewById(R.id.favorite_button);
             }
 
-            public void bind(Song song, List<Song> queue, int position) {
+            void bind(Song song, int position) {
                 songTitle.setText(song.getTitle());
                 artistName.setText(song.getArtist());
                 albumArtCard.setCardBackgroundColor(ART_COLORS[position % ART_COLORS.length]);
@@ -165,15 +155,26 @@ public class FavoritesFragment extends Fragment {
 
                 itemView.setOnClickListener(v -> {
                     if (itemView.getContext() instanceof MainActivity) {
-                        ((MainActivity) itemView.getContext()).onSongPlaybackRequested(song, queue, position);
+                        ((MainActivity) itemView.getContext()).onSongPlaybackRequested(song, songs, position);
                     }
                 });
 
                 favoriteButton.setOnClickListener(v -> {
-                    song.setFavorite(!song.isFavorite());
+                    boolean isFavorite = favoriteSongsStore.toggleFavorite(song);
                     favoriteButton.setImageTintList(ContextCompat.getColorStateList(
                             itemView.getContext(),
-                            song.isFavorite() ? R.color.player_bar_background : R.color.gray_400));
+                            isFavorite ? R.color.player_bar_background : R.color.gray_400));
+                    if (!isFavorite) {
+                        int adapterPosition = getAdapterPosition();
+                        if (adapterPosition != RecyclerView.NO_POSITION) {
+                            songs.remove(adapterPosition);
+                            notifyItemRemoved(adapterPosition);
+                            if (songs.isEmpty()) {
+                                loadFavorites();
+                            }
+                        }
+                        Toast.makeText(itemView.getContext(), R.string.removed_from_favorites, Toast.LENGTH_SHORT).show();
+                    }
                 });
             }
         }
