@@ -47,5 +47,6 @@ dependencies {
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
     implementation project(":core_player_sdk")
+    implementation project(":core_network")
     implementation project(":feature_player")
 }

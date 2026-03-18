@@ -17,6 +17,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.storage.RecentPlaybackStore;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 
@@ -29,13 +30,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
-public class RecentFragment extends Fragment {
+public class RecentFragment extends Fragment implements RecentPlaybackStore.Listener {
 
     private RecyclerView recentRecycler;
     private View emptyState;
     private MaterialButton browseButton;
     private RecentAdapter recentAdapter;
     private List<SongWithDate> recentSongs;
+    private final RecentPlaybackStore recentPlaybackStore = RecentPlaybackStore.getInstance();
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -44,7 +46,7 @@ public class RecentFragment extends Fragment {
 
         initViews(view);
         setupClickListeners();
-        loadRecentSongs();
+        loadRecentSongs(recentPlaybackStore.getRecentSongs());
 
         return view;
     }
@@ -70,9 +72,7 @@ public class RecentFragment extends Fragment {
         });
     }
 
-    private void loadRecentSongs() {
-        List<Song> songs = createMockRecentSongs();
-
+    private void loadRecentSongs(@NonNull List<Song> songs) {
         if (songs.isEmpty()) {
             recentRecycler.setVisibility(View.GONE);
             emptyState.setVisibility(View.VISIBLE);
@@ -137,32 +137,24 @@ public class RecentFragment extends Fragment {
         }
     }
 
-    private List<Song> createMockRecentSongs() {
-        List<Song> songs = new ArrayList<>();
-        Calendar cal = Calendar.getInstance();
+    @Override
+    public void onStart() {
+        super.onStart();
+        recentPlaybackStore.addListener(this);
+    }
 
-        Song song1 = new Song(1, "Starlight", "The Midnight", "Heroes", (3 * 60 + 30) * 1000, "url1.mp3");
-        song1.setLastPlayedDate(cal.getTimeInMillis());
-        songs.add(song1);
+    @Override
+    public void onStop() {
+        recentPlaybackStore.removeListener(this);
+        super.onStop();
+    }
 
-        song1 = new Song(2, "Blinding Lights", "The Weeknd", "After Hours", (4 * 60 + 15) * 1000, "url2.mp3");
-        song1.setLastPlayedDate(cal.getTimeInMillis() - (15 * 60 * 1000L));
-        songs.add(song1);
-
-        song1 = new Song(3, "Levitating", "Dua Lipa", "Future Nostalgia", (3 * 60 + 23) * 1000, "url4.mp3");
-        song1.setLastPlayedDate(cal.getTimeInMillis() - (60 * 60 * 1000L));
-        songs.add(song1);
-
-        cal.add(Calendar.DAY_OF_YEAR, -1);
-        Song song2 = new Song(4, "After Hours", "The Weeknd", "After Hours", (5 * 60 + 20) * 1000, "url3.mp3");
-        song2.setLastPlayedDate(cal.getTimeInMillis());
-        songs.add(song2);
-
-        Song song3 = new Song(5, "Nightcall", "Kavinsky", "OutRun", (4 * 60 + 14) * 1000, "url5.mp3");
-        song3.setLastPlayedDate(cal.getTimeInMillis() - (2 * 60 * 60 * 1000L));
-        songs.add(song3);
-
-        return songs;
+    @Override
+    public void onRecentSongsChanged(@NonNull List<Song> songs) {
+        if (!isAdded()) {
+            return;
+        }
+        loadRecentSongs(songs);
     }
 
     private static class SongWithDate {

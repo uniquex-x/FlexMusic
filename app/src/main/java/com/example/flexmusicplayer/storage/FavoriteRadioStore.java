@@ -15,14 +15,15 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public class FavoriteSongsStore {
+public class FavoriteRadioStore {
 
-    private static final String PREFS_NAME = "flexmusic_favorites";
-    private static final String KEY_FAVORITES = "favorite_songs";
+    private static final String PREFS_NAME = "flexmusic_favorite_radios";
+    private static final String KEY_FAVORITES = "favorite_radios";
+    private static final int MAX_FAVORITES = 100;
 
     private final SharedPreferences preferences;
 
-    public FavoriteSongsStore(@NonNull Context context) {
+    public FavoriteRadioStore(@NonNull Context context) {
         preferences = context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
@@ -33,9 +34,9 @@ public class FavoriteSongsStore {
         try {
             JSONArray array = new JSONArray(raw);
             for (int i = 0; i < array.length(); i++) {
-                Song song = fromJson(array.getJSONObject(i));
-                song.setFavorite(true);
-                favorites.add(song);
+                Song radio = fromJson(array.getJSONObject(i));
+                radio.setFavorite(true);
+                favorites.add(radio);
             }
         } catch (JSONException ignored) {
         }
@@ -43,9 +44,9 @@ public class FavoriteSongsStore {
     }
 
     public boolean isFavorite(@NonNull Song song) {
-        String key = buildSongKey(song);
+        String key = buildRadioKey(song);
         for (Song favorite : loadFavorites()) {
-            if (key.equals(buildSongKey(favorite))) {
+            if (key.equals(buildRadioKey(favorite))) {
                 return true;
             }
         }
@@ -54,10 +55,10 @@ public class FavoriteSongsStore {
 
     public boolean toggleFavorite(@NonNull Song song) {
         List<Song> favorites = loadFavorites();
-        String key = buildSongKey(song);
+        String key = buildRadioKey(song);
         Iterator<Song> iterator = favorites.iterator();
         while (iterator.hasNext()) {
-            if (key.equals(buildSongKey(iterator.next()))) {
+            if (key.equals(buildRadioKey(iterator.next()))) {
                 iterator.remove();
                 saveFavorites(favorites);
                 song.setFavorite(false);
@@ -66,16 +67,14 @@ public class FavoriteSongsStore {
         }
         Song favoriteCopy = copySong(song);
         favoriteCopy.setFavorite(true);
+        favoriteCopy.setRadioStream(true);
         favorites.add(0, favoriteCopy);
+        while (favorites.size() > MAX_FAVORITES) {
+            favorites.remove(favorites.size() - 1);
+        }
         saveFavorites(favorites);
         song.setFavorite(true);
         return true;
-    }
-
-    public void applyFavoriteFlags(@NonNull List<Song> songs) {
-        for (Song song : songs) {
-            song.setFavorite(isFavorite(song));
-        }
     }
 
     private void saveFavorites(@NonNull List<Song> songs) {
@@ -86,14 +85,15 @@ public class FavoriteSongsStore {
         preferences.edit().putString(KEY_FAVORITES, array.toString()).apply();
     }
 
-    private String buildSongKey(@NonNull Song song) {
-        String source = song.getAudioUrl() != null ? song.getAudioUrl() : "";
-        if (!source.trim().isEmpty()) {
-            return source;
+    @NonNull
+    private String buildRadioKey(@NonNull Song song) {
+        if (song.getSourceId() != null && !song.getSourceId().trim().isEmpty()) {
+            return song.getSourceId();
         }
-        return song.getTitle() + "|" + song.getArtist() + "|" + song.getAlbum();
+        return song.getAudioUrl() != null ? song.getAudioUrl() : song.getTitle();
     }
 
+    @NonNull
     private Song copySong(@NonNull Song source) {
         Song song = new Song(source.getId(), source.getTitle(), source.getArtist(), source.getAlbum(), source.getDuration(), source.getAudioUrl());
         song.setAlbumArtUrl(source.getAlbumArtUrl());
@@ -106,6 +106,7 @@ public class FavoriteSongsStore {
         return song;
     }
 
+    @NonNull
     private JSONObject toJson(@NonNull Song song) {
         JSONObject object = new JSONObject();
         try {
@@ -127,7 +128,8 @@ public class FavoriteSongsStore {
         return object;
     }
 
-    private Song fromJson(@NonNull JSONObject object) throws JSONException {
+    @NonNull
+    private Song fromJson(@NonNull JSONObject object) {
         Song song = new Song(
                 object.optLong("id"),
                 object.optString("title"),

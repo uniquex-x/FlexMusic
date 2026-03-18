@@ -1,11 +1,12 @@
 package com.example.flexmusicplayer.ui;
 
-import android.os.Bundle;
 import android.graphics.Color;
+import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -18,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
@@ -27,6 +29,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FavoritesFragment extends Fragment {
+
+    private enum FavoriteTab {
+        SONGS,
+        RADIOS
+    }
 
     private static final int[] ART_COLORS = {
             Color.parseColor("#2B203F"),
@@ -42,6 +49,16 @@ public class FavoritesFragment extends Fragment {
     private MaterialButton discoverButton;
     private SongVerticalAdapter favoritesAdapter;
     private FavoriteSongsStore favoriteSongsStore;
+    private FavoriteRadioStore favoriteRadioStore;
+    private TextView emptyTitle;
+    private TextView emptyDescription;
+    private View songsTab;
+    private View radiosTab;
+    private TextView songsTabText;
+    private TextView radiosTabText;
+    private View songsTabIndicator;
+    private View radiosTabIndicator;
+    private FavoriteTab selectedTab = FavoriteTab.SONGS;
 
     @Nullable
     @Override
@@ -61,8 +78,17 @@ public class FavoritesFragment extends Fragment {
         favoritesRecycler = view.findViewById(R.id.favorites_recycler);
         emptyState = view.findViewById(R.id.empty_state);
         discoverButton = view.findViewById(R.id.discover_button);
+        emptyTitle = view.findViewById(R.id.empty_title);
+        emptyDescription = view.findViewById(R.id.empty_description);
+        songsTab = view.findViewById(R.id.tab_songs);
+        radiosTab = view.findViewById(R.id.tab_radios);
+        songsTabText = view.findViewById(R.id.tab_songs_text);
+        radiosTabText = view.findViewById(R.id.tab_radios_text);
+        songsTabIndicator = view.findViewById(R.id.tab_songs_indicator);
+        radiosTabIndicator = view.findViewById(R.id.tab_radios_indicator);
         backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
         favoriteSongsStore = new FavoriteSongsStore(requireContext());
+        favoriteRadioStore = new FavoriteRadioStore(requireContext());
 
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         favoritesRecycler.setLayoutManager(layoutManager);
@@ -75,19 +101,48 @@ public class FavoritesFragment extends Fragment {
             BottomNavigationView navigationView = requireActivity().findViewById(R.id.bottom_navigation);
             navigationView.setSelectedItemId(R.id.nav_main_page);
         });
+        songsTab.setOnClickListener(v -> switchTab(FavoriteTab.SONGS));
+        radiosTab.setOnClickListener(v -> switchTab(FavoriteTab.RADIOS));
+    }
+
+    private void switchTab(@NonNull FavoriteTab tab) {
+        if (selectedTab == tab) {
+            return;
+        }
+        selectedTab = tab;
+        loadFavorites();
     }
 
     private void loadFavorites() {
-        List<Song> favorites = favoriteSongsStore.loadFavorites();
+        updateTabUi();
+        List<Song> favorites = selectedTab == FavoriteTab.SONGS
+                ? favoriteSongsStore.loadFavorites()
+                : favoriteRadioStore.loadFavorites();
 
         if (favorites.isEmpty()) {
             favoritesRecycler.setVisibility(View.GONE);
             emptyState.setVisibility(View.VISIBLE);
+            emptyTitle.setText(selectedTab == FavoriteTab.SONGS
+                    ? R.string.favorites_empty
+                    : R.string.favorite_radios_empty);
+            emptyDescription.setText(selectedTab == FavoriteTab.SONGS
+                    ? R.string.favorites_empty_description
+                    : R.string.favorite_radios_empty_description);
         } else {
             favoritesRecycler.setVisibility(View.VISIBLE);
             emptyState.setVisibility(View.GONE);
-            favoritesAdapter.setSongs(favorites);
+            favoritesAdapter.setSongs(favorites, selectedTab);
         }
+    }
+
+    private void updateTabUi() {
+        boolean songsSelected = selectedTab == FavoriteTab.SONGS;
+        songsTabText.setTextColor(ContextCompat.getColor(requireContext(),
+                songsSelected ? R.color.player_bar_background : R.color.gray_500));
+        radiosTabText.setTextColor(ContextCompat.getColor(requireContext(),
+                songsSelected ? R.color.gray_500 : R.color.player_bar_background));
+        songsTabIndicator.setVisibility(songsSelected ? View.VISIBLE : View.INVISIBLE);
+        radiosTabIndicator.setVisibility(songsSelected ? View.INVISIBLE : View.VISIBLE);
     }
 
     @Override
@@ -102,13 +157,15 @@ public class FavoritesFragment extends Fragment {
 
     private class SongVerticalAdapter extends RecyclerView.Adapter<SongVerticalAdapter.ViewHolder> {
         private List<Song> songs;
+        private FavoriteTab tab = FavoriteTab.SONGS;
 
         SongVerticalAdapter(List<Song> songs) {
             this.songs = songs;
         }
 
-        void setSongs(List<Song> songs) {
+        void setSongs(List<Song> songs, @NonNull FavoriteTab tab) {
             this.songs = songs;
+            this.tab = tab;
             notifyDataSetChanged();
         }
 
@@ -123,7 +180,7 @@ public class FavoritesFragment extends Fragment {
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             Song song = songs.get(position);
-            holder.bind(song, position);
+            holder.bind(song, position, tab);
         }
 
         @Override
@@ -133,11 +190,11 @@ public class FavoritesFragment extends Fragment {
 
         class ViewHolder extends RecyclerView.ViewHolder {
             private final MaterialCardView albumArtCard;
-            private final android.widget.TextView songTitle;
-            private final android.widget.TextView artistName;
-            private final android.widget.ImageButton favoriteButton;
+            private final TextView songTitle;
+            private final TextView artistName;
+            private final ImageButton favoriteButton;
 
-            public ViewHolder(@NonNull View itemView) {
+            ViewHolder(@NonNull View itemView) {
                 super(itemView);
                 albumArtCard = itemView.findViewById(R.id.album_art_card);
                 songTitle = itemView.findViewById(R.id.song_title);
@@ -145,7 +202,7 @@ public class FavoritesFragment extends Fragment {
                 favoriteButton = itemView.findViewById(R.id.favorite_button);
             }
 
-            void bind(Song song, int position) {
+            void bind(Song song, int position, @NonNull FavoriteTab tab) {
                 songTitle.setText(song.getTitle());
                 artistName.setText(song.getArtist());
                 albumArtCard.setCardBackgroundColor(ART_COLORS[position % ART_COLORS.length]);
@@ -160,7 +217,9 @@ public class FavoritesFragment extends Fragment {
                 });
 
                 favoriteButton.setOnClickListener(v -> {
-                    boolean isFavorite = favoriteSongsStore.toggleFavorite(song);
+                    boolean isFavorite = tab == FavoriteTab.SONGS
+                            ? favoriteSongsStore.toggleFavorite(song)
+                            : favoriteRadioStore.toggleFavorite(song);
                     favoriteButton.setImageTintList(ContextCompat.getColorStateList(
                             itemView.getContext(),
                             isFavorite ? R.color.player_bar_background : R.color.gray_400));

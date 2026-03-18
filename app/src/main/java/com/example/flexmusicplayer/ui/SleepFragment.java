@@ -1,14 +1,14 @@
 package com.example.flexmusicplayer.ui;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -24,13 +24,14 @@ import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.sleep.SleepPlaybackController;
 import com.example.flexmusicplayer.sleep.SleepPlaybackState;
 import com.example.flexmusicplayer.sleep.SleepRadioStation;
-import com.example.flexmusicplayer.sleep.SleepRecentEntry;
 import com.example.flexmusicplayer.sleep.SleepSound;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 
 import java.util.List;
+import java.util.ArrayList;
 
 public class SleepFragment extends Fragment implements SleepPlaybackController.Listener {
 
@@ -38,10 +39,8 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
 
     private EditText searchInput;
     private TextView timerValueText;
-    private TextView featureTitleText;
-    private TextView featureSubtitleText;
-    private ImageButton featurePlayButton;
     private SwitchCompat fadeOutSwitch;
+    private MaterialButton defaultMixButton;
     private MaterialButtonToggleGroup timerToggleGroup;
     private MaterialCardView trackRainCard;
     private MaterialCardView trackOceanCard;
@@ -55,14 +54,14 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
     private LinearProgressIndicator trackOceanProgress;
     private LinearProgressIndicator trackWindProgress;
     private LinearProgressIndicator trackForestProgress;
-    private MaterialCardView radioCategoryLightMusic;
-    private MaterialCardView radioCategoryMeditation;
-    private MaterialCardView radioCategoryAsmr;
-    private LinearLayout recentSessionsContainer;
     private LinearLayout radioResultsContainer;
     private View radioResultsEmpty;
 
-    private String selectedCategory = "";
+    private final Handler searchHandler = new Handler(Looper.getMainLooper());
+    private final List<SleepRadioStation> displayedStations = new ArrayList<>();
+    private int searchRequestVersion = 0;
+    private boolean searching = false;
+    private final Runnable searchRunnable = this::requestStations;
     private String lastErrorMessage = null;
 
     @Nullable
@@ -74,8 +73,7 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
 
         initViews(view);
         setupClickListeners();
-        renderRecents();
-        renderStations();
+        scheduleStationSearch(0L);
         onSleepStateChanged(sleepPlaybackController.getState());
 
         return view;
@@ -87,10 +85,8 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
 
         searchInput = view.findViewById(R.id.search_input);
         timerValueText = view.findViewById(R.id.timer_value_text);
-        featureTitleText = view.findViewById(R.id.sleep_feature_title_text);
-        featureSubtitleText = view.findViewById(R.id.sleep_feature_subtitle_text);
-        featurePlayButton = view.findViewById(R.id.feature_play_button);
         fadeOutSwitch = view.findViewById(R.id.fade_out_switch);
+        defaultMixButton = view.findViewById(R.id.default_mix_button);
         timerToggleGroup = view.findViewById(R.id.timer_toggle_group);
 
         trackRainCard = view.findViewById(R.id.track_rain_card);
@@ -106,19 +102,16 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         trackWindProgress = view.findViewById(R.id.track_wind_progress);
         trackForestProgress = view.findViewById(R.id.track_forest_progress);
 
-        radioCategoryLightMusic = view.findViewById(R.id.radio_category_light_music);
-        radioCategoryMeditation = view.findViewById(R.id.radio_category_meditation);
-        radioCategoryAsmr = view.findViewById(R.id.radio_category_asmr);
-
-        recentSessionsContainer = view.findViewById(R.id.recent_sessions_container);
         radioResultsContainer = view.findViewById(R.id.radio_results_container);
         radioResultsEmpty = view.findViewById(R.id.radio_results_empty);
     }
 
     private void setupClickListeners() {
-        featurePlayButton.setOnClickListener(v -> {
+        defaultMixButton.setOnClickListener(v -> {
             SleepPlaybackState state = sleepPlaybackController.getState();
-            if (state.isPlaying() || state.isLoading()) {
+            if (state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE
+                    && state.getCurrentSound() == SleepSound.DEFAULT_MIX
+                    && (state.isPlaying() || state.isLoading())) {
                 sleepPlaybackController.stop();
             } else {
                 sleepPlaybackController.playDefaultMix();
@@ -129,10 +122,6 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         trackOceanCard.setOnClickListener(v -> toggleSound(SleepSound.OCEAN));
         trackWindCard.setOnClickListener(v -> toggleSound(SleepSound.WIND));
         trackForestCard.setOnClickListener(v -> toggleSound(SleepSound.FOREST));
-
-        radioCategoryLightMusic.setOnClickListener(v -> toggleCategory(getString(R.string.sleep_radio_light_music)));
-        radioCategoryMeditation.setOnClickListener(v -> toggleCategory(getString(R.string.sleep_radio_meditation)));
-        radioCategoryAsmr.setOnClickListener(v -> toggleCategory(getString(R.string.sleep_radio_asmr)));
 
         fadeOutSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> sleepPlaybackController.setFadeOutEnabled(isChecked));
         timerToggleGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
@@ -159,7 +148,7 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
 
             @Override
             public void afterTextChanged(Editable s) {
-                renderStations();
+                scheduleStationSearch(300L);
             }
         });
     }
@@ -172,6 +161,7 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
 
     @Override
     public void onStop() {
+        searchHandler.removeCallbacks(searchRunnable);
         sleepPlaybackController.removeListener(this);
         super.onStop();
     }
@@ -186,9 +176,7 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         sleepPlaybackController.resetAll();
         timerToggleGroup.clearChecked();
         searchInput.setText("");
-        selectedCategory = "";
-        updateCategorySelection();
-        renderStations();
+        scheduleStationSearch(0L);
     }
 
     private void toggleSound(@NonNull SleepSound sound) {
@@ -202,42 +190,23 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         sleepPlaybackController.playAmbience(sound);
     }
 
-    private void toggleCategory(@NonNull String category) {
-        if (category.equals(selectedCategory)) {
-            selectedCategory = "";
-        } else {
-            selectedCategory = category;
-        }
-        updateCategorySelection();
-        renderStations();
-    }
-
-    private void updateCategorySelection() {
-        updateCategoryCard(radioCategoryLightMusic, getString(R.string.sleep_radio_light_music).equals(selectedCategory));
-        updateCategoryCard(radioCategoryMeditation, getString(R.string.sleep_radio_meditation).equals(selectedCategory));
-        updateCategoryCard(radioCategoryAsmr, getString(R.string.sleep_radio_asmr).equals(selectedCategory));
-    }
-
-    private void updateCategoryCard(@NonNull MaterialCardView cardView, boolean selected) {
-        int strokeColor = ContextCompat.getColor(requireContext(), selected ? R.color.primary_500 : R.color.card_stroke);
-        int backgroundColor = ContextCompat.getColor(requireContext(), selected ? R.color.primary_50 : R.color.card_background_light);
-        cardView.setStrokeColor(strokeColor);
-        cardView.setCardBackgroundColor(backgroundColor);
-        cardView.setStrokeWidth(selected ? dpToPx(2) : dpToPx(1));
-    }
-
     private void renderStations() {
         if (radioResultsContainer == null) {
             return;
         }
-        String query = searchInput != null ? searchInput.getText().toString().trim() : "";
-        List<SleepRadioStation> stations = sleepPlaybackController.searchStations(query, selectedCategory);
         radioResultsContainer.removeAllViews();
-        radioResultsEmpty.setVisibility(stations.isEmpty() ? View.VISIBLE : View.GONE);
+        TextView emptyText = (TextView) radioResultsEmpty;
+        if (searching && displayedStations.isEmpty()) {
+            emptyText.setText(R.string.loading);
+            radioResultsEmpty.setVisibility(View.VISIBLE);
+            return;
+        }
+        emptyText.setText(R.string.sleep_fm_no_results);
+        radioResultsEmpty.setVisibility(displayedStations.isEmpty() ? View.VISIBLE : View.GONE);
 
         LayoutInflater inflater = LayoutInflater.from(requireContext());
         SleepPlaybackState state = sleepPlaybackController.getState();
-        for (SleepRadioStation station : stations) {
+        for (SleepRadioStation station : displayedStations) {
             View item = inflater.inflate(R.layout.item_sleep_entry, radioResultsContainer, false);
             TextView title = item.findViewById(R.id.entry_title);
             TextView subtitle = item.findViewById(R.id.entry_subtitle);
@@ -245,65 +214,43 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
 
             title.setText(station.getName());
             String sourceTag = station.isOfficial() ? getString(R.string.sleep_source_official) : getString(R.string.sleep_source_sample);
-            subtitle.setText(station.getSubtitle() + " · " + sourceTag);
+            subtitle.setText(station.getFrequency() + " · " + station.getSubtitle() + " · " + sourceTag);
             boolean isCurrent = state.getCurrentStation() != null
                     && station.getId().equals(state.getCurrentStation().getId())
                     && state.getSessionType() == SleepPlaybackState.SessionType.RADIO
                     && state.isPlaying();
             action.setText(isCurrent ? getString(R.string.sleep_playing) : getString(R.string.sleep_play));
 
-            item.setOnClickListener(v -> {
-                SleepPlaybackState currentState = sleepPlaybackController.getState();
-                boolean alreadyPlaying = currentState.getCurrentStation() != null
-                        && station.getId().equals(currentState.getCurrentStation().getId())
-                        && currentState.getSessionType() == SleepPlaybackState.SessionType.RADIO
-                        && currentState.isPlaying();
-                if (alreadyPlaying) {
-                    sleepPlaybackController.stop();
-                } else {
-                    sleepPlaybackController.playRadio(station);
-                }
-            });
+            item.setOnClickListener(v -> sleepPlaybackController.toggleRadio(station));
             radioResultsContainer.addView(item);
         }
     }
 
-    private void renderRecents() {
-        if (recentSessionsContainer == null) {
+    private void scheduleStationSearch(long delayMs) {
+        searchHandler.removeCallbacks(searchRunnable);
+        searchHandler.postDelayed(searchRunnable, delayMs);
+    }
+
+    private void requestStations() {
+        if (!isAdded()) {
             return;
         }
-        recentSessionsContainer.removeAllViews();
-        LayoutInflater inflater = LayoutInflater.from(requireContext());
-        List<SleepRecentEntry> entries = sleepPlaybackController.getRecentEntries();
-        if (entries.isEmpty()) {
-            View item = inflater.inflate(R.layout.item_sleep_entry, recentSessionsContainer, false);
-            TextView title = item.findViewById(R.id.entry_title);
-            TextView subtitle = item.findViewById(R.id.entry_subtitle);
-            TextView action = item.findViewById(R.id.entry_action);
-            title.setText(getString(R.string.sleep_recent_title));
-            subtitle.setText(getString(R.string.sleep_recent_empty));
-            action.setText("");
-            item.setOnClickListener(null);
-            recentSessionsContainer.addView(item);
-            return;
-        }
-
-        for (SleepRecentEntry entry : entries) {
-            View item = inflater.inflate(R.layout.item_sleep_entry, recentSessionsContainer, false);
-            TextView title = item.findViewById(R.id.entry_title);
-            TextView subtitle = item.findViewById(R.id.entry_subtitle);
-            TextView action = item.findViewById(R.id.entry_action);
-
-            title.setText(entry.getTitle());
-            CharSequence relativeTime = DateUtils.getRelativeTimeSpanString(
-                    entry.getPlayedAt(),
-                    System.currentTimeMillis(),
-                    DateUtils.MINUTE_IN_MILLIS);
-            subtitle.setText(entry.getSubtitle() + " · " + relativeTime);
-            action.setText(getString(R.string.sleep_play));
-            item.setOnClickListener(v -> sleepPlaybackController.playRecent(entry));
-            recentSessionsContainer.addView(item);
-        }
+        int requestVersion = ++searchRequestVersion;
+        searching = true;
+        renderStations();
+        String query = searchInput != null ? searchInput.getText().toString().trim() : "";
+        sleepPlaybackController.searchStations(query, (stations, errorMessage) -> {
+            if (!isAdded() || requestVersion != searchRequestVersion) {
+                return;
+            }
+            searching = false;
+            displayedStations.clear();
+            displayedStations.addAll(stations);
+            renderStations();
+            if (errorMessage != null) {
+                maybeShowError(errorMessage);
+            }
+        });
     }
 
     @Override
@@ -313,45 +260,18 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         }
 
         fadeOutSwitch.setChecked(state.isFadeOutEnabled());
-        renderFeature(state);
+        renderDefaultMixButton(state);
         renderTracks(state);
         renderTimer(state);
-        renderRecents();
         renderStations();
         maybeShowError(state.getErrorMessage());
     }
 
-    private void renderFeature(@NonNull SleepPlaybackState state) {
-        String title = getString(R.string.sleep_default_mix_title);
-        String subtitle = getString(R.string.sleep_session_idle);
-
-        if (state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE && state.getCurrentSound() != null) {
-            title = resolveSoundTitle(state.getCurrentSound());
-            subtitle = resolveSoundSubtitle(state.getCurrentSound());
-        } else if (state.getSessionType() == SleepPlaybackState.SessionType.RADIO && state.getCurrentStation() != null) {
-            title = state.getCurrentStation().getName();
-            subtitle = state.getCurrentStation().getSubtitle();
-        }
-
-        if (state.getTimerRemainingSeconds() > 0) {
-            subtitle = getString(
-                    R.string.sleep_session_timer,
-                    SleepPlaybackController.formatRemainingTime(state.getTimerRemainingSeconds()));
-            if (state.getVolumeScale() < 1f) {
-                subtitle = subtitle + " · " + getString(
-                        R.string.sleep_session_volume,
-                        Math.round(state.getVolumeScale() * 100f));
-            }
-        }
-
-        if (state.isLoading()) {
-            subtitle = getString(R.string.loading);
-        }
-
-        featureTitleText.setText(title);
-        featureSubtitleText.setText(subtitle);
-        featurePlayButton.setImageResource((state.isPlaying() || state.isLoading()) ? R.drawable.ic_pause : R.drawable.ic_play);
-        featurePlayButton.setContentDescription(getString((state.isPlaying() || state.isLoading()) ? R.string.sleep_stop : R.string.play));
+    private void renderDefaultMixButton(@NonNull SleepPlaybackState state) {
+        boolean active = state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE
+                && state.getCurrentSound() == SleepSound.DEFAULT_MIX
+                && (state.isPlaying() || state.isLoading());
+        defaultMixButton.setText(active ? R.string.sleep_default_mix_stop : R.string.sleep_default_mix_play);
     }
 
     private void renderTracks(@NonNull SleepPlaybackState state) {
@@ -395,31 +315,6 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         }
         lastErrorMessage = errorMessage;
         Toast.makeText(requireContext(), errorMessage, Toast.LENGTH_SHORT).show();
-    }
-
-    @NonNull
-    private String resolveSoundTitle(@NonNull SleepSound sound) {
-        if (sound == SleepSound.DEFAULT_MIX) {
-            return getString(R.string.sleep_default_mix_title);
-        }
-        if (sound == SleepSound.RAIN) {
-            return getString(R.string.sleep_track_rain);
-        }
-        if (sound == SleepSound.OCEAN) {
-            return getString(R.string.sleep_track_ocean);
-        }
-        if (sound == SleepSound.WIND) {
-            return getString(R.string.sleep_track_wind);
-        }
-        return getString(R.string.sleep_track_forest);
-    }
-
-    @NonNull
-    private String resolveSoundSubtitle(@NonNull SleepSound sound) {
-        if (sound == SleepSound.DEFAULT_MIX) {
-            return getString(R.string.sleep_default_mix_subtitle);
-        }
-        return getString(R.string.sleep_offline_ready);
     }
 
     private int dpToPx(int dp) {

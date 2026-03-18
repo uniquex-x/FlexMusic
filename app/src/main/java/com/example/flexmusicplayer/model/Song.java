@@ -13,8 +13,10 @@ public class Song implements Serializable {
     private boolean isLocal;
     private boolean isFavorite;
     private boolean isDownloaded;
+    private boolean isRadioStream;
     private long addedDate;
     private long lastPlayedDate;
+    private String sourceId;
 
     public Song() {
         this.addedDate = System.currentTimeMillis();
@@ -112,6 +114,14 @@ public class Song implements Serializable {
         isDownloaded = downloaded;
     }
 
+    public boolean isRadioStream() {
+        return isRadioStream;
+    }
+
+    public void setRadioStream(boolean radioStream) {
+        isRadioStream = radioStream;
+    }
+
     public long getAddedDate() {
         return addedDate;
     }
@@ -126,6 +136,14 @@ public class Song implements Serializable {
 
     public void setLastPlayedDate(long lastPlayedDate) {
         this.lastPlayedDate = lastPlayedDate;
+    }
+
+    public String getSourceId() {
+        return sourceId;
+    }
+
+    public void setSourceId(String sourceId) {
+        this.sourceId = sourceId;
     }
 
     // Utility method to format duration as mm:ss

@@ -35,8 +35,11 @@
     <string name="favorites_tab_songs">Songs</string>
     <string name="favorites_tab_albums">Albums</string>
     <string name="favorites_tab_artists">Artists</string>
+    <string name="favorites_tab_radios">Radios</string>
     <string name="added_to_favorites">Added to favorites</string>
     <string name="removed_from_favorites">Removed from favorites</string>
+    <string name="favorite_radios_empty">No favorite radios yet</string>
+    <string name="favorite_radios_empty_description">Like a station while it is playing to pin it here</string>
 
     <!-- Recent -->
     <string name="recent_title">Recent</string>
@@ -300,6 +303,10 @@
     <string name="sleep_fade_out_hint">Gradually lower volume at end</string>
     <string name="sleep_radio_title">Sleep Radio</string>
     <string name="sleep_search_hint">Search stations or artists…</string>
+    <string name="sleep_fm_title">FM Radio</string>
+    <string name="sleep_fm_search_hint">Search FM frequency, station, or city…</string>
+    <string name="sleep_fm_results_title">FM Results</string>
+    <string name="sleep_fm_no_results">No stations match the current FM query.</string>
     <string name="sleep_radio_light_music">Light Music</string>
     <string name="sleep_radio_meditation">Meditation</string>
     <string name="sleep_radio_asmr">ASMR</string>
@@ -308,6 +315,8 @@
     <string name="sleep_feature_subtitle">Gentle keys for deep resting</string>
     <string name="sleep_default_mix_title">Default Sleep Mix</string>
     <string name="sleep_default_mix_subtitle">Offline white-noise blend for quick rest</string>
+    <string name="sleep_default_mix_play">Play Default Mix</string>
+    <string name="sleep_default_mix_stop">Stop Default Mix</string>
     <string name="sleep_offline_ready">Offline ambience loop</string>
     <string name="sleep_timer_not_set">Not set</string>
     <string name="sleep_recent_title">Recent Sessions</string>
@@ -321,6 +330,7 @@
     <string name="sleep_session_timer">Timer: %1$s</string>
     <string name="sleep_session_volume">Fade volume %1$d%%</string>
     <string name="sleep_radio_error">Unable to load this station right now.</string>
+    <string name="sleep_radio_search_error">Unable to search stations right now.</string>
     <string name="sleep_source_official">Official</string>
     <string name="sleep_source_sample">Sample Catalog</string>
 

@@ -38,8 +38,12 @@
     <string name="favorites_title">我喜欢的</string>
     <string name="favorites_empty">暂无喜欢的歌曲</string>
     <string name="favorites_empty_description">给歌曲点赞即可加入喜欢列表</string>
+    <string name="favorites_tab_songs">歌曲</string>
+    <string name="favorites_tab_radios">电台</string>
     <string name="added_to_favorites">已添加到喜欢</string>
     <string name="removed_from_favorites">已从喜欢中移除</string>
+    <string name="favorite_radios_empty">暂无喜欢的电台</string>
+    <string name="favorite_radios_empty_description">播放电台时点喜欢即可收藏到这里</string>
 
     <!-- Recent -->
     <string name="recent_title">最近播放</string>
@@ -50,6 +54,12 @@
     <string name="recent_this_week">本周</string>
     <string name="recent_this_month">本月</string>
     <string name="recent_earlier">更早</string>
+    <string name="sleep_fm_title">调频电台</string>
+    <string name="sleep_fm_search_hint">搜索频率、台名或城市…</string>
+    <string name="sleep_fm_results_title">调频结果</string>
+    <string name="sleep_fm_no_results">当前调频检索没有匹配结果</string>
+    <string name="sleep_default_mix_play">播放默认白噪音</string>
+    <string name="sleep_default_mix_stop">停止默认白噪音</string>
 
     <!-- Local -->
     <string name="local_title">本地音乐</string>

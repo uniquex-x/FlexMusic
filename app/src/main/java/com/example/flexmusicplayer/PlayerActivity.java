@@ -23,6 +23,7 @@ import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.player.LyricsLine;
 import com.example.flexmusicplayer.player.LyricsRepository;
 import com.example.flexmusicplayer.player.PlaybackController;
+import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     private int currentActiveLyricIndex = RecyclerView.NO_POSITION;
     private String currentFavoriteSongKey = "";
     private FavoriteSongsStore favoriteSongsStore;
+    private FavoriteRadioStore favoriteRadioStore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,6 +55,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
 
         playbackController = PlaybackController.getInstance(this);
         favoriteSongsStore = new FavoriteSongsStore(this);
+        favoriteRadioStore = new FavoriteRadioStore(this);
         lyricsAdapter = new LyricsAdapter(this::showNowPlayingScreen);
 
         binding.lyricsRecycler.setLayoutManager(new LinearLayoutManager(this));
@@ -144,7 +147,9 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         String songKey = buildSongKey(currentSong);
         if (!songKey.equals(currentFavoriteSongKey)) {
             currentFavoriteSongKey = songKey;
-            currentSong.setFavorite(favoriteSongsStore.isFavorite(currentSong));
+            currentSong.setFavorite(currentSong.isRadioStream()
+                    ? favoriteRadioStore.isFavorite(currentSong)
+                    : favoriteSongsStore.isFavorite(currentSong));
         }
 
         String artist = !TextUtils.isEmpty(currentSong.getArtist())
@@ -174,8 +179,23 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 this,
                 currentSong.isFavorite() ? R.color.player_bar_background : R.color.gray_400)));
 
+        updateMediaActions(currentSong);
         updateControlChrome(state);
         updateLyrics(state);
+    }
+
+    private void updateMediaActions(@NonNull Song currentSong) {
+        boolean isRadio = currentSong.isRadioStream();
+        binding.actionSave.setVisibility(isRadio ? android.view.View.GONE : android.view.View.VISIBLE);
+        binding.actionLyrics.setVisibility(isRadio ? android.view.View.GONE : android.view.View.VISIBLE);
+        binding.playerSeekBar.setEnabled(!isRadio);
+        binding.playerSeekBar.setAlpha(isRadio ? 0.4f : 1f);
+        binding.playerElapsedTime.setVisibility(isRadio ? android.view.View.INVISIBLE : android.view.View.VISIBLE);
+        binding.playerTotalTime.setVisibility(isRadio ? android.view.View.INVISIBLE : android.view.View.VISIBLE);
+        binding.albumDisc.setEnabled(!isRadio);
+        if (isRadio && showingLyrics) {
+            showNowPlayingScreen();
+        }
     }
 
     private void updateControlChrome(@NonNull PlayerState state) {
@@ -195,7 +215,11 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
 
     private void updateLyrics(@NonNull PlayerState state) {
         Song currentSong = state.getCurrentSong();
-        if (currentSong == null) {
+        if (currentSong == null || currentSong.isRadioStream()) {
+            currentLyricsSongId = Long.MIN_VALUE;
+            currentLyrics.clear();
+            lyricsAdapter.submitLyrics(currentLyrics);
+            currentActiveLyricIndex = RecyclerView.NO_POSITION;
             return;
         }
         if (currentSong.getId() != currentLyricsSongId) {
@@ -234,7 +258,9 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         if (currentSong == null) {
             return;
         }
-        boolean isFavorite = favoriteSongsStore.toggleFavorite(currentSong);
+        boolean isFavorite = currentSong.isRadioStream()
+                ? favoriteRadioStore.toggleFavorite(currentSong)
+                : favoriteSongsStore.toggleFavorite(currentSong);
         currentSong.setFavorite(isFavorite);
         currentFavoriteSongKey = buildSongKey(currentSong);
         onPlaybackStateChanged(playbackController.getPlayerState());
@@ -268,6 +294,10 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     }
 
     private void showLyricsScreen() {
+        Song currentSong = playbackController.getPlayerState().getCurrentSong();
+        if (currentSong != null && currentSong.isRadioStream()) {
+            return;
+        }
         showingLyrics = true;
         updateScreenMode(playbackController.getPlayerState());
         if (currentActiveLyricIndex != RecyclerView.NO_POSITION) {
@@ -318,6 +348,9 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     }
 
     private String buildSongKey(@NonNull Song song) {
+        if (!TextUtils.isEmpty(song.getSourceId())) {
+            return song.getSourceId();
+        }
         if (!TextUtils.isEmpty(song.getAudioUrl())) {
             return song.getAudioUrl();
         }

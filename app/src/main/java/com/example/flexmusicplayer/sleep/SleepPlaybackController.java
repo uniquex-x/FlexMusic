@@ -4,12 +4,13 @@ import android.content.Context;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
-import android.media.MediaPlayer;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.example.flexmusicplayer.R;
+import com.example.flexmusicplayer.model.PlayerState;
+import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.player.PlaybackController;
 
 import java.io.IOException;
@@ -19,11 +20,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public final class SleepPlaybackController {
+public final class SleepPlaybackController implements PlaybackController.Listener {
 
     public interface Listener {
         void onSleepStateChanged(@NonNull SleepPlaybackState state);
+    }
+
+    public interface SearchCallback {
+        void onSearchResult(@NonNull List<SleepRadioStation> stations, @Nullable String errorMessage);
     }
 
     private static SleepPlaybackController instance;
@@ -31,7 +38,9 @@ public final class SleepPlaybackController {
     private final Context appContext;
     private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Set<Listener> listeners = new LinkedHashSet<>();
-    private final SleepRecentStore recentStore;
+    private final PlaybackController playbackController;
+    private final SleepRadioSearchRepository radioSearchRepository;
+    private final ExecutorService radioSearchExecutor = Executors.newSingleThreadExecutor();
     private final SleepPlaybackState state = new SleepPlaybackState();
     private final AmbientEngine ambientEngine = new AmbientEngine();
     private final Runnable timerTicker = new Runnable() {
@@ -73,12 +82,11 @@ public final class SleepPlaybackController {
         }
     };
 
-    @Nullable
-    private MediaPlayer radioPlayer;
-
     private SleepPlaybackController(@NonNull Context context) {
         appContext = context.getApplicationContext();
-        recentStore = new SleepRecentStore(appContext);
+        playbackController = PlaybackController.getInstance(appContext);
+        radioSearchRepository = new SleepRadioSearchRepository();
+        playbackController.addListener(this);
     }
 
     public static synchronized SleepPlaybackController getInstance(@NonNull Context context) {
@@ -102,14 +110,17 @@ public final class SleepPlaybackController {
         return snapshotState();
     }
 
-    @NonNull
-    public synchronized List<SleepRecentEntry> getRecentEntries() {
-        return recentStore.loadRecents();
-    }
-
-    @NonNull
-    public synchronized List<SleepRadioStation> searchStations(@Nullable String query, @Nullable String category) {
-        return new ArrayList<>(SleepRadioCatalog.search(query, category));
+    public void searchStations(@Nullable String query, @NonNull SearchCallback callback) {
+        String safeQuery = query == null ? "" : query;
+        radioSearchExecutor.execute(() -> {
+            try {
+                List<SleepRadioStation> stations = radioSearchRepository.search(safeQuery);
+                mainHandler.post(() -> callback.onSearchResult(stations, null));
+            } catch (IOException e) {
+                mainHandler.post(() -> callback.onSearchResult(new ArrayList<>(),
+                        appContext.getString(R.string.sleep_radio_search_error)));
+            }
+        });
     }
 
     @Nullable
@@ -126,7 +137,6 @@ public final class SleepPlaybackController {
     }
 
     public synchronized void playRadio(@NonNull SleepRadioStation station) {
-        pauseMainMusic();
         stopCurrentLocked();
 
         state.setSessionType(SleepPlaybackState.SessionType.RADIO);
@@ -136,51 +146,25 @@ public final class SleepPlaybackController {
         state.setLoading(true);
         state.setErrorMessage(null);
         dispatchState();
+        playbackController.setVolume(state.getVolumeScale());
+        playbackController.playSong(station.toSong());
+        radioSearchExecutor.execute(() -> radioSearchRepository.registerClick(station));
+        ensureTimerTicker();
+    }
 
-        try {
-            MediaPlayer player = new MediaPlayer();
-            player.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            player.setOnPreparedListener(mp -> {
-                synchronized (SleepPlaybackController.this) {
-                    radioPlayer = mp;
-                    mp.start();
-                    applyVolume();
-                    state.setPlaying(true);
-                    state.setLoading(false);
-                    state.setErrorMessage(null);
-                    recentStore.recordStation(station);
-                    dispatchState();
-                    ensureTimerTicker();
-                }
-            });
-            player.setOnErrorListener((mp, what, extra) -> {
-                synchronized (SleepPlaybackController.this) {
-                    if (radioPlayer == mp) {
-                        radioPlayer = null;
-                    }
-                    safeRelease(mp);
-                    state.setPlaying(false);
-                    state.setLoading(false);
-                    state.setErrorMessage(appContext.getString(R.string.sleep_radio_error));
-                    dispatchState();
-                }
-                return true;
-            });
-            player.setOnCompletionListener(mp -> {
-                synchronized (SleepPlaybackController.this) {
-                    state.setPlaying(false);
-                    dispatchState();
-                }
-            });
-            player.setDataSource(station.getStreamUrl());
-            player.prepareAsync();
-            radioPlayer = player;
-        } catch (IOException | RuntimeException e) {
-            state.setPlaying(false);
-            state.setLoading(false);
-            state.setErrorMessage(appContext.getString(R.string.sleep_radio_error));
-            dispatchState();
+    public synchronized void toggleRadio(@NonNull SleepRadioStation station) {
+        SleepRadioStation currentStation = state.getCurrentStation();
+        boolean isCurrent = currentStation != null && currentStation.getId().equals(station.getId())
+                && state.getSessionType() == SleepPlaybackState.SessionType.RADIO;
+        if (!isCurrent) {
+            playRadio(station);
+            return;
         }
+        if (state.isPlaying() || state.isLoading()) {
+            playbackController.pause();
+            return;
+        }
+        playbackController.togglePlayPause();
     }
 
     public synchronized void playRecent(@NonNull SleepRecentEntry entry) {
@@ -249,10 +233,6 @@ public final class SleepPlaybackController {
                 state.setLoading(false);
                 state.setPlaying(true);
                 state.setErrorMessage(null);
-                recentStore.recordAmbience(
-                        sound,
-                        resolveSoundTitle(sound),
-                        resolveSoundSubtitle(sound));
                 dispatchState();
                 ensureTimerTicker();
             }
@@ -260,15 +240,16 @@ public final class SleepPlaybackController {
     }
 
     private void pauseMainMusic() {
-        PlaybackController.getInstance(appContext).pause();
+        playbackController.pause();
     }
 
     private void stopCurrentLocked() {
         ambientEngine.stop();
-        if (radioPlayer != null) {
-            MediaPlayer player = radioPlayer;
-            radioPlayer = null;
-            safeRelease(player);
+        Song currentSong = playbackController.getPlayerState().getCurrentSong();
+        if (state.getSessionType() == SleepPlaybackState.SessionType.RADIO
+                && currentSong != null
+                && currentSong.isRadioStream()) {
+            playbackController.pause();
         }
         state.setPlaying(false);
         state.setLoading(false);
@@ -298,11 +279,9 @@ public final class SleepPlaybackController {
     private void applyVolume() {
         float volume = Math.max(0f, Math.min(1f, state.getVolumeScale()));
         ambientEngine.setVolume(volume);
-        if (radioPlayer != null) {
-            try {
-                radioPlayer.setVolume(volume, volume);
-            } catch (IllegalStateException ignored) {
-            }
+        Song currentSong = playbackController.getPlayerState().getCurrentSong();
+        if (currentSong != null && currentSong.isRadioStream()) {
+            playbackController.setVolume(volume);
         }
     }
 
@@ -358,16 +337,42 @@ public final class SleepPlaybackController {
         mainHandler.post(() -> listener.onSleepStateChanged(snapshot));
     }
 
-    private void safeRelease(@NonNull MediaPlayer player) {
-        try {
-            player.stop();
-        } catch (IllegalStateException ignored) {
+    @Override
+    public synchronized void onPlaybackStateChanged(@NonNull PlayerState playerState) {
+        Song currentSong = playerState.getCurrentSong();
+        if (currentSong != null && currentSong.isRadioStream()) {
+            SleepRadioStation station = findStationById(currentSong.getSourceId());
+            if (station == null) {
+                station = new SleepRadioStation(
+                        currentSong.getSourceId() == null ? currentSong.getTitle() : currentSong.getSourceId(),
+                        currentSong.getTitle(),
+                        currentSong.getArtist(),
+                        currentSong.getArtist(),
+                        currentSong.getAudioUrl(),
+                        false);
+            }
+            state.setSessionType(SleepPlaybackState.SessionType.RADIO);
+            state.setCurrentSound(null);
+            state.setCurrentStation(station);
+            state.setPlaying(playerState.isPlaying());
+            state.setLoading(playerState.isLoading());
+            state.setErrorMessage(playerState.getState() == PlayerState.State.ERROR
+                    ? appContext.getString(R.string.sleep_radio_error)
+                    : null);
+            dispatchState();
+            return;
         }
-        try {
-            player.reset();
-        } catch (IllegalStateException ignored) {
+
+        if (state.getSessionType() == SleepPlaybackState.SessionType.RADIO) {
+            playbackController.setVolume(1f);
+            clearTimerLocked();
+            state.setSessionType(SleepPlaybackState.SessionType.NONE);
+            state.setCurrentStation(null);
+            state.setPlaying(false);
+            state.setLoading(false);
+            state.setErrorMessage(null);
+            dispatchState();
         }
-        player.release();
     }
 
     private static final class AmbientEngine {

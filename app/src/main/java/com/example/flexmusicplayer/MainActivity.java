@@ -146,7 +146,8 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
                 || fragment instanceof MyFragment
                 || fragment instanceof SleepFragment
                 || fragment instanceof FavoritesFragment
-                || fragment instanceof LocalFragment;
+                || fragment instanceof LocalFragment
+                || fragment instanceof RecentFragment;
         boolean hasSong = playbackController.getPlayerState().getCurrentSong() != null;
         binding.playerMiniBar.setVisibility(showMiniPlayer && hasSong ? View.VISIBLE : View.GONE);
     }

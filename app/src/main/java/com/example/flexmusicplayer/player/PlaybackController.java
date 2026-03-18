@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.storage.RecentPlaybackStore;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,6 +42,7 @@ public final class PlaybackController {
     private final Set<Listener> listeners = new LinkedHashSet<>();
     private final PlayerState playerState = new PlayerState();
     private final MediaPlayer mediaPlayer = new MediaPlayer();
+    private final RecentPlaybackStore recentPlaybackStore = RecentPlaybackStore.getInstance();
     private final Runnable progressTicker = new Runnable() {
         @Override
         public void run() {
@@ -89,8 +91,13 @@ public final class PlaybackController {
                 prepared = true;
                 playerState.setDuration(Math.max(mp.getDuration(), playerState.getDuration()));
                 playerState.setState(PlayerState.State.PLAYING);
+                mp.setVolume(playerState.getVolume(), playerState.getVolume());
                 mp.start();
                 startProgressTicker();
+                Song currentSong = playerState.getCurrentSong();
+                if (currentSong != null) {
+                    recentPlaybackStore.recordPlayback(currentSong);
+                }
                 dispatchState();
             }
         });
@@ -216,12 +223,22 @@ public final class PlaybackController {
     }
 
     public synchronized void seekTo(int positionMs) {
-        if (!prepared) {
+        if (!prepared || playerState.getCurrentSong() == null || playerState.getCurrentSong().isRadioStream()) {
             return;
         }
         int safePosition = Math.max(0, Math.min(positionMs, playerState.getDuration()));
         mediaPlayer.seekTo(safePosition);
         playerState.setCurrentPosition(safePosition);
+        dispatchState();
+    }
+
+    public synchronized void setVolume(float volume) {
+        float safeVolume = Math.max(0f, Math.min(1f, volume));
+        playerState.setVolume(safeVolume);
+        try {
+            mediaPlayer.setVolume(safeVolume, safeVolume);
+        } catch (IllegalStateException ignored) {
+        }
         dispatchState();
     }
 

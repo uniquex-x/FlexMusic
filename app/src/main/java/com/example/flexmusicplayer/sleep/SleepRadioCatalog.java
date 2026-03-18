@@ -1,7 +1,5 @@
 package com.example.flexmusicplayer.sleep;
 
-import android.text.TextUtils;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -17,38 +15,52 @@ public final class SleepRadioCatalog {
     static {
         List<SleepRadioStation> stations = new ArrayList<>();
         stations.add(new SleepRadioStation(
-                "cnr-zgzs",
+                "cnr-zgzs-1061",
                 "中国之声",
-                "央广新闻综合频道 · 官方 HLS",
-                "Meditation",
+                "北京 / 全国新闻综合",
+                "FM 106.1",
                 "http://ngcdn001.cnr.cn/live/zgzs/index.m3u8",
                 true));
         stations.add(new SleepRadioStation(
-                "cnr-jjzs",
+                "cnr-jjzs-966",
                 "经济之声",
-                "央广财经资讯频道 · 官方 HLS",
-                "Light Music",
+                "北京 / 财经资讯",
+                "FM 96.6",
                 "http://ngcdn002.cnr.cn/live/jjzs/index.m3u8",
                 true));
         stations.add(new SleepRadioStation(
-                "cnr-dwqzs",
+                "cnr-dwqzs-1012",
                 "大湾区之声",
-                "央广粤港澳大湾区频道 · 官方 HLS",
-                "ASMR",
+                "粤港澳大湾区 / 综合资讯",
+                "FM 101.2",
                 "http://ngcdn007.cnr.cn/live/hxzs/index.m3u8",
                 true));
         stations.add(new SleepRadioStation(
-                "shanxi-music",
+                "beijing-music-974",
+                "北京音乐广播",
+                "北京 / 流行音乐",
+                "FM 97.4",
+                "https://lhttp.qingting.fm/live/336/64k.mp3",
+                false));
+        stations.add(new SleepRadioStation(
+                "shanghai-news-990",
+                "上海第一财经广播",
+                "上海 / 财经资讯",
+                "FM 97.7",
+                "https://lhttp.qingting.fm/live/274/64k.mp3",
+                false));
+        stations.add(new SleepRadioStation(
+                "shanxi-music-897",
                 "山西音乐广播",
-                "轻音乐样本频道 · Qingting 64k",
-                "Light Music",
+                "太原 / 音乐陪伴",
+                "FM 89.7",
                 "https://lhttp.qingting.fm/live/4932/64k.mp3",
                 false));
         stations.add(new SleepRadioStation(
-                "beijing-news",
+                "beijing-news-1006",
                 "北京新闻广播",
-                "城市资讯样本频道 · Qingting 64k",
-                "Meditation",
+                "北京 / 城市资讯",
+                "FM 100.6",
                 "https://lhttp.qingting.fm/live/339/64k.mp3",
                 false));
         STATIONS = Collections.unmodifiableList(stations);
@@ -58,18 +70,15 @@ public final class SleepRadioCatalog {
     }
 
     @NonNull
-    public static List<SleepRadioStation> search(@Nullable String query, @Nullable String category) {
+    public static List<SleepRadioStation> search(@Nullable String query) {
         String safeQuery = normalize(query);
-        String safeCategory = normalize(category);
         List<SleepRadioStation> results = new ArrayList<>();
         for (SleepRadioStation station : STATIONS) {
-            boolean matchesQuery = TextUtils.isEmpty(safeQuery)
+            boolean matchesQuery = safeQuery.isEmpty()
                     || normalize(station.getName()).contains(safeQuery)
                     || normalize(station.getSubtitle()).contains(safeQuery)
-                    || normalize(station.getCategory()).contains(safeQuery);
-            boolean matchesCategory = TextUtils.isEmpty(safeCategory)
-                    || normalize(station.getCategory()).equals(safeCategory);
-            if (matchesQuery && matchesCategory) {
+                    || normalize(station.getFrequency()).contains(safeQuery);
+            if (matchesQuery) {
                 results.add(station);
             }
         }
