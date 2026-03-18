@@ -6,7 +6,8 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.example.core_network.http.SimpleHttpClient;
+import com.example.core_network.http.NetworkClient;
+import com.example.core_network.http.RequestPolicy;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -14,25 +15,35 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class RadioBrowserService {
 
-    private static final List<String> MIRRORS = Collections.unmodifiableList(Arrays.asList(
-            "https://de1.api.radio-browser.info",
-            "https://nl1.api.radio-browser.info",
-            "https://at1.api.radio-browser.info"
-    ));
     private static final String USER_AGENT = "FlexMusic/1.0";
+    private static final RequestPolicy SEARCH_POLICY = new RequestPolicy.Builder()
+            .connectTimeoutMs(5_000)
+            .readTimeoutMs(8_000)
+            .retryCount(1)
+            .build();
+    private static final RequestPolicy CLICK_POLICY = new RequestPolicy.Builder()
+            .connectTimeoutMs(4_000)
+            .readTimeoutMs(4_000)
+            .retryCount(0)
+            .build();
 
-    private final SimpleHttpClient httpClient;
+    private final NetworkClient networkClient;
+    private final RadioBrowserEndpointResolver endpointResolver;
 
-    public RadioBrowserService(@NonNull SimpleHttpClient httpClient) {
-        this.httpClient = httpClient;
+    public RadioBrowserService() {
+        this(NetworkClient.getInstance(), new RadioBrowserEndpointResolver());
+    }
+
+    public RadioBrowserService(@NonNull NetworkClient networkClient,
+                               @NonNull RadioBrowserEndpointResolver endpointResolver) {
+        this.networkClient = networkClient;
+        this.endpointResolver = endpointResolver;
     }
 
     @NonNull
@@ -53,24 +64,21 @@ public class RadioBrowserService {
         String path = uriBuilder.build().toString();
 
         IOException lastException = null;
-        for (String mirror : MIRRORS) {
+        for (String endpoint : endpointResolver.getSearchEndpoints()) {
             try {
-                return parseStations(httpClient.get(mirror + path, buildHeaders()));
+                return parseStations(networkClient.get(endpoint + path, buildHeaders(), SEARCH_POLICY));
             } catch (IOException e) {
                 lastException = e;
             }
         }
-        if (lastException != null) {
-            throw lastException;
-        }
-        return Collections.emptyList();
+        throw lastException != null ? lastException : new IOException("No radio search endpoint available");
     }
 
     public void registerClick(@NonNull String stationUuid) throws IOException {
         IOException lastException = null;
-        for (String mirror : MIRRORS) {
+        for (String endpoint : endpointResolver.getPlaybackEndpoints()) {
             try {
-                httpClient.get(mirror + "/json/url/" + stationUuid, buildHeaders());
+                networkClient.get(endpoint + "/json/url/" + stationUuid, buildHeaders(), CLICK_POLICY);
                 return;
             } catch (IOException e) {
                 lastException = e;

@@ -111,9 +111,9 @@
 
 建议后续按下面的方向推进：
 
-1. 在 `feature_player` 或 `core_player_sdk` 中建立 JNI 播放桥
+1. 在 `feature_player` 中建立 JNI 播放桥
 - Java 层保留统一的 `PlaybackController` 接口
-- 底层新增 `NativePlayerBridge`
+- 底层新增 `PlayerJNI`
 
 2. 在 `native/` 中补齐模块
 - datasource：本地文件 / HTTP(S)

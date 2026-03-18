@@ -12,11 +12,6 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        externalNativeBuild {
-            cmake {
-                cppFlags '-std=c++17'
-            }
-        }
     }
 
     buildTypes {
@@ -46,7 +41,8 @@ dependencies {
     implementation "androidx.activity:activity:1.7.2"
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
-    implementation project(":core_player_sdk")
+    implementation project(":core_data")
+    implementation project(":core_domain")
     implementation project(":core_network")
     implementation project(":feature_player")
 }

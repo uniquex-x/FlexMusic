@@ -1,8 +1,6 @@
 package com.example.flexmusicplayer.player;
 
 import android.content.Context;
-import android.media.AudioAttributes;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,6 +8,14 @@ import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 
+import com.example.core_domain.player.PlaybackRequest;
+import com.example.core_domain.player.PlaybackSourceResolver;
+import com.example.core_domain.player.PlayerKernel;
+import com.example.core_domain.player.PlayerKernelSnapshot;
+import com.example.core_domain.player.PlayerKernelState;
+import com.example.core_domain.player.ResolvedPlayableSource;
+import com.example.core_network.stream.NetworkPlaybackSourceResolver;
+import com.example.feature_player.player.FeaturePlayerFactory;
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.storage.RecentPlaybackStore;
@@ -20,6 +26,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class PlaybackController {
 
@@ -41,8 +49,10 @@ public final class PlaybackController {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Set<Listener> listeners = new LinkedHashSet<>();
     private final PlayerState playerState = new PlayerState();
-    private final MediaPlayer mediaPlayer = new MediaPlayer();
     private final RecentPlaybackStore recentPlaybackStore = RecentPlaybackStore.getInstance();
+    private final ExecutorService sourceResolveExecutor = Executors.newSingleThreadExecutor();
+    private final PlayerKernel playerKernel;
+    private final PlaybackSourceResolver playbackSourceResolver;
     private final Runnable progressTicker = new Runnable() {
         @Override
         public void run() {
@@ -50,16 +60,12 @@ public final class PlaybackController {
                 if (playerState.getCurrentSong() == null) {
                     return;
                 }
-                try {
-                    if (mediaPlayer.isPlaying() || playerState.isPaused()) {
-                        playerState.setCurrentPosition(mediaPlayer.getCurrentPosition());
-                        playerState.setDuration(Math.max(mediaPlayer.getDuration(), playerState.getDuration()));
-                        dispatchState();
-                    }
-                    if (mediaPlayer.isPlaying()) {
-                        mainHandler.postDelayed(this, 500);
-                    }
-                } catch (IllegalStateException ignored) {
+                PlayerKernelSnapshot snapshot = playerKernel.getSnapshot();
+                playerState.setCurrentPosition((int) snapshot.getCurrentPositionMs());
+                playerState.setDuration((int) Math.max(snapshot.getDurationMs(), playerState.getDuration()));
+                dispatchState();
+                if (snapshot.getState() == PlayerKernelState.PLAYING) {
+                    mainHandler.postDelayed(this, 500);
                 }
             }
         }
@@ -67,11 +73,14 @@ public final class PlaybackController {
 
     private final List<Song> queue = new ArrayList<>();
     private int currentIndex = -1;
-    private boolean prepared;
+    private long prepareGeneration = 0L;
+    private String pendingRecentKey = "";
 
     private PlaybackController(@NonNull Context context) {
         appContext = context.getApplicationContext();
-        configureMediaPlayer();
+        playerKernel = FeaturePlayerFactory.create(appContext);
+        playbackSourceResolver = new NetworkPlaybackSourceResolver();
+        playerKernel.addListener(this::handleKernelSnapshotChanged);
     }
 
     public static synchronized PlaybackController getInstance(@NonNull Context context) {
@@ -79,68 +88,6 @@ public final class PlaybackController {
             instance = new PlaybackController(context);
         }
         return instance;
-    }
-
-    private void configureMediaPlayer() {
-        mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .build());
-        mediaPlayer.setOnPreparedListener(mp -> {
-            synchronized (PlaybackController.this) {
-                prepared = true;
-                playerState.setDuration(Math.max(mp.getDuration(), playerState.getDuration()));
-                playerState.setState(PlayerState.State.PLAYING);
-                mp.setVolume(playerState.getVolume(), playerState.getVolume());
-                mp.start();
-                startProgressTicker();
-                Song currentSong = playerState.getCurrentSong();
-                if (currentSong != null) {
-                    recentPlaybackStore.recordPlayback(currentSong);
-                }
-                dispatchState();
-            }
-        });
-        mediaPlayer.setOnCompletionListener(mp -> {
-            synchronized (PlaybackController.this) {
-                if (playerState.getRepeatMode() == PlayerState.RepeatMode.ONE) {
-                    mp.seekTo(0);
-                    mp.start();
-                    startProgressTicker();
-                    dispatchState();
-                    return;
-                }
-                if (hasNextInternal()) {
-                    playQueue(queue, resolveNextIndex());
-                    return;
-                }
-                playerState.setCurrentPosition(playerState.getDuration());
-                playerState.setState(PlayerState.State.PAUSED);
-                stopProgressTicker();
-                dispatchState();
-            }
-        });
-        mediaPlayer.setOnInfoListener((mp, what, extra) -> {
-            synchronized (PlaybackController.this) {
-                if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) {
-                    playerState.setState(PlayerState.State.LOADING);
-                    dispatchState();
-                } else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END) {
-                    playerState.setState(mp.isPlaying() ? PlayerState.State.PLAYING : PlayerState.State.PAUSED);
-                    dispatchState();
-                }
-            }
-            return false;
-        });
-        mediaPlayer.setOnErrorListener((mp, what, extra) -> {
-            synchronized (PlaybackController.this) {
-                prepared = false;
-                stopProgressTicker();
-                playerState.setState(PlayerState.State.ERROR);
-                dispatchState();
-            }
-            return true;
-        });
     }
 
     public synchronized void addListener(@NonNull Listener listener) {
@@ -185,49 +132,37 @@ public final class PlaybackController {
         if (playerState.getCurrentSong() == null) {
             return;
         }
-        try {
-            if (prepared && mediaPlayer.isPlaying()) {
-                mediaPlayer.pause();
-                playerState.setState(PlayerState.State.PAUSED);
-                stopProgressTicker();
-            } else if (prepared) {
-                mediaPlayer.start();
-                playerState.setState(PlayerState.State.PLAYING);
-                startProgressTicker();
-            } else {
-                prepareCurrentSong();
-                return;
-            }
-            dispatchState();
-        } catch (IllegalStateException e) {
-            playerState.setState(PlayerState.State.ERROR);
-            dispatchState();
+        PlayerKernelState kernelState = playerKernel.getSnapshot().getState();
+        if (kernelState == PlayerKernelState.PLAYING || kernelState == PlayerKernelState.BUFFERING) {
+            pause();
+            return;
         }
+        if (kernelState == PlayerKernelState.PAUSED
+                || kernelState == PlayerKernelState.READY
+                || kernelState == PlayerKernelState.COMPLETED) {
+            playerKernel.play();
+            return;
+        }
+        prepareCurrentSong();
     }
 
     public synchronized void pause() {
-        if (!prepared) {
+        PlayerKernelState kernelState = playerKernel.getSnapshot().getState();
+        if (kernelState != PlayerKernelState.PLAYING && kernelState != PlayerKernelState.BUFFERING) {
             return;
         }
-        try {
-            if (mediaPlayer.isPlaying()) {
-                mediaPlayer.pause();
-                playerState.setState(PlayerState.State.PAUSED);
-                stopProgressTicker();
-                dispatchState();
-            }
-        } catch (IllegalStateException e) {
-            playerState.setState(PlayerState.State.ERROR);
-            dispatchState();
-        }
+        playerKernel.pause();
     }
 
     public synchronized void seekTo(int positionMs) {
-        if (!prepared || playerState.getCurrentSong() == null || playerState.getCurrentSong().isRadioStream()) {
+        if (playerState.getCurrentSong() == null || playerState.getCurrentSong().isRadioStream()) {
+            return;
+        }
+        if (!playerKernel.getSnapshot().isSeekable()) {
             return;
         }
         int safePosition = Math.max(0, Math.min(positionMs, playerState.getDuration()));
-        mediaPlayer.seekTo(safePosition);
+        playerKernel.seekTo(safePosition);
         playerState.setCurrentPosition(safePosition);
         dispatchState();
     }
@@ -235,10 +170,7 @@ public final class PlaybackController {
     public synchronized void setVolume(float volume) {
         float safeVolume = Math.max(0f, Math.min(1f, volume));
         playerState.setVolume(safeVolume);
-        try {
-            mediaPlayer.setVolume(safeVolume, safeVolume);
-        } catch (IllegalStateException ignored) {
-        }
+        playerKernel.setVolume(safeVolume);
         dispatchState();
     }
 
@@ -251,7 +183,7 @@ public final class PlaybackController {
     }
 
     public synchronized void skipPrevious() {
-        if (prepared && playerState.getCurrentPosition() > 3000) {
+        if (playerState.getCurrentPosition() > 3000) {
             seekTo(0);
             return;
         }
@@ -305,33 +237,12 @@ public final class PlaybackController {
         playerState.setCurrentPosition(0);
         playerState.setDuration(song.getDuration());
         playerState.setState(PlayerState.State.LOADING);
-        prepared = false;
         stopProgressTicker();
+        pendingRecentKey = buildPlaybackKey(song);
+        long generation = ++prepareGeneration;
+        dispatchState();
 
-        try {
-            mediaPlayer.reset();
-            setDataSource(song);
-            mediaPlayer.prepareAsync();
-            dispatchState();
-        } catch (IOException | RuntimeException e) {
-            playerState.setState(PlayerState.State.ERROR);
-            dispatchState();
-        }
-    }
-
-    private void setDataSource(@NonNull Song song) throws IOException {
-        String source = resolvePlayableSource(song);
-        Uri uri = Uri.parse(source);
-        String scheme = uri.getScheme();
-        if ("content".equalsIgnoreCase(scheme) || "file".equalsIgnoreCase(scheme) || "android.resource".equalsIgnoreCase(scheme)) {
-            mediaPlayer.setDataSource(appContext, uri);
-            return;
-        }
-        if (scheme == null && source.startsWith("/")) {
-            mediaPlayer.setDataSource(source);
-            return;
-        }
-        mediaPlayer.setDataSource(source);
+        sourceResolveExecutor.execute(() -> resolveAndPrepare(song, generation));
     }
 
     private String resolvePlayableSource(@NonNull Song song) {
@@ -361,6 +272,115 @@ public final class PlaybackController {
     private String resolveDemoStream(@NonNull Song song) {
         int index = (int) (Math.abs(song.getId()) % DEMO_STREAMS.length);
         return DEMO_STREAMS[index];
+    }
+
+    private void resolveAndPrepare(@NonNull Song song, long generation) {
+        try {
+            String source = resolvePlayableSource(song);
+            PlaybackRequest request = new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
+            ResolvedPlayableSource resolvedSource = playbackSourceResolver.resolve(request);
+            mainHandler.post(() -> onSourceResolved(generation, resolvedSource));
+        } catch (IOException e) {
+            mainHandler.post(() -> onSourceResolveFailed(generation));
+        }
+    }
+
+    private synchronized void onSourceResolved(long generation, @NonNull ResolvedPlayableSource resolvedSource) {
+        if (generation != prepareGeneration) {
+            return;
+        }
+        try {
+            playerKernel.prepare(resolvedSource);
+        } catch (IOException | RuntimeException e) {
+            playerState.setState(PlayerState.State.ERROR);
+            dispatchState();
+        }
+    }
+
+    private synchronized void onSourceResolveFailed(long generation) {
+        if (generation != prepareGeneration) {
+            return;
+        }
+        playerState.setState(PlayerState.State.ERROR);
+        stopProgressTicker();
+        dispatchState();
+    }
+
+    private synchronized void handleKernelSnapshotChanged(@NonNull PlayerKernelSnapshot snapshot) {
+        Song currentSong = playerState.getCurrentSong();
+        if (currentSong == null) {
+            return;
+        }
+
+        playerState.setCurrentPosition((int) snapshot.getCurrentPositionMs());
+        playerState.setDuration((int) Math.max(snapshot.getDurationMs(), playerState.getDuration()));
+
+        switch (snapshot.getState()) {
+            case PREPARING:
+            case READY:
+            case BUFFERING:
+                playerState.setState(PlayerState.State.LOADING);
+                if (snapshot.getState() == PlayerKernelState.BUFFERING) {
+                    startProgressTicker();
+                }
+                break;
+            case PLAYING:
+                playerState.setState(PlayerState.State.PLAYING);
+                startProgressTicker();
+                if (pendingRecentKey.equals(buildPlaybackKey(currentSong))) {
+                    recentPlaybackStore.recordPlayback(currentSong);
+                    pendingRecentKey = "";
+                }
+                break;
+            case PAUSED:
+                playerState.setState(PlayerState.State.PAUSED);
+                stopProgressTicker();
+                break;
+            case COMPLETED:
+                handleCompletionLocked();
+                return;
+            case ERROR:
+                playerState.setState(PlayerState.State.ERROR);
+                stopProgressTicker();
+                break;
+            case IDLE:
+            default:
+                playerState.setState(PlayerState.State.IDLE);
+                stopProgressTicker();
+                break;
+        }
+        dispatchState();
+    }
+
+    private void handleCompletionLocked() {
+        if (playerState.getRepeatMode() == PlayerState.RepeatMode.ONE) {
+            playerKernel.seekTo(0L);
+            playerKernel.play();
+            return;
+        }
+        if (hasNextInternal()) {
+            currentIndex = resolveNextIndex();
+            prepareCurrentSong();
+            return;
+        }
+        playerState.setCurrentPosition(playerState.getDuration());
+        playerState.setState(PlayerState.State.PAUSED);
+        stopProgressTicker();
+        dispatchState();
+    }
+
+    @NonNull
+    private String resolveSourceId(@NonNull Song song) {
+        if (!TextUtils.isEmpty(song.getSourceId())) {
+            return song.getSourceId();
+        }
+        return String.valueOf(song.getId());
+    }
+
+    @NonNull
+    private String buildPlaybackKey(@NonNull Song song) {
+        String sourceId = resolveSourceId(song);
+        return sourceId + "|" + song.getAudioUrl();
     }
 
     private int resolveNextIndex() {

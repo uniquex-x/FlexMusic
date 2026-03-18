@@ -8,6 +8,8 @@ import android.media.AudioTrack;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.example.core_data.radio.RadioRepository;
+import com.example.core_domain.radio.RadioStation;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
@@ -39,7 +41,7 @@ public final class SleepPlaybackController implements PlaybackController.Listene
     private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Set<Listener> listeners = new LinkedHashSet<>();
     private final PlaybackController playbackController;
-    private final SleepRadioSearchRepository radioSearchRepository;
+    private final RadioRepository radioRepository;
     private final ExecutorService radioSearchExecutor = Executors.newSingleThreadExecutor();
     private final SleepPlaybackState state = new SleepPlaybackState();
     private final AmbientEngine ambientEngine = new AmbientEngine();
@@ -85,7 +87,7 @@ public final class SleepPlaybackController implements PlaybackController.Listene
     private SleepPlaybackController(@NonNull Context context) {
         appContext = context.getApplicationContext();
         playbackController = PlaybackController.getInstance(appContext);
-        radioSearchRepository = new SleepRadioSearchRepository();
+        radioRepository = new RadioRepository();
         playbackController.addListener(this);
     }
 
@@ -114,8 +116,9 @@ public final class SleepPlaybackController implements PlaybackController.Listene
         String safeQuery = query == null ? "" : query;
         radioSearchExecutor.execute(() -> {
             try {
-                List<SleepRadioStation> stations = radioSearchRepository.search(safeQuery);
-                mainHandler.post(() -> callback.onSearchResult(stations, null));
+                List<RadioStation> stations = radioRepository.search(safeQuery);
+                List<SleepRadioStation> mappedStations = mapToSleepRadioStations(stations);
+                mainHandler.post(() -> callback.onSearchResult(mappedStations, null));
             } catch (IOException e) {
                 mainHandler.post(() -> callback.onSearchResult(new ArrayList<>(),
                         appContext.getString(R.string.sleep_radio_search_error)));
@@ -125,6 +128,10 @@ public final class SleepPlaybackController implements PlaybackController.Listene
 
     @Nullable
     public synchronized SleepRadioStation findStationById(@Nullable String stationId) {
+        RadioStation station = radioRepository.findById(stationId);
+        if (station != null) {
+            return mapToSleepRadioStation(station);
+        }
         return SleepRadioCatalog.findById(stationId);
     }
 
@@ -148,7 +155,7 @@ public final class SleepPlaybackController implements PlaybackController.Listene
         dispatchState();
         playbackController.setVolume(state.getVolumeScale());
         playbackController.playSong(station.toSong());
-        radioSearchExecutor.execute(() -> radioSearchRepository.registerClick(station));
+        radioSearchExecutor.execute(() -> radioRepository.registerClick(mapFromSleepRadioStation(station)));
         ensureTimerTicker();
     }
 
@@ -241,6 +248,37 @@ public final class SleepPlaybackController implements PlaybackController.Listene
 
     private void pauseMainMusic() {
         playbackController.pause();
+    }
+
+    @NonNull
+    private List<SleepRadioStation> mapToSleepRadioStations(@NonNull List<RadioStation> stations) {
+        List<SleepRadioStation> mapped = new ArrayList<>();
+        for (RadioStation station : stations) {
+            mapped.add(mapToSleepRadioStation(station));
+        }
+        return mapped;
+    }
+
+    @NonNull
+    private SleepRadioStation mapToSleepRadioStation(@NonNull RadioStation station) {
+        return new SleepRadioStation(
+                station.getId(),
+                station.getName(),
+                station.getSubtitle(),
+                station.getFrequency(),
+                station.getStreamUrl(),
+                station.isOfficial());
+    }
+
+    @NonNull
+    private RadioStation mapFromSleepRadioStation(@NonNull SleepRadioStation station) {
+        return new RadioStation(
+                station.getId(),
+                station.getName(),
+                station.getSubtitle(),
+                station.getFrequency(),
+                station.getStreamUrl(),
+                station.isOfficial());
     }
 
     private void stopCurrentLocked() {

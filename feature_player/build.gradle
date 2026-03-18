@@ -2,13 +2,18 @@ apply plugin: 'com.android.library'
 
 android {
     namespace 'com.example.feature_player'
-    compileSdk 28
+    compileSdk 34
 
     defaultConfig {
         minSdk 21
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
+        externalNativeBuild {
+            cmake {
+                cppFlags '-std=c++17'
+            }
+        }
     }
 
     buildTypes {
@@ -18,8 +23,24 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    externalNativeBuild {
+        cmake {
+            path file('../native/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+    sourceSets {
+        main {
+            jniLibs.srcDirs = [
+                    '../native/third_party/ffmpeg/libs',
+                    '../native/third_party/flac/libs',
+                    '../native/third_party/oggvorbis/libs',
+                    '../native/third_party/mp3lame/libs'
+            ]
+        }
     }
 }
 
@@ -27,6 +48,7 @@ dependencies {
 
     implementation libs.appcompat
     implementation libs.material
+    implementation project(":core_domain")
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
