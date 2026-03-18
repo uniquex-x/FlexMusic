@@ -318,6 +318,178 @@
 2. 点击阶段快速解析与探测
 3. 播放器只接已知可播放的 resolved source
 
+## 7.5 当前 `DEMO_STREAMS` 这类 HTTPS 直链为什么仍然慢
+
+当前项目里像 `DEMO_STREAMS` 这种 HTTPS 直链，即使已经引入了 `ResolvedPlayableSource`，仍然会出现明显首播等待，根因不是“单次 TLS 慢”这么简单，而是当前链路存在重复网络初始化：
+
+1. Java 层 `AudioStreamProbeApi` 会先对 HTTPS 地址做一次探测。
+2. native 层 `PlayerBridge.setDataSource(...)` 里又会通过 `FileIoRegistry` 立即打开一次 `FfmpegStreamFileIo`。
+3. 实际播放仍然由 Java `MediaPlayer.prepareAsync()` 负责，`MediaPlayer` 会再次自己建立 HTTPS 连接。
+
+也就是说，对同一个 HTTPS 音频源，当前首播阶段很可能发生：
+
+- 一次 Java 探测
+- 一次 native FFmpeg `avio_open2`
+- 一次 `MediaPlayer` 真正 prepare
+
+这会带来 3 类额外成本：
+
+1. 重复 DNS / TCP / TLS 建连
+2. 重复 redirect 跟随与首包等待
+3. 播放前串行执行了“探测 + native 打开 + Java prepare”，导致用户感知被叠加放大
+
+因此，当前 `DEMO_STREAMS` 慢，不是单纯“HTTPS 比 HTTP 慢”，而是：
+
+- 在“Java 播放内核仍是实际播放器”的前提下，网络准备动作被做了不止一次
+
+## 7.6 针对 HTTPS 首播慢的优化方案
+
+下面的方案按优先级划分，目标是先减掉重复网络动作，再逐步做真正的启动优化。
+
+### P1-Immediate：先减重复链路
+
+#### 方案 1：探测请求改成轻量探测，而不是完整打开流
+
+当前探测阶段不应以“完整 GET 并读取输入流”为目标，而应改成：
+
+- 优先 `HEAD`
+- 如果对方不支持 `HEAD`，则降级到 `Range: bytes=0-1`
+- 只获取：
+  - 最终 URL
+  - 响应码
+  - `Content-Type`
+  - redirect 结果
+  - 首字节耗时
+
+目标：
+
+- 探测阶段不消费真正的音频流读取
+- 避免把“探测”做成一次隐式播放准备
+
+#### 方案 2：native `FileIo` 在 Java fallback 路径中改为“延迟打开”
+
+当前 native `FileIoRegistry.createAndOpen(...)` 在 `setDataSource(...)` 阶段就会真的打开远端流。
+
+这对未来 native 播放链路是合理的，但对当前“Java `MediaPlayer` 仍是实际播放器”的阶段会带来重复网络开销。
+
+因此应拆成两种模式：
+
+1. `resolveOnly`
+   - 只根据协议选择 backend
+   - 记录当前源应该由哪个 `FileIo` 实现负责
+   - 不真正建立远端连接
+
+2. `openNow`
+   - 仅在 native pipeline 真正接管播放时执行
+
+当前阶段建议：
+
+- `PlayerBridge.setDataSource(...)` 只完成 backend 选择与上下文记录
+- 不在 Java fallback 播放链路中提前 `avio_open2`
+
+这样可以直接减少一轮 HTTPS 建连。
+
+#### 方案 3：Java `MediaPlayer` 路径与 native IO 路径必须二选一
+
+在架构上必须明确：
+
+1. 如果当前真正负责播放的是 `MediaPlayer`
+   - native 层不应真的打开网络流
+   - native 只记录 backend 选择和上下文信息
+
+2. 如果当前真正负责播放的是 native pipeline
+   - 则不再把同一个 URL 交给 `MediaPlayer.prepareAsync()`
+
+禁止继续存在：
+
+- native 先开流
+- Java 再开同一个流
+
+这种双开流模式是当前首播慢的核心原因之一。
+
+### P1-Measure：把慢点拆出来量化
+
+必须新增启动耗时分段埋点，至少记录：
+
+1. source resolve latency
+2. probe latency
+3. backend select latency
+4. native open latency
+5. player prepare latency
+6. first frame / first audio latency
+
+只有把这些时间拆开，才能确认到底是：
+
+- TLS 慢
+- redirect 慢
+- 探测慢
+- `MediaPlayer.prepareAsync()` 慢
+- 还是我们自己重复做了多次网络初始化
+
+### P1-Prewarm：做可复用的连接预热
+
+对于像 `DEMO_STREAMS`、电台列表、搜索结果列表这类“用户大概率会点击”的在线源，可以在以下时机做轻量预热：
+
+1. 列表曝光时，按 host 维度做限量 preconnect
+2. 点击 down 时预解析，不要等点击 up
+3. 最近成功播放的 host 保留短 TTL warm record
+
+这里的预热不是提前全量拉流，而是：
+
+- DNS 预解析
+- TCP/TLS 预热
+- redirect 缓存
+
+### P1-Cache：缓存 resolved source 而不是只缓存原始 URL
+
+对同一个 HTTPS 流，应该缓存：
+
+- `originalUrl`
+- `resolvedUrl`
+- `contentType`
+- backend 选择结果
+- 最近一次成功时间
+- 是否 live
+
+并设置短 TTL。
+
+这样二次点击同一资源时，不必每次都：
+
+- 重新判断协议
+- 重新做 redirect 跟随
+- 重新猜测 backend
+
+### P2：native 播放链真正接管后再启用 `openNow`
+
+当前引入 `FileIoRegistry` 和 `FfmpegStreamFileIo` 的价值在于：
+
+- 先把 IO 选择逻辑抽象出来
+- 为未来 native demux / decode 做好扩展点
+
+但在 native pipeline 尚未真正接管前，不应把 `FfmpegStreamFileIo.open(...)` 当成当前 Java fallback 播放的必要步骤。
+
+未来当 native pipeline 进入可播放状态时，再切换为：
+
+`ResolvedPlayableSource`
+-> `FileIoRegistry`
+-> `FfmpegStreamFileIo`
+-> `avformat_open_input`
+-> demux / decode / render
+
+那时 `openNow` 才有真正意义，因为网络打开动作会直接服务于实际播放，而不是只做重复初始化。
+
+## 7.7 当前结论
+
+针对 `DEMO_STREAMS` 这类 HTTPS 直链，短期最有效的优化不是“立刻换 QUIC”，而是：
+
+1. 把探测改轻
+2. 把 native IO 改为延迟打开
+3. 禁止 Java fallback 与 native IO 双开流
+4. 补齐启动耗时埋点
+5. 缓存 resolved source 和 host 级预热结果
+
+只有先把重复链路删掉，后续 QUIC、native 网络栈、连接池复用这些优化才有真实收益。
+
 ## 8. 搜索链路设计
 
 ### 8.1 搜索统一入口

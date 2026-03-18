@@ -16,6 +16,6 @@ public final class FeaturePlayerFactory {
     public static PlayerKernel create(@NonNull Context context) {
         SoLibraryLoader.loadLibrary(context.getApplicationContext());
         PlayerJNI.initializeNativeRuntime(context.getApplicationContext().getFilesDir().getAbsolutePath());
-        return new NativeBackedMediaPlayerKernel(context.getApplicationContext());
+        return new NativeBackedPlayerKernel(context.getApplicationContext());
     }
 }

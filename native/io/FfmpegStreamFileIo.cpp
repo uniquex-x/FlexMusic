@@ -1,5 +1,8 @@
 #include "FfmpegStreamFileIo.h"
 
+#include "../core/logger/logger.h"
+
+#include <chrono>
 #include <mutex>
 #include <memory>
 #include <string>
@@ -41,6 +44,8 @@ FfmpegStreamFileIo::~FfmpegStreamFileIo() {
 bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMessage) {
     close();
     ensureFfmpegNetworkInitialized();
+    const auto startedAt = std::chrono::steady_clock::now();
+    const auto log = flexmusic::core::levelLog("FfmpegStreamIo");
 
     AVDictionary* options = nullptr;
     if (!spec.userAgent.empty()) {
@@ -56,6 +61,13 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
         if (errorMessage != nullptr) {
             *errorMessage = avErrorToString(result < 0 ? result : AVERROR_UNKNOWN);
         }
+        const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - startedAt).count();
+        log.e("open failed sourceId=%s url=%s elapsedMs=%lld error=%s",
+              spec.sourceId.c_str(),
+              spec.resolvedUrl.c_str(),
+              static_cast<long long>(elapsedMs),
+              errorMessage != nullptr ? errorMessage->c_str() : "");
         close();
         return false;
     }
@@ -63,6 +75,12 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
     if (errorMessage != nullptr) {
         errorMessage->clear();
     }
+    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startedAt).count();
+    log.i("open success sourceId=%s url=%s elapsedMs=%lld",
+          spec.sourceId.c_str(),
+          spec.resolvedUrl.c_str(),
+          static_cast<long long>(elapsedMs));
     return true;
 }
 
@@ -95,6 +113,10 @@ const char* FfmpegStreamFileIo::implementationName() const {
 }
 
 bool FfmpegStreamFileIoFactory::supports(const DataSourceSpec& spec) const {
+    // A detached fd means Java has already prepared a fallback transport.
+    if (spec.detachedFd >= 0) {
+        return false;
+    }
     std::string scheme = resolveScheme(spec.resolvedUrl);
     return scheme == "http" || scheme == "https";
 }

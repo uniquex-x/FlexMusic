@@ -7,6 +7,15 @@ import com.example.feature_player.player.SoLibraryLoader;
 
 public final class PlayerJNI {
 
+    public static final int STATE_IDLE = 0;
+    public static final int STATE_PREPARING = 1;
+    public static final int STATE_READY = 2;
+    public static final int STATE_PLAYING = 3;
+    public static final int STATE_PAUSED = 4;
+    public static final int STATE_BUFFERING = 5;
+    public static final int STATE_COMPLETED = 6;
+    public static final int STATE_ERROR = 7;
+
     private long nativeHandle;
     private static boolean nativeRuntimeInitialized;
 
@@ -29,6 +38,13 @@ public final class PlayerJNI {
     }
 
     public void setDataSource(@NonNull ResolvedPlayableSource source) {
+        setDataSource(source, -1, 0L, -1L);
+    }
+
+    public void setDataSource(@NonNull ResolvedPlayableSource source,
+                              int detachedFd,
+                              long fdStartOffset,
+                              long fdLength) {
         if (nativeHandle == 0L) {
             return;
         }
@@ -39,15 +55,18 @@ public final class PlayerJNI {
                 source.getResolvedUrl(),
                 source.getContentType(),
                 source.getUserAgent(),
+                detachedFd,
+                fdStartOffset,
+                fdLength,
                 source.isLiveStream(),
                 source.isLocalSource(),
                 source.isSeekable(),
                 source.getProbeLatencyMs());
     }
 
-    public void onPrepared(long durationMs) {
+    public void prepare() {
         if (nativeHandle != 0L) {
-            nativeOnPrepared(nativeHandle, durationMs);
+            nativePrepare(nativeHandle);
         }
     }
 
@@ -57,9 +76,9 @@ public final class PlayerJNI {
         }
     }
 
-    public void pause(long positionMs) {
+    public void pause() {
         if (nativeHandle != 0L) {
-            nativePause(nativeHandle, positionMs);
+            nativePause(nativeHandle);
         }
     }
 
@@ -75,10 +94,27 @@ public final class PlayerJNI {
         }
     }
 
-    public void onCompletion(long durationMs) {
+    public void setVolume(float volume) {
         if (nativeHandle != 0L) {
-            nativeOnCompletion(nativeHandle, durationMs);
+            nativeSetVolume(nativeHandle, volume);
         }
+    }
+
+    public int getState() {
+        return nativeHandle == 0L ? STATE_IDLE : nativeGetState(nativeHandle);
+    }
+
+    public long getCurrentPosition() {
+        return nativeHandle == 0L ? 0L : nativeGetCurrentPosition(nativeHandle);
+    }
+
+    public long getDuration() {
+        return nativeHandle == 0L ? 0L : nativeGetDuration(nativeHandle);
+    }
+
+    @NonNull
+    public String getErrorMessage() {
+        return nativeHandle == 0L ? "" : nativeGetErrorMessage(nativeHandle);
     }
 
     public void release() {
@@ -92,30 +128,42 @@ public final class PlayerJNI {
 
     private static native void nativeInitialize(@NonNull String appStoragePath);
 
+    private static native void nativePrepare(long nativeHandle);
+
     private static native void nativeSetDataSource(long nativeHandle,
                                                    @NonNull String sourceId,
                                                    @NonNull String originalUrl,
                                                    @NonNull String resolvedUrl,
                                                    @NonNull String contentType,
                                                    @NonNull String userAgent,
+                                                   int detachedFd,
+                                                   long fdStartOffset,
+                                                   long fdLength,
                                                    boolean liveStream,
                                                    boolean localSource,
                                                    boolean seekable,
                                                    long probeLatencyMs);
 
-    private static native void nativeOnPrepared(long nativeHandle, long durationMs);
-
     private static native void nativePlay(long nativeHandle);
 
-    private static native void nativePause(long nativeHandle, long positionMs);
+    private static native void nativePause(long nativeHandle);
 
     private static native void nativeSeekTo(long nativeHandle, long positionMs);
 
     private static native void nativeStop(long nativeHandle);
 
-    private static native void nativeOnCompletion(long nativeHandle, long durationMs);
+    private static native void nativeSetVolume(long nativeHandle, float volume);
 
     private static native void nativeRelease(long nativeHandle);
 
     private static native boolean nativeIsReady(long nativeHandle);
+
+    private static native int nativeGetState(long nativeHandle);
+
+    private static native long nativeGetCurrentPosition(long nativeHandle);
+
+    private static native long nativeGetDuration(long nativeHandle);
+
+    @NonNull
+    private static native String nativeGetErrorMessage(long nativeHandle);
 }

@@ -9,11 +9,16 @@ import com.example.core_domain.player.PlaybackSourceResolver;
 import com.example.core_domain.player.ResolvedPlayableSource;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
 
+    private static final long CACHE_TTL_MS = 2 * 60 * 1000L;
+
     private final AudioStreamProbeApi audioStreamProbeApi;
+    private final Map<String, CachedResolvedSource> resolvedSourceCache = new LinkedHashMap<>();
 
     public NetworkPlaybackSourceResolver() {
         this(new AudioStreamProbeApi());
@@ -44,10 +49,15 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
                     0L);
         }
 
+        ResolvedPlayableSource cachedSource = getCachedSource(originalUrl);
+        if (cachedSource != null) {
+            return cachedSource;
+        }
+
         try {
             AudioStreamProbeResult result = audioStreamProbeApi.probe(originalUrl);
             boolean liveStream = resolveLiveStreamFlag(request, result);
-            return new ResolvedPlayableSource(
+            ResolvedPlayableSource resolvedSource = new ResolvedPlayableSource(
                     request.getSourceId(),
                     originalUrl,
                     result.getResolvedUrl(),
@@ -57,6 +67,8 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
                     false,
                     !liveStream,
                     result.getProbeLatencyMs());
+            cacheResolvedSource(originalUrl, resolvedSource);
+            return resolvedSource;
         } catch (IOException probeError) {
             return new ResolvedPlayableSource(
                     request.getSourceId(),
@@ -88,5 +100,35 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
                 && (resolvedUrl.contains(".m3u8")
                 || resolvedUrl.contains("/live")
                 || resolvedUrl.contains("stream"));
+    }
+
+    private synchronized void cacheResolvedSource(@NonNull String originalUrl,
+                                                  @NonNull ResolvedPlayableSource resolvedSource) {
+        resolvedSourceCache.put(originalUrl, new CachedResolvedSource(
+                resolvedSource,
+                System.currentTimeMillis() + CACHE_TTL_MS));
+    }
+
+    private synchronized ResolvedPlayableSource getCachedSource(@NonNull String originalUrl) {
+        CachedResolvedSource cached = resolvedSourceCache.get(originalUrl);
+        if (cached == null) {
+            return null;
+        }
+        if (cached.expiresAtMs < System.currentTimeMillis()) {
+            resolvedSourceCache.remove(originalUrl);
+            return null;
+        }
+        return cached.resolvedSource;
+    }
+
+    private static final class CachedResolvedSource {
+        private final ResolvedPlayableSource resolvedSource;
+        private final long expiresAtMs;
+
+        private CachedResolvedSource(@NonNull ResolvedPlayableSource resolvedSource,
+                                     long expiresAtMs) {
+            this.resolvedSource = resolvedSource;
+            this.expiresAtMs = expiresAtMs;
+        }
     }
 }

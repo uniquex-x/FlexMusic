@@ -4,10 +4,9 @@
 #include <cstdint>
 #include <jni.h>
 #include <memory>
-#include <mutex>
 #include <string>
 
-#include "../../io/IFileIo.h"
+#include "../../player/PlayerSession.h"
 
 namespace flexmusic {
 namespace jni {
@@ -15,23 +14,7 @@ namespace jni {
 bool register_PlayerBridgeJNI(JNIEnv* env);
 
 struct NativePlayerContext {
-    std::mutex mutex;
-    std::string sourceId;
-    std::string originalUrl;
-    std::string resolvedUrl;
-    std::string contentType;
-    std::string userAgent;
-    bool liveStream = false;
-    bool localSource = false;
-    bool seekable = false;
-    int64_t probeLatencyMs = 0;
-    int64_t durationMs = 0;
-    int64_t currentPositionMs = 0;
-    bool playing = false;
-    bool fileIoReady = false;
-    std::string fileIoBackend;
-    std::string lastErrorMessage;
-    std::unique_ptr<flexmusic::io::IFileIo> fileIo;
+    std::unique_ptr<flexmusic::player::PlayerSession> playerSession;
 };
 
 class PlayerBridge final {
@@ -47,18 +30,25 @@ public:
                               const std::string& resolvedUrl,
                               const std::string& contentType,
                               const std::string& userAgent,
+                              int detachedFd,
+                              int64_t fdStartOffset,
+                              int64_t fdLength,
                               bool liveStream,
                               bool localSource,
                               bool seekable,
                               int64_t probeLatencyMs);
 
-    static void onPrepared(NativePlayerContext* context, int64_t durationMs);
+    static void prepare(NativePlayerContext* context);
     static void play(NativePlayerContext* context);
-    static void pause(NativePlayerContext* context, int64_t positionMs);
+    static void pause(NativePlayerContext* context);
     static void seekTo(NativePlayerContext* context, int64_t positionMs);
     static void stop(NativePlayerContext* context);
-    static void onCompletion(NativePlayerContext* context, int64_t durationMs);
+    static void setVolume(NativePlayerContext* context, float volume);
     static bool isReady(NativePlayerContext* context);
+    static int getState(NativePlayerContext* context);
+    static int64_t getCurrentPosition(NativePlayerContext* context);
+    static int64_t getDuration(NativePlayerContext* context);
+    static std::string getErrorMessage(NativePlayerContext* context);
 };
 
 } // namespace jni

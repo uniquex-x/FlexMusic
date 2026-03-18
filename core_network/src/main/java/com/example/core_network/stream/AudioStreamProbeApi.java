@@ -12,6 +12,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.List;
 
 public class AudioStreamProbeApi {
 
@@ -22,26 +24,51 @@ public class AudioStreamProbeApi {
             .readTimeoutMs(2_500)
             .retryCount(0)
             .build();
+    private static final List<String> LIGHTWEIGHT_METHODS = Arrays.asList("HEAD", "GET");
 
     @NonNull
     AudioStreamProbeResult probe(@NonNull String url) throws IOException {
+        IOException lastError = null;
+        for (String method : LIGHTWEIGHT_METHODS) {
+            try {
+                return executeLightweightProbe(url, method);
+            } catch (IOException error) {
+                lastError = error;
+            }
+        }
+        if (lastError != null) {
+            throw lastError;
+        }
+        throw new IOException("Stream probe failed for " + url);
+    }
+
+    @NonNull
+    private AudioStreamProbeResult executeLightweightProbe(@NonNull String url,
+                                                           @NonNull String method) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setInstanceFollowRedirects(true);
-        connection.setRequestMethod("GET");
+        connection.setRequestMethod(method);
         connection.setUseCaches(false);
         connection.setConnectTimeout(PROBE_POLICY.getConnectTimeoutMs());
         connection.setReadTimeout(PROBE_POLICY.getReadTimeoutMs());
         connection.setRequestProperty("User-Agent", DEFAULT_USER_AGENT);
         connection.setRequestProperty("Icy-MetaData", "1");
+        if ("GET".equals(method)) {
+            connection.setRequestProperty("Range", "bytes=0-1");
+        }
 
         long startAt = SystemClock.elapsedRealtime();
         InputStream inputStream = null;
         try {
             int code = connection.getResponseCode();
-            if (code < 200 || code >= 400) {
-                throw new IOException("HTTP " + code + " for stream probe " + url);
+            if (!isSuccessCode(method, code)) {
+                throw new IOException("HTTP " + code + " for " + method + " probe " + url);
             }
-            inputStream = connection.getInputStream();
+
+            if ("GET".equals(method)) {
+                inputStream = connection.getInputStream();
+            }
+
             String resolvedUrl = connection.getURL() != null ? connection.getURL().toString() : url;
             String contentType = connection.getContentType();
             return new AudioStreamProbeResult(
@@ -57,6 +84,13 @@ public class AudioStreamProbeApi {
             }
             connection.disconnect();
         }
+    }
+
+    private boolean isSuccessCode(@NonNull String method, int code) {
+        if ("GET".equals(method)) {
+            return (code >= 200 && code < 300) || code == HttpURLConnection.HTTP_PARTIAL;
+        }
+        return code >= 200 && code < 300;
     }
 
     static boolean isNetworkUri(@NonNull String url) {

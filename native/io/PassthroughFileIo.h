@@ -1,6 +1,8 @@
 #ifndef FLEXMUSIC_PASSTHROUGH_FILE_IO_H
 #define FLEXMUSIC_PASSTHROUGH_FILE_IO_H
 
+#include <cstdio>
+
 #include "IFileIoFactory.h"
 
 namespace flexmusic {
@@ -16,6 +18,7 @@ public:
     const char* implementationName() const override;
 
 private:
+    std::FILE* file_ = nullptr;
     bool opened_ = false;
 };
 

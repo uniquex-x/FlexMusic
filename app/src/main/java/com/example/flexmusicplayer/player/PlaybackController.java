@@ -5,6 +5,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -30,6 +31,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class PlaybackController {
+
+    private static final String TAG = "PlaybackController";
 
     public interface Listener {
         void onPlaybackStateChanged(@NonNull PlayerState state);
@@ -233,6 +236,11 @@ public final class PlaybackController {
             return;
         }
         Song song = queue.get(currentIndex);
+        Log.d(TAG, "prepareCurrentSong id=" + song.getId()
+                + " title=" + song.getTitle()
+                + " url=" + song.getAudioUrl()
+                + " local=" + song.isLocal()
+                + " radio=" + song.isRadioStream());
         playerState.setCurrentSong(song);
         playerState.setCurrentPosition(0);
         playerState.setDuration(song.getDuration());
@@ -277,10 +285,12 @@ public final class PlaybackController {
     private void resolveAndPrepare(@NonNull Song song, long generation) {
         try {
             String source = resolvePlayableSource(song);
+            Log.d(TAG, "resolveAndPrepare sourceId=" + resolveSourceId(song) + " source=" + source);
             PlaybackRequest request = new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
             ResolvedPlayableSource resolvedSource = playbackSourceResolver.resolve(request);
             mainHandler.post(() -> onSourceResolved(generation, resolvedSource));
         } catch (IOException e) {
+            Log.e(TAG, "resolveAndPrepare failed sourceId=" + resolveSourceId(song), e);
             mainHandler.post(() -> onSourceResolveFailed(generation));
         }
     }
@@ -289,9 +299,14 @@ public final class PlaybackController {
         if (generation != prepareGeneration) {
             return;
         }
+        Log.d(TAG, "onSourceResolved sourceId=" + resolvedSource.getSourceId()
+                + " resolvedUrl=" + resolvedSource.getResolvedUrl()
+                + " local=" + resolvedSource.isLocalSource()
+                + " seekable=" + resolvedSource.isSeekable());
         try {
             playerKernel.prepare(resolvedSource);
         } catch (IOException | RuntimeException e) {
+            Log.e(TAG, "playerKernel.prepare failed sourceId=" + resolvedSource.getSourceId(), e);
             playerState.setState(PlayerState.State.ERROR);
             dispatchState();
         }
@@ -311,6 +326,11 @@ public final class PlaybackController {
         if (currentSong == null) {
             return;
         }
+        Log.d(TAG, "kernelSnapshot state=" + snapshot.getState()
+                + " position=" + snapshot.getCurrentPositionMs()
+                + " duration=" + snapshot.getDurationMs()
+                + " nativeReady=" + snapshot.isNativeReady()
+                + " error=" + snapshot.getErrorMessage());
 
         playerState.setCurrentPosition((int) snapshot.getCurrentPositionMs());
         playerState.setDuration((int) Math.max(snapshot.getDurationMs(), playerState.getDuration()));

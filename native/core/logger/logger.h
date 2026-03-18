@@ -1,6 +1,7 @@
 #ifndef FLEXMUSIC_LOGGER_H
 #define FLEXMUSIC_LOGGER_H
 
+#include <cstdarg>
 #include <string>
 
 namespace flexmusic {
@@ -22,6 +23,7 @@ public:
 
     void setLogLevel(LogLevel level);
     void log(LogLevel level, const char* tag, const char* format, ...);
+    void logv(LogLevel level, const char* tag, const char* format, va_list args);
 
     // 便捷方法
     void v(const char* tag, const char* format, ...);
@@ -38,6 +40,25 @@ private:
 
     LogLevel logLevel_{LogLevel::INFO};
 };
+
+class LevelLog final {
+public:
+    explicit constexpr LevelLog(const char* tag) : tag_(tag) {
+    }
+
+    void v(const char* format, ...) const;
+    void d(const char* format, ...) const;
+    void i(const char* format, ...) const;
+    void w(const char* format, ...) const;
+    void e(const char* format, ...) const;
+
+private:
+    const char* tag_;
+};
+
+inline LevelLog levelLog(const char* tag) {
+    return LevelLog(tag);
+}
 
 // 宏定义
 #define LOGV(tag, ...) flexmusic::core::Logger::getInstance().v(tag, __VA_ARGS__)

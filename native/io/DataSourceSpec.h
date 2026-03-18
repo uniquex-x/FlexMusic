@@ -14,6 +14,9 @@ struct DataSourceSpec {
     std::string resolvedUrl;
     std::string contentType;
     std::string userAgent;
+    int detachedFd = -1;
+    int64_t fdStartOffset = 0;
+    int64_t fdLength = -1;
     bool liveStream = false;
     bool localSource = false;
     bool seekable = false;

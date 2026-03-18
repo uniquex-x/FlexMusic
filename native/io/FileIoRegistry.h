@@ -13,6 +13,9 @@ class FileIoRegistry final {
 public:
     static void registerFactory(std::unique_ptr<IFileIoFactory> factory);
 
+    static std::unique_ptr<IFileIo> createForSpec(const DataSourceSpec& spec,
+                                                  std::string* errorMessage);
+
     static std::unique_ptr<IFileIo> createAndOpen(const DataSourceSpec& spec,
                                                   std::string* errorMessage);
 };

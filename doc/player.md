@@ -1,143 +1,142 @@
 # 播放器模块实现说明
 
-## 当前落地范围
-本轮实现覆盖了 3 个层面：
+## 当前运行态
+播放器运行时已经从 Java `MediaPlayer` 切到 native 播放链路，当前主路径为：
 
-1. 播放器 UI
-- 新增全屏播放页与歌词页，入口为底部 mini-player 点击后打开。
-- 播放页样式对齐 `doc/UI picture/playing歌曲播放.png`。
-- 歌词页样式对齐 `doc/UI picture/lyrics歌词界面.png`。
+1. `PlaybackController`
+- 负责队列、播放请求、进度同步和最近播放记录。
 
-2. 可工作的播放链路
-- 当前运行时播放器使用 Java `MediaPlayer` 作为可用内核。
-- 支持 HTTP / HTTPS 网络音频流。
-- 支持 `content://`、`file://`、绝对路径形式的本地音频源。
-- 本地音频由 `Storage Access Framework` 选取后持久化保存 URI，不强制复制文件。
+2. `feature_player`
+- `NativeBackedPlayerKernel` 作为 `core_domain` 的播放器内核实现。
+- Java 层只负责：
+  - 解析 `ResolvedPlayableSource`
+  - 对 `content://` / `android.resource://` 打开 `AssetFileDescriptor`
+  - 将 `fd + offset + length` 传给 JNI
+  - 轮询 native 播放快照并分发给 UI
 
-3. 本地音乐存储
-- 新增 `LocalMusicStore`，把用户通过“本地 -> Upload Offline Songs”选择的音频 URI 持久化到 `SharedPreferences`。
-- 读取时尽量通过 `MediaMetadataRetriever` 提取标题、艺术家、专辑、时长。
-- 如果系统中已经有音频文件，优先建议直接保存 `content://` 或 `MediaStore` URI；Android 10+ 不建议依赖裸文件路径。
+3. JNI Bridge
+- `PlayerJNI` -> `PlayerBridge`
+- 全部采用动态注册
+- 仅负责参数转换、句柄管理和 native session 调度
+
+4. Native 播放链路
+- `IFileIo`
+  - `FfmpegStreamFileIo`：`http/https`
+  - `FdFileIo`：`content://` / `android.resource://` 的 fd 输入
+  - `PassthroughFileIo`：`file://` 或绝对路径
+- `AvioDataSource`
+  - 把统一的 `IFileIo` 适配成 FFmpeg 自定义 AVIO
+- `FfmpegDemuxer`
+  - 打开输入、找到音频流、输出编码包
+- `FfmpegAudioDecoder`
+  - 解码并重采样成 `S16 PCM`
+- `OpenSlAudioRenderer`
+  - 负责 OpenSL ES 音频输出
+- `PlayerSession`
+  - 负责状态机、线程编排、缓冲队列、播放控制
+
+## 本地音频支持
+当前本地音频有 3 条可用路径：
+
+1. `content://`
+- 来自 SAF / MediaStore 的本地音频 URI
+- Java 层通过 `ContentResolver.openAssetFileDescriptor(...)` 打开
+- 不复制文件，不落本地缓存
+- native 通过 `FdFileIo` 直接读取 fd
+
+2. `android.resource://`
+- 应用内资源音频
+- 同样通过 fd 路径进入 native
+
+3. `file://` / 绝对路径
+- native 通过 `PassthroughFileIo` 直接读取文件
+
+结论：
+- 当前离线音频不依赖 `MediaPlayer`
+- `SAF content://` 已能直接进 native 播放链路
+- 不需要把本地音频额外复制到应用私有目录
+
+## 在线音频支持
+在线音频当前走：
+
+- `core_network` 轻量探测
+  - 优先 `HEAD`
+  - 回退 `Range: bytes=0-1`
+- `feature_player` JNI 内核
+  - `http/https` 由 `FfmpegStreamFileIo` 打开
+  - 通过统一 AVIO 进入 FFmpeg demux / decode / render
+
+当前仓库只 vendored：
+- `arm64-v8a`
+- `armeabi-v7a`
+
+因此 `app` 和 `feature_player` 已显式限制 ABI，避免构建阶段错误尝试 `x86`。
 
 ## 关键代码位置
 
-### UI
-- `app/src/main/java/com/example/flexmusicplayer/PlayerActivity.java`
-- `app/src/main/res/layout/activity_player.xml`
-- `app/src/main/res/layout/item_lyric_line.xml`
-
-### 播放控制
+### Java / Domain
 - `app/src/main/java/com/example/flexmusicplayer/player/PlaybackController.java`
-- `app/src/main/java/com/example/flexmusicplayer/player/LyricsRepository.java`
-- `app/src/main/java/com/example/flexmusicplayer/player/LyricsLine.java`
+- `feature_player/src/main/java/com/example/feature_player/player/NativeBackedPlayerKernel.java`
+- `feature_player/src/main/java/com/example/feature_player/coreplayer/PlayerJNI.java`
+- `core_domain/src/main/java/com/example/core_domain/player/PlayerKernel.java`
 
-### 本地音频持久化
-- `app/src/main/java/com/example/flexmusicplayer/storage/LocalMusicStore.java`
+### Native
+- `native/jni/JNILoader.cpp`
+- `native/jni/bridge/PlayerBridge.cpp`
+- `native/player/PlayerSession.cpp`
+- `native/media/source/AvioDataSource.cpp`
+- `native/media/demux/FfmpegDemuxer.cpp`
+- `native/media/codec/FfmpegAudioDecoder.cpp`
+- `native/audio/OpenSlAudioRenderer.cpp`
+- `native/io/FfmpegStreamFileIo.cpp`
+- `native/io/FdFileIo.cpp`
+- `native/io/PassthroughFileIo.cpp`
 
-### 入口接入
-- `app/src/main/java/com/example/flexmusicplayer/MainActivity.java`
-- `app/src/main/java/com/example/flexmusicplayer/ui/MainPageFragment.java`
-- `app/src/main/java/com/example/flexmusicplayer/ui/FavoritesFragment.java`
-- `app/src/main/java/com/example/flexmusicplayer/ui/RecentFragment.java`
-- `app/src/main/java/com/example/flexmusicplayer/ui/LocalFragment.java`
+## 当前线程模型
+- Java 主线程：
+  - 控制层事件分发
+  - 快照轮询
+- native prepare 线程：
+  - 打开数据源、demuxer、decoder
+- native demux 线程：
+  - 拉流 / 读文件并输出编码包
+- native decode 线程：
+  - 解码并输出 PCM
+- native render 线程：
+  - 将 PCM 送入 OpenSL ES
 
-## 当前播放架构
+## 当前日志策略
+播放器关键环节已经补日志，便于排查“点了没声”类问题：
 
-### 1. UI 层
-- 列表点击歌曲后，通过 `MainActivity.onSongPlaybackRequested(...)` 把歌曲和队列交给 `PlaybackController`。
-- mini-player 监听播放器状态变化，更新标题、艺人、播放状态和显隐。
-- 全屏 `PlayerActivity` 订阅同一份播放状态，实现播放页和歌词页双界面。
+- Java 层
+  - `NativeBackedPlayerKernel` 打印 sourceId、url、local/fd 信息
+- JNI 层
+  - `PlayerBridge` 打印数据源选型和 backend
+- Native 内核
+  - `PlayerSession` 打印 prepare、状态切换、错误信息
 
-### 2. 控制层
-- `PlaybackController` 是进程级单例。
-- 负责：
-  - 维护当前队列与索引
-  - 控制 `MediaPlayer` prepare/play/pause/seek/next/previous
-  - 维护 `PlayerState`
-  - 每 500ms 分发一次进度
-  - 处理 buffering / complete / error 状态
+定位问题时，先看：
+1. Java 是否拿到了可用 source 和 fd
+2. JNI 是否选到了预期 backend
+3. native 是否进入 `prepareLoop`
+4. 状态是否从 `PREPARING` 进入 `PLAYING`
+5. 是否有 demux / decode / render 错误日志
 
-### 3. 数据源层
-- 网络流：
-  - 直接把 `http://` / `https://` URL 交给 `MediaPlayer.setDataSource(String)`。
-- 本地流：
-  - `content://` 通过 `MediaPlayer.setDataSource(Context, Uri)`。
-  - `file://` 或绝对路径优先直接播放。
-  - 如果是示例数据里不存在的假本地路径，则自动回退到 demo 网络流，避免演示时点击即失败。
+## 已验证的构建状态
+本轮已通过：
 
-## 本地文件是否可以直接链接
-可以，但推荐分 3 种情况处理：
+- `:app:compileDebugJavaWithJavac`
+- `:feature_player:externalNativeBuildDebug`
+- `:app:assembleDebug`
 
-1. 用户从系统文件选择器选择音频
-- 直接保存返回的 `content://` URI。
-- 调用 `takePersistableUriPermission(...)` 保留读权限。
-- 这是当前实现已经采用的方案。
+## 后续建议
+下一步建议继续收口 3 件事：
 
-2. 系统媒体库中的音频
-- 优先保存 `MediaStore` 查询得到的 `content://media/...` URI。
-- 这种方式兼容新版本 Android 分区存储。
+1. 启动耗时指标
+- 给 source resolve、native prepare、first pcm、first render 打点
 
-3. 应用私有目录或你自己缓存下来的音频
-- 可以直接保存绝对路径或 `file://` URI。
+2. buffer 策略
+- 继续缩短首播链路，并区分本地/网络的预缓冲阈值
 
-结论：
-- 手机中已存在的音频文件不必复制一份才能播放。
-- 只要你拿到的是稳定可访问的 URI 或路径，就能直接链接。
-- Android 10+ 场景优先 `content://`，不要依赖外部存储裸路径。
-
-## 网络拉流说明
-
-当前实现使用系统 `MediaPlayer` 走 HTTP(S) 流播放，可满足：
-- 远程 MP3/AAC 等常见音频直链
-- 基础缓冲、暂停、续播、拖动
-
-仓库内已经放入：
-- FFmpeg 8.0
-- FLAC
-- mp3lame
-- oggVorbis
-
-但这些 native 库目前还没有接入到运行时链路，原因是：
-- `native/CMakeLists.txt` 仍为空
-- 没有 JNI bridge 的 cpp 实现
-- 也没有 native demux / decode / render pipeline
-
-所以当前状态是：
-- 资源已就位
-- Java fallback 已可工作
-- native 播放内核尚未真正启用
-
-## 下一步如何切换到 FFmpeg 播放链路
-
-建议后续按下面的方向推进：
-
-1. 在 `feature_player` 中建立 JNI 播放桥
-- Java 层保留统一的 `PlaybackController` 接口
-- 底层新增 `PlayerJNI`
-
-2. 在 `native/` 中补齐模块
-- datasource：本地文件 / HTTP(S)
-- demux：FFmpeg `avformat`
-- decode：FFmpeg `avcodec`
-- output：Android `AudioTrack`
-
-3. 线程模型建议
-- UI 线程：界面状态与事件分发
-- 控制线程：播放状态机
-- 拉流线程：网络读取与 packet buffer
-- 解码线程：音频解码
-- 渲染线程：PCM -> AudioTrack
-
-4. buffering 建议
-- packet buffer：网络层缓冲
-- decoded PCM buffer：解码层缓冲
-- audio output buffer：渲染层缓冲
-
-5. 保留当前 Java 播放器作为 fallback
-- native 初始化失败时回退到 `MediaPlayer`
-- 先保证业务可用，再逐步切换高性能链路
-
-## 这轮实现的取舍
-- 优先交付“能播、能看、能切歌词、能播本地/网络”的可运行版本。
-- 没有在本轮硬上 FFmpeg JNI，是因为仓库当前缺失 native 运行时桥和 CMake 构建内容，直接强接只会得到不可运行的半成品。
-- 文档已经把 native 接入的拆分路径写清楚，后续可以在不推翻当前 UI 与控制层的前提下平滑替换底层内核。
+3. `content://` 稳定性
+- 补充 SAF URI 权限异常、fd 打开失败、length unknown 场景的专项测试
