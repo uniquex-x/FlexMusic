@@ -9,8 +9,12 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.example.core_data.player.PlaybackWarmupCoordinator;
+import com.example.core_domain.player.IPlaybackWarmupEngine;
 import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.player.PlaybackSourceResolver;
+import com.example.core_domain.player.PlaybackWarmupRequest;
+import com.example.core_domain.player.PlaybackWarmupSnapshot;
 import com.example.core_domain.player.PlayerKernel;
 import com.example.core_domain.player.PlayerKernelSnapshot;
 import com.example.core_domain.player.PlayerKernelState;
@@ -55,8 +59,11 @@ public final class PlaybackController {
     private final PlayerState playerState = new PlayerState();
     private final RecentPlaybackStore recentPlaybackStore = RecentPlaybackStore.getInstance();
     private final ExecutorService sourceResolveExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService warmupExecutor = Executors.newSingleThreadExecutor();
     private final PlayerKernel playerKernel;
     private final PlaybackSourceResolver playbackSourceResolver;
+    private final IPlaybackWarmupEngine playbackWarmupEngine;
+    private final PlaybackWarmupCoordinator playbackWarmupCoordinator = new PlaybackWarmupCoordinator();
     private final Runnable progressTicker = new Runnable() {
         @Override
         public void run() {
@@ -78,12 +85,17 @@ public final class PlaybackController {
     private final List<Song> queue = new ArrayList<>();
     private int currentIndex = -1;
     private long prepareGeneration = 0L;
+    private long warmupGeneration = 0L;
     private String pendingRecentKey = "";
+    private String activeWarmupSourceId = "";
+    private String lastWarmupPlanKey = "";
 
     private PlaybackController(@NonNull Context context) {
         appContext = context.getApplicationContext();
         playerKernel = FeaturePlayerFactory.create(appContext);
-        playbackSourceResolver = new NetworkPlaybackSourceResolver();
+        NetworkPlaybackSourceResolver networkPlaybackSourceResolver = new NetworkPlaybackSourceResolver();
+        playbackSourceResolver = networkPlaybackSourceResolver;
+        playbackWarmupEngine = networkPlaybackSourceResolver;
         playerKernel.addListener(this::handleKernelSnapshotChanged);
     }
 
@@ -146,6 +158,7 @@ public final class PlaybackController {
         Log.d(TAG, "addSearchTrackNext sourceId=" + request.getSourceId()
                 + " insertIndex=" + insertIndex
                 + " queueSize=" + queue.size());
+        onQueueTopologyChangedLocked();
         dispatchState();
     }
 
@@ -159,6 +172,7 @@ public final class PlaybackController {
         queue.add(song);
         Log.d(TAG, "addSearchTrackToQueue sourceId=" + request.getSourceId()
                 + " queueSize=" + queue.size());
+        onQueueTopologyChangedLocked();
         dispatchState();
     }
 
@@ -267,11 +281,13 @@ public final class PlaybackController {
 
     public synchronized void toggleShuffle() {
         playerState.toggleShuffle();
+        onQueueTopologyChangedLocked();
         dispatchState();
     }
 
     public synchronized void toggleRepeat() {
         playerState.toggleRepeat();
+        onQueueTopologyChangedLocked();
         dispatchState();
     }
 
@@ -297,6 +313,7 @@ public final class PlaybackController {
             return;
         }
         Song song = queue.get(currentIndex);
+        resetWarmupStateForCurrentSongLocked(resolveSourceId(song));
         Log.d(TAG, "prepareCurrentSong id=" + song.getId()
                 + " title=" + song.getTitle()
                 + " url=" + song.getAudioUrl()
@@ -417,6 +434,7 @@ public final class PlaybackController {
                     recentPlaybackStore.recordPlayback(currentSong);
                     pendingRecentKey = "";
                 }
+                scheduleWarmupLocked();
                 break;
             case PAUSED:
                 playerState.setState(PlayerState.State.PAUSED);
@@ -530,6 +548,89 @@ public final class PlaybackController {
             }
             listener.onPlaybackStateChanged(snapshot);
         });
+    }
+
+    private void onQueueTopologyChangedLocked() {
+        lastWarmupPlanKey = "";
+        if (playerState.getState() == PlayerState.State.PLAYING) {
+            scheduleWarmupLocked();
+        }
+    }
+
+    private void resetWarmupStateForCurrentSongLocked(@NonNull String currentSourceId) {
+        if (!TextUtils.isEmpty(activeWarmupSourceId) && activeWarmupSourceId.equals(currentSourceId)) {
+            return;
+        }
+        lastWarmupPlanKey = "";
+        if (!TextUtils.isEmpty(activeWarmupSourceId) && !activeWarmupSourceId.equals(currentSourceId)) {
+            playbackWarmupEngine.cancelWarmup(activeWarmupSourceId);
+            activeWarmupSourceId = "";
+        }
+    }
+
+    private void scheduleWarmupLocked() {
+        List<PlaybackRequest> queueRequests = buildQueueRequestsLocked();
+        PlaybackWarmupRequest warmupRequest = playbackWarmupCoordinator.planWarmup(
+                queueRequests,
+                currentIndex,
+                resolveNextIndex());
+        if (warmupRequest == null) {
+            if (!TextUtils.isEmpty(activeWarmupSourceId)) {
+                playbackWarmupEngine.cancelWarmup(activeWarmupSourceId);
+                activeWarmupSourceId = "";
+            }
+            lastWarmupPlanKey = "";
+            return;
+        }
+
+        String warmupPlanKey = warmupRequest.getSourceId()
+                + "|" + warmupRequest.getOriginalUrl()
+                + "|" + warmupRequest.getTargetLevel();
+        if (warmupPlanKey.equals(lastWarmupPlanKey)) {
+            return;
+        }
+
+        if (!TextUtils.isEmpty(activeWarmupSourceId) && !activeWarmupSourceId.equals(warmupRequest.getSourceId())) {
+            playbackWarmupEngine.cancelWarmup(activeWarmupSourceId);
+        }
+
+        activeWarmupSourceId = warmupRequest.getSourceId();
+        lastWarmupPlanKey = warmupPlanKey;
+        long generation = ++warmupGeneration;
+        warmupExecutor.execute(() -> executeWarmup(warmupRequest, warmupPlanKey, generation));
+    }
+
+    private void executeWarmup(@NonNull PlaybackWarmupRequest warmupRequest,
+                               @NonNull String warmupPlanKey,
+                               long generation) {
+        PlaybackWarmupSnapshot snapshot = playbackWarmupEngine.warmup(warmupRequest);
+        synchronized (this) {
+            boolean stalePlan = generation != warmupGeneration
+                    || !warmupRequest.getSourceId().equals(activeWarmupSourceId)
+                    || !warmupPlanKey.equals(lastWarmupPlanKey);
+            if (stalePlan) {
+                playbackWarmupEngine.cancelWarmup(warmupRequest.getSourceId());
+                Log.d(TAG, "warmup stale sourceId=" + warmupRequest.getSourceId()
+                        + " completed=" + snapshot.getCompletedLevel());
+                return;
+            }
+            Log.d(TAG, "warmup tracked sourceId=" + warmupRequest.getSourceId()
+                    + " completed=" + snapshot.getCompletedLevel()
+                    + " totalLatencyMs=" + snapshot.getTotalLatencyMs());
+        }
+    }
+
+    @NonNull
+    private List<PlaybackRequest> buildQueueRequestsLocked() {
+        List<PlaybackRequest> requests = new ArrayList<>(queue.size());
+        for (Song queuedSong : queue) {
+            String source = resolvePlayableSource(queuedSong);
+            requests.add(new PlaybackRequest(
+                    resolveSourceId(queuedSong),
+                    source,
+                    queuedSong.isRadioStream()));
+        }
+        return requests;
     }
 
     @NonNull

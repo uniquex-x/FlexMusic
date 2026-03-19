@@ -41,6 +41,7 @@ public final class SeekablePlaybackProxyServer {
     private static final SeekablePlaybackProxyServer INSTANCE = new SeekablePlaybackProxyServer();
 
     private final ConcurrentMap<String, ProxySession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> preparedSessionTokensBySourceId = new ConcurrentHashMap<>();
     private final ExecutorService requestExecutor = Executors.newCachedThreadPool();
     private final ScheduledExecutorService cleanerExecutor = Executors.newSingleThreadScheduledExecutor();
 
@@ -70,9 +71,56 @@ public final class SeekablePlaybackProxyServer {
         return new ProxySessionHandle(token, localUrl);
     }
 
+    @NonNull
+    public synchronized ProxySessionHandle prepareSession(@NonNull String sourceId,
+                                                          @NonNull String remoteUrl,
+                                                          @NonNull String userAgent) throws IOException {
+        String existingToken = preparedSessionTokensBySourceId.get(sourceId);
+        if (existingToken != null) {
+            ProxySession existingSession = sessions.get(existingToken);
+            if (existingSession != null && existingSession.matches(remoteUrl, userAgent)) {
+                String localUrl = "http://127.0.0.1:" + port + "/stream/" + existingToken;
+                Log.d(TAG, "prepared session hit sourceId=" + sourceId
+                        + " remoteUrl=" + remoteUrl
+                        + " localUrl=" + localUrl);
+                return new ProxySessionHandle(existingToken, localUrl);
+            }
+            releasePreparedSession(sourceId);
+        }
+
+        ProxySessionHandle handle = openSession(sourceId, remoteUrl, userAgent);
+        preparedSessionTokensBySourceId.put(sourceId, handle.token);
+        Log.d(TAG, "prepared session ready sourceId=" + sourceId
+                + " remoteUrl=" + remoteUrl
+                + " localUrl=" + handle.localUrl);
+        return handle;
+    }
+
+    public void releasePreparedSession(@NonNull String sourceId) {
+        String token = preparedSessionTokensBySourceId.remove(sourceId);
+        if (token == null) {
+            return;
+        }
+        ProxySession session = sessions.remove(token);
+        if (session != null) {
+            session.close();
+            Log.d(TAG, "prepared session released sourceId=" + sourceId
+                    + " token=" + token);
+        }
+    }
+
+    public void promotePreparedSession(@NonNull String sourceId) {
+        String token = preparedSessionTokensBySourceId.remove(sourceId);
+        if (token != null) {
+            Log.d(TAG, "prepared session promoted sourceId=" + sourceId
+                    + " token=" + token);
+        }
+    }
+
     public void releaseSession(@NonNull String token) {
         ProxySession session = sessions.remove(token);
         if (session != null) {
+            preparedSessionTokensBySourceId.remove(session.sourceId, token);
             session.close();
         }
     }
@@ -173,6 +221,7 @@ public final class SeekablePlaybackProxyServer {
                 continue;
             }
             if (sessions.remove(entry.getKey(), session)) {
+                preparedSessionTokensBySourceId.remove(session.sourceId, entry.getKey());
                 session.close();
                 Log.d(TAG, "session expired sourceId=" + session.sourceId);
             }
@@ -205,10 +254,27 @@ public final class SeekablePlaybackProxyServer {
             return localUrl;
         }
 
+        @NonNull
+        public String getToken() {
+            return token;
+        }
+
+        public void primeHead(int targetBytes) throws IOException {
+            SeekablePlaybackProxyServer.getInstance().primeHead(token, targetBytes);
+        }
+
         @Override
         public void close() {
             SeekablePlaybackProxyServer.getInstance().releaseSession(token);
         }
+    }
+
+    private void primeHead(@NonNull String token, int targetBytes) throws IOException {
+        ProxySession session = sessions.get(token);
+        if (session == null) {
+            throw new IOException("Proxy session not found for token=" + token);
+        }
+        session.primeHead(targetBytes);
     }
 
     private static final class ProxySession {
@@ -232,6 +298,10 @@ public final class SeekablePlaybackProxyServer {
             this.remoteUrl = remoteUrl;
             this.userAgent = userAgent;
             this.resolvedUpstreamUrl = remoteUrl;
+        }
+
+        private boolean matches(@NonNull String candidateUrl, @NonNull String candidateUserAgent) {
+            return remoteUrl.equals(candidateUrl) && userAgent.equals(candidateUserAgent);
         }
 
         private void serve(@NonNull HttpRequest request,
@@ -282,8 +352,18 @@ public final class SeekablePlaybackProxyServer {
                     outputStream.write(headBytes, cachedStart, cachedEnd - cachedStart);
                     nextOffset = cachedEnd;
                 }
-                if (responseCode == HttpURLConnection.HTTP_OK && nextOffset > 0) {
-                    skipFully(upstreamStream, nextOffset);
+                long upstreamStartOffset = responseCode == HttpURLConnection.HTTP_OK
+                        ? 0L
+                        : responseStart;
+                long skipBytes = Math.max(0L, nextOffset - upstreamStartOffset);
+                if (skipBytes > 0) {
+                    skipFully(upstreamStream, skipBytes);
+                    Log.d(TAG, "head cache skip sourceId=" + sourceId
+                            + " token=" + token
+                            + " responseCode=" + responseCode
+                            + " skipBytes=" + skipBytes
+                            + " responseStart=" + responseStart
+                            + " nextOffset=" + nextOffset);
                 }
 
                 byte[] buffer = new byte[16 * 1024];
@@ -363,6 +443,59 @@ public final class SeekablePlaybackProxyServer {
 
         private long lastAccessAtMs() {
             return lastAccessAtMs;
+        }
+
+        private synchronized void primeHead(int targetBytes) throws IOException {
+            if (targetBytes <= 0) {
+                headBytes = new byte[0];
+                return;
+            }
+            int warmBytes = Math.min(targetBytes, 128 * 1024);
+            HttpURLConnection connection = null;
+            InputStream inputStream = null;
+            try {
+                connection = openConnection(resolvedUpstreamUrl, userAgent, 0L, (long) warmBytes - 1L);
+                int responseCode = connection.getResponseCode();
+                if (responseCode != HttpURLConnection.HTTP_OK
+                        && responseCode != HttpURLConnection.HTTP_PARTIAL) {
+                    throw new IOException("Unexpected warmup response " + responseCode + " for " + resolvedUpstreamUrl);
+                }
+                updateMetadataFromConnection(connection, responseCode);
+                inputStream = new BufferedInputStream(connection.getInputStream());
+                byte[] buffer = new byte[warmBytes];
+                int totalRead = 0;
+                while (totalRead < warmBytes) {
+                    int read = inputStream.read(buffer, totalRead, warmBytes - totalRead);
+                    if (read < 0) {
+                        break;
+                    }
+                    totalRead += read;
+                }
+                if (totalRead <= 0) {
+                    headBytes = new byte[0];
+                } else if (totalRead == buffer.length) {
+                    headBytes = buffer;
+                } else {
+                    byte[] partial = new byte[totalRead];
+                    System.arraycopy(buffer, 0, partial, 0, totalRead);
+                    headBytes = partial;
+                }
+                lastAccessAtMs = System.currentTimeMillis();
+                Log.d(TAG, "head cache primed sourceId=" + sourceId
+                        + " token=" + token
+                        + " bytes=" + headBytes.length
+                        + " url=" + resolvedUpstreamUrl);
+            } finally {
+                if (inputStream != null) {
+                    try {
+                        inputStream.close();
+                    } catch (IOException ignored) {
+                    }
+                }
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
         }
 
         private void close() {

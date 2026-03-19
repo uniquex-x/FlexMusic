@@ -104,7 +104,7 @@ public class PlaylistDetailFragment extends Fragment {
         ImageButton backButton = view.findViewById(R.id.btn_back);
         ImageButton moreButton = view.findViewById(R.id.btn_more);
         MaterialButton playAllButton = view.findViewById(R.id.btn_play_all);
-        backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        backButton.setOnClickListener(v -> navigateBack());
         moreButton.setOnClickListener(v -> showPlaylistOptions());
         playAllButton.setOnClickListener(v -> playAllSongs());
     }
@@ -112,7 +112,7 @@ public class PlaylistDetailFragment extends Fragment {
     private void loadPlaylist() {
         currentPlaylist = playlistStore.findPlaylistById(playlistId);
         if (currentPlaylist == null) {
-            requireActivity().getOnBackPressedDispatcher().onBackPressed();
+            navigateBack();
             return;
         }
         playlistNameView.setText(currentPlaylist.getName());
@@ -204,10 +204,18 @@ public class PlaylistDetailFragment extends Fragment {
                 .setMessage(R.string.dialog_delete_playlist_message)
                 .setPositiveButton(R.string.delete, (dialog, which) -> {
                     playlistStore.deletePlaylist(currentPlaylist.getId());
-                    requireActivity().getOnBackPressedDispatcher().onBackPressed();
+                    navigateBack();
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    private void navigateBack() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onBackPressed();
+            return;
+        }
+        requireActivity().finish();
     }
 
     private void showSongOptions(@NonNull Song song) {

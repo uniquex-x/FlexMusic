@@ -155,6 +155,48 @@
 - 调用 use case / resolver / kernel
 - 展示快照
 
+### 4.7 当前预热实现状态
+
+截至当前代码，预热能力已经按分层接入，但仍保留了后续继续演进的空间。
+
+1. `core_domain`
+- 已新增 `IPlaybackWarmupEngine`
+- 已新增 `PlaybackWarmupLevel`
+- 已新增 `PlaybackWarmupRequest`
+- 已新增 `PlaybackWarmupSnapshot`
+
+2. `core_data`
+- 已新增 `PlaybackWarmupCoordinator`
+- 当前负责基于业务队列决定：
+  - 是否需要预热
+  - 预热当前 host 还是下一首
+  - 预热到 `HOST / URL_METADATA / PLAYBACK_CANDIDATE` 哪一层
+
+3. `core_network`
+- `NetworkPlaybackSourceResolver` 当前同时承担：
+  - 冷路径 `resolve`
+  - 热路径 `warmup` 命中与回收
+- 已新增 `HostWarmupClient`
+  - 做 DNS / TCP / TLS 级轻量 host warmup
+- 已新增 `NetworkWarmupEngine`
+  - 按层执行 host、URL 元数据、代理 session、head cache 预热
+- `AudioStreamProbeApi` 当前会产出：
+  - `resolvedUrl`
+  - `contentType`
+  - `contentLength`
+  - `Accept-Ranges`
+- `SeekablePlaybackProxyServer` 当前已支持：
+  - `openSession()`
+  - `prepareSession()`
+  - `primeHead()`
+  - `releasePreparedSession()`
+  - `promotePreparedSession()`
+
+4. `app`
+- `PlaybackController` 当前在“当前曲目进入稳定 `PLAYING` 后”异步触发预热
+- 预热目标来自当前业务队列，不由网络层猜测
+- 队列变化、切歌、随机/循环模式变化时会取消过期预热
+
 ## 5. 预热到底预热什么
 
 这是本轮设计最需要说清楚的地方。
@@ -257,6 +299,35 @@
 - 代理 session 是否已存在
 - 首包是否已经在本地可读
 
+### 5.6 当前代码对应关系
+
+当前实现里，这五层已经和代码一一对应：
+
+1. Host 级预热
+- `HostWarmupClient`
+
+2. URL 元数据预热
+- `AudioStreamProbeApi`
+- 输出最终 URL、`content-type`、`content-length`、`Accept-Ranges`
+
+3. 代理 Session 预热
+- `SeekablePlaybackProxyServer.prepareSession()`
+
+4. 首包 / Head Cache 预热
+- `SeekablePlaybackProxyServer.primeHead()`
+- 当前默认 head cache 大小为 `64KB`
+
+5. 播放候选级预热
+- `PlaybackWarmupCoordinator` 选出当前业务队列中的下一首
+- `NetworkWarmupEngine` 执行完整 warm path
+- `NetworkPlaybackSourceResolver.resolve()` 在真正切歌时命中 warmup 产物
+
+补充一个关键实现细节：
+
+- prepared session 命中后，代理层必须把已缓存的 head bytes 与上游真实响应做严格字节对齐
+- 不能把 head cache 和 `206` 上游返回内容重复拼接
+- 当前代理已增加 `head cache skip` 对齐逻辑，避免 FFmpeg 读到错位数据
+
 ## 6. 预热的基本原则
 
 ### 6.1 冷路径和热路径必须分离
@@ -309,7 +380,7 @@ warm path 必须满足：
 
 1. 当前曲目进入稳定 `PLAYING` 后
 2. 由 `PlaybackWarmupCoordinator` 读取业务队列中的下一首
-3. 解析下一首 `TrackPlaybackCandidate`
+3. 产出下一首 `PlaybackWarmupRequest`
 4. 创建代理 session
 5. 如适合，再做小块 head cache
 
@@ -373,10 +444,15 @@ warm path 必须满足：
 
 ### 9.1 `core_domain`
 
-- `IPlaybackWarmupPlanner`
+- `IPlaybackWarmupEngine`
 - `PlaybackWarmupRequest`
 - `PlaybackWarmupSnapshot`
-- `PreparedPlaybackCandidate`
+
+当前说明：
+
+- 本轮已落地 `IPlaybackWarmupEngine`
+- `PreparedPlaybackCandidate` 还没有单独抽象成独立领域对象
+- 热路径命中产物当前由 `NetworkPlaybackSourceResolver` 内部缓存管理
 
 ### 9.2 `core_data`
 
@@ -408,6 +484,9 @@ warm path 必须满足：
 4. `releasePreparedSession()`
 - 在队列变化、切歌、超时后释放
 
+5. `promotePreparedSession()`
+- 在真正切歌命中 warm path 后，把 prepared session 提升成当前播放会话
+
 ## 10. 连接复用的实现注意点
 
 如果后续要把 warm start 稳定压低，网络实现上有一个关键现实：
@@ -420,6 +499,12 @@ warm path 必须满足：
 - `core_network` 最终应收敛为单一可复用的 HTTP 栈
 
 当前基于 `HttpURLConnection` 的实现能工作，但对显式连接池治理、预连接控制和精细埋点并不理想。后续若继续强化 warm path，建议统一到可控的复用型 client。
+
+当前实现说明：
+
+- host warmup 目前使用 `Socket / SSLSocket`
+- URL 元数据和代理上游请求目前仍基于 `HttpURLConnection`
+- 因此当前“host 预热收益”受多 client 现实约束，不能等价视为稳定连接池复用
 
 ## 11. Seekable 代理的职责边界
 
@@ -471,7 +556,11 @@ warm path 必须满足：
 - `warmup start`
 - `warmup hit/miss`
 - `session open`
+- `prepared session ready`
+- `prepared session promoted`
 - `upstream ready`
+- `head cache primed`
+- `head cache skip`
 - `serve`
 - `client disconnected`
 - `prepared session released`
@@ -488,7 +577,7 @@ warm path 必须满足：
 如果目标是把 warm start 压到 `<1s`，下一步优先做：
 
 1. 共享连接池和 host 级连接复用
-2. 已知队列的下一首显式预热
+2. 让 warmup 覆盖搜索“播放全部”等更多已知队列场景
 3. 小块 ring buffer / head cache
 4. 预热指标回流到 source 排序策略
 
@@ -498,6 +587,12 @@ warm path 必须满足：
 2. seek 后重复 Range 的合并
 3. 预热资源的 TTL、取消和释放机制
 4. 异常断连和正常切歌的日志降噪
+
+当前已完成：
+
+1. 已知队列的下一首显式预热
+2. prepared session 的命中、提升和释放
+3. head cache 的预取与回放字节对齐修正
 
 ## 15. 构建说明
 

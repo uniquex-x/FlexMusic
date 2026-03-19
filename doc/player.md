@@ -206,6 +206,33 @@
 - warm path 是“加速器”
 - 不是“进入播放器的前置门槛”
 
+### 7.5 当前已实现的 warm path 接入
+
+当前播放器侧已经按这个边界接上了 warm path：
+
+1. `PlaybackController`
+- 当前曲目进入 `PLAYING` 后，异步向 `PlaybackWarmupCoordinator` 请求下一首预热计划
+
+2. `NetworkPlaybackSourceResolver`
+- 真正切歌时优先命中 warmup 产物
+- 命中后直接把 prepared localhost URL 交给 `NativeBackedPlayerKernel`
+- 未命中则立即回退 cold path
+
+3. `SeekablePlaybackProxyServer`
+- prepared session 命中后会执行 `promotePreparedSession()`
+- 这样 prepared session 不会再被当作“待取消的预热资源”回收
+
+4. 代理回放约束
+- 如果命中了 head cache，代理必须先输出缓存头部
+- 同时必须在上游输入流里跳过相同字节区间
+- 否则会把同一段 MP3 字节重复拼接给 FFmpeg，导致 demux / decode 失败
+
+因此当前播放器与 warm path 的真实关系是：
+
+- 播放器只消费 localhost / fd / URL 形式的 `ResolvedPlayableSource`
+- 预热是否存在、预热到了哪一层、prepared session 是否可复用，都由 Java / Data / Network 层处理
+- native 内核不需要知道“这是冷启动”还是“这是 warm hit”
+
 ### 7.4 为什么要这样设计
 
 这和 `ijkplayer/ffplay` 的思路一致：

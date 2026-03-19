@@ -74,6 +74,8 @@ public class AudioStreamProbeApi {
             return new AudioStreamProbeResult(
                     resolvedUrl,
                     contentType == null ? "" : contentType,
+                    resolveContentLength(connection, code),
+                    supportsRanges(connection),
                     SystemClock.elapsedRealtime() - startAt);
         } finally {
             if (inputStream != null) {
@@ -91,6 +93,29 @@ public class AudioStreamProbeApi {
             return (code >= 200 && code < 300) || code == HttpURLConnection.HTTP_PARTIAL;
         }
         return code >= 200 && code < 300;
+    }
+
+    private long resolveContentLength(@NonNull HttpURLConnection connection, int responseCode) {
+        String contentRange = connection.getHeaderField("Content-Range");
+        if (contentRange != null) {
+            int slashIndex = contentRange.lastIndexOf('/');
+            if (slashIndex >= 0 && slashIndex + 1 < contentRange.length()) {
+                try {
+                    return Long.parseLong(contentRange.substring(slashIndex + 1));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        long contentLength = connection.getContentLengthLong();
+        if (contentLength > 0 && responseCode == HttpURLConnection.HTTP_OK) {
+            return contentLength;
+        }
+        return contentLength > 0 ? contentLength : -1L;
+    }
+
+    private boolean supportsRanges(@NonNull HttpURLConnection connection) {
+        String acceptRanges = connection.getHeaderField("Accept-Ranges");
+        return acceptRanges != null && acceptRanges.toLowerCase().contains("bytes");
     }
 
     static boolean isNetworkUri(@NonNull String url) {

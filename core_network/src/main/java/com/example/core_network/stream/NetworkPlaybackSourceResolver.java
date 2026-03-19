@@ -1,33 +1,40 @@
 package com.example.core_network.stream;
 
-import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.example.core_domain.player.IPlaybackWarmupEngine;
 import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.player.PlaybackSourceResolver;
+import com.example.core_domain.player.PlaybackWarmupRequest;
+import com.example.core_domain.player.PlaybackWarmupSnapshot;
 import com.example.core_domain.player.ResolvedPlayableSource;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 
-public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
+public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IPlaybackWarmupEngine {
 
     private static final String TAG = "PlaybackSourceResolver";
     private static final long CACHE_TTL_MS = 2 * 60 * 1000L;
 
-    private final AudioStreamProbeApi audioStreamProbeApi;
+    private final NetworkWarmupEngine networkWarmupEngine;
     private final Map<String, CachedResolvedSource> resolvedSourceCache = new LinkedHashMap<>();
 
     public NetworkPlaybackSourceResolver() {
-        this(new AudioStreamProbeApi());
+        this(new AudioStreamProbeApi(), new HostWarmupClient());
     }
 
     public NetworkPlaybackSourceResolver(@NonNull AudioStreamProbeApi audioStreamProbeApi) {
-        this.audioStreamProbeApi = audioStreamProbeApi;
+        this(audioStreamProbeApi, new HostWarmupClient());
+    }
+
+    NetworkPlaybackSourceResolver(@NonNull AudioStreamProbeApi audioStreamProbeApi,
+                                  @NonNull HostWarmupClient hostWarmupClient) {
+        this.networkWarmupEngine = new NetworkWarmupEngine(hostWarmupClient, audioStreamProbeApi);
     }
 
     @NonNull
@@ -51,11 +58,30 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
                     0L);
         }
 
+        CachedResolvedSource cachedResolvedSource = getCachedEntry(request.getSourceId(), originalUrl);
+        if (cachedResolvedSource != null) {
+            if (cachedResolvedSource.warmupSnapshot != null) {
+                SeekablePlaybackProxyServer.getInstance().promotePreparedSession(request.getSourceId());
+                cacheResolvedSource(
+                        request.getSourceId(),
+                        originalUrl,
+                        cachedResolvedSource.resolvedSource,
+                        null);
+                Log.d(TAG, "warmup hit sourceId=" + request.getSourceId()
+                        + " level=" + cachedResolvedSource.warmupSnapshot.snapshot.getCompletedLevel()
+                        + " resolvedUrl=" + cachedResolvedSource.resolvedSource.getResolvedUrl());
+            } else {
+                Log.d(TAG, "resolved cache hit sourceId=" + request.getSourceId()
+                        + " resolvedUrl=" + cachedResolvedSource.resolvedSource.getResolvedUrl());
+            }
+            return cachedResolvedSource.resolvedSource;
+        }
+
         Log.d(TAG, "skip cold-start probe sourceId=" + request.getSourceId()
                 + " url=" + originalUrl
                 + " live=" + request.isLiveStream());
         String playbackUrl = originalUrl;
-        if (shouldUseSeekableProxy(request, originalUrl)) {
+        if (NetworkStreamWarmupPolicy.shouldUseSeekableProxy(request, originalUrl)) {
             try {
                 SeekablePlaybackProxyServer.ProxySessionHandle proxySessionHandle =
                         SeekablePlaybackProxyServer.getInstance().openSession(
@@ -71,7 +97,7 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
                         + " url=" + originalUrl, ioException);
             }
         }
-        return new ResolvedPlayableSource(
+        ResolvedPlayableSource resolvedSource = new ResolvedPlayableSource(
                 request.getSourceId(),
                 originalUrl,
                 playbackUrl,
@@ -81,67 +107,129 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
                 false,
                 !request.isLiveStream(),
                 0L);
+        cacheResolvedSource(request.getSourceId(), originalUrl, resolvedSource, null);
+        Log.d(TAG, "warmup miss sourceId=" + request.getSourceId()
+                + " fallback=cold_path"
+                + " resolvedUrl=" + playbackUrl);
+        return resolvedSource;
     }
 
-    private boolean shouldUseSeekableProxy(@NonNull PlaybackRequest request, @NonNull String originalUrl) {
-        if (request.isLiveStream()) {
-            return false;
+    @NonNull
+    @Override
+    public PlaybackWarmupSnapshot warmup(@NonNull PlaybackWarmupRequest request) {
+        CachedResolvedSource cachedSource = getCachedEntry(request.getSourceId(), request.getOriginalUrl());
+        if (cachedSource != null
+                && cachedSource.warmupSnapshot != null
+                && cachedSource.warmupSnapshot.snapshot.getCompletedLevel().ordinal() >= request.getTargetLevel().ordinal()) {
+            Log.d(TAG, "warmup hit sourceId=" + request.getSourceId()
+                    + " level=" + cachedSource.warmupSnapshot.snapshot.getCompletedLevel());
+            return cachedSource.warmupSnapshot.snapshot;
         }
-        String normalizedUrl = originalUrl.toLowerCase(Locale.ROOT);
-        return !(normalizedUrl.contains(".m3u8")
-                || normalizedUrl.contains(".m3u")
-                || normalizedUrl.contains(".pls")
-                || normalizedUrl.contains(".xspf")
-                || normalizedUrl.contains("/live")
-                || normalizedUrl.contains("playlist"));
+
+        NetworkWarmupEngine.PreparedWarmupResult warmupResult = networkWarmupEngine.warmup(request);
+        cacheResolvedSource(
+                request.getSourceId(),
+                request.getOriginalUrl(),
+                warmupResult.getResolvedSource(),
+                new CachedWarmupSnapshot(warmupResult.getSnapshot(), warmupResult.getProxySessionHandle()));
+        Log.d(TAG, "warmup ready sourceId=" + request.getSourceId()
+                + " requested=" + request.getTargetLevel()
+                + " completed=" + warmupResult.getSnapshot().getCompletedLevel()
+                + " probeLatencyMs=" + warmupResult.getSnapshot().getProbeLatencyMs()
+                + " totalLatencyMs=" + warmupResult.getSnapshot().getTotalLatencyMs());
+        return warmupResult.getSnapshot();
     }
 
-    private boolean resolveLiveStreamFlag(@NonNull PlaybackRequest request,
-                                          @NonNull AudioStreamProbeResult result) {
-        if (request.isLiveStream()) {
-            return true;
+    @Override
+    public void cancelWarmup(@NonNull String sourceId) {
+        CachedResolvedSource cachedResolvedSource;
+        synchronized (this) {
+            cachedResolvedSource = resolvedSourceCache.remove(sourceId);
         }
-        String contentType = result.getContentType().toLowerCase(Locale.ROOT);
-        String resolvedUrl = result.getResolvedUrl().toLowerCase(Locale.ROOT);
-        if (contentType.contains("mpegurl")
-                || contentType.contains("vnd.apple.mpegurl")
-                || contentType.contains("audio/aacp")
-                || contentType.contains("application/vnd.apple.mpegurl")) {
-            return true;
+        if (cachedResolvedSource != null && cachedResolvedSource.warmupSnapshot != null) {
+            SeekablePlaybackProxyServer.ProxySessionHandle handle = cachedResolvedSource.warmupSnapshot.proxySessionHandle;
+            if (handle != null) {
+                SeekablePlaybackProxyServer.getInstance().releasePreparedSession(sourceId);
+                Log.d(TAG, "prepared session released sourceId=" + sourceId);
+            } else {
+                Log.d(TAG, "warmup cache released sourceId=" + sourceId
+                        + " level=" + cachedResolvedSource.warmupSnapshot.snapshot.getCompletedLevel());
+            }
         }
-        return !TextUtils.isEmpty(resolvedUrl)
-                && (resolvedUrl.contains(".m3u8")
-                || resolvedUrl.contains("/live")
-                || resolvedUrl.contains("stream"));
     }
 
-    private synchronized void cacheResolvedSource(@NonNull String originalUrl,
-                                                  @NonNull ResolvedPlayableSource resolvedSource) {
-        resolvedSourceCache.put(originalUrl, new CachedResolvedSource(
+    @Override
+    public synchronized void cancelAllWarmups() {
+        for (String sourceId : new LinkedHashMap<>(resolvedSourceCache).keySet()) {
+            cancelWarmup(sourceId);
+        }
+    }
+
+    private synchronized void cacheResolvedSource(@NonNull String sourceId,
+                                                  @NonNull String originalUrl,
+                                                  @NonNull ResolvedPlayableSource resolvedSource,
+                                                  @Nullable CachedWarmupSnapshot warmupSnapshot) {
+        resolvedSourceCache.put(sourceId, new CachedResolvedSource(
                 resolvedSource,
+                originalUrl,
+                warmupSnapshot,
                 System.currentTimeMillis() + CACHE_TTL_MS));
     }
 
-    private synchronized ResolvedPlayableSource getCachedSource(@NonNull String originalUrl) {
-        CachedResolvedSource cached = resolvedSourceCache.get(originalUrl);
+    @Nullable
+    private synchronized CachedResolvedSource getCachedEntry(@NonNull String sourceId,
+                                                             @NonNull String originalUrl) {
+        CachedResolvedSource cached = resolvedSourceCache.get(sourceId);
         if (cached == null) {
             return null;
         }
-        if (cached.expiresAtMs < System.currentTimeMillis()) {
-            resolvedSourceCache.remove(originalUrl);
+        if (!cached.originalUrl.equals(originalUrl)) {
+            releasePreparedHandleLocked(sourceId, cached);
+            resolvedSourceCache.remove(sourceId);
             return null;
         }
-        return cached.resolvedSource;
+        if (cached.expiresAtMs < System.currentTimeMillis()) {
+            releasePreparedHandleLocked(sourceId, cached);
+            resolvedSourceCache.remove(sourceId);
+            return null;
+        }
+        return cached;
+    }
+
+    private void releasePreparedHandleLocked(@NonNull String sourceId,
+                                             @NonNull CachedResolvedSource cachedResolvedSource) {
+        if (cachedResolvedSource.warmupSnapshot == null
+                || cachedResolvedSource.warmupSnapshot.proxySessionHandle == null) {
+            return;
+        }
+        SeekablePlaybackProxyServer.getInstance().releasePreparedSession(sourceId);
     }
 
     private static final class CachedResolvedSource {
         private final ResolvedPlayableSource resolvedSource;
+        private final String originalUrl;
+        private final CachedWarmupSnapshot warmupSnapshot;
         private final long expiresAtMs;
 
         private CachedResolvedSource(@NonNull ResolvedPlayableSource resolvedSource,
+                                     @NonNull String originalUrl,
+                                     @Nullable CachedWarmupSnapshot warmupSnapshot,
                                      long expiresAtMs) {
             this.resolvedSource = resolvedSource;
+            this.originalUrl = originalUrl;
+            this.warmupSnapshot = warmupSnapshot;
             this.expiresAtMs = expiresAtMs;
+        }
+    }
+
+    private static final class CachedWarmupSnapshot {
+        private final PlaybackWarmupSnapshot snapshot;
+        private final SeekablePlaybackProxyServer.ProxySessionHandle proxySessionHandle;
+
+        private CachedWarmupSnapshot(@NonNull PlaybackWarmupSnapshot snapshot,
+                                     @Nullable SeekablePlaybackProxyServer.ProxySessionHandle proxySessionHandle) {
+            this.snapshot = snapshot;
+            this.proxySessionHandle = proxySessionHandle;
         }
     }
 }
