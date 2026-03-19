@@ -27,6 +27,11 @@ public final class GetSearchSuggestionsUseCase {
         return suggestionRepository.getHistory();
     }
 
+    @NonNull
+    public List<String> getHotSearches() throws IOException {
+        return suggestionRepository.getHotSearches();
+    }
+
     public void clearHistory() {
         suggestionRepository.clearHistory();
     }

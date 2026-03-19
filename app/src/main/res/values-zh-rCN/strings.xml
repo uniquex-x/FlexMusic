@@ -146,6 +146,9 @@
     <string name="player_queue">播放队列</string>
     <string name="player_add_to_queue">添加到队列</string>
     <string name="player_lyrics">歌词</string>
+    <string name="player_no_lyrics">暂未找到这首歌的同步歌词</string>
+    <string name="player_loading_lyrics">正在加载歌词…</string>
+    <string name="player_buffering_after_seek">正在缓存中，请稍后</string>
 
     <!-- Common -->
     <string name="search">搜索</string>

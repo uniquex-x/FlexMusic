@@ -167,6 +167,8 @@
     <string name="player_save_placeholder">Save action is reserved for download / playlist logic.</string>
     <string name="player_playback_error">Unable to play this source right now.</string>
     <string name="player_no_lyrics">No synced lyrics available for this song.</string>
+    <string name="player_loading_lyrics">Loading lyrics…</string>
+    <string name="player_buffering_after_seek">Buffering, please wait.</string>
     <string name="player_unknown_artist">Unknown Artist</string>
     <string name="player_unknown_album">Unknown Album</string>
     <string name="player_demo_line_one">Waiting in a car</string>

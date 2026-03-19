@@ -3,8 +3,10 @@
     android:id="@+id/lyric_text"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:gravity="center"
     android:paddingTop="14dp"
     android:paddingBottom="14dp"
+    android:textAlignment="center"
     android:textColor="#C4CAD6"
     android:textSize="20sp"
     android:textStyle="bold" />

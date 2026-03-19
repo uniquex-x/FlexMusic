@@ -2,7 +2,10 @@ package com.example.flexmusicplayer;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.widget.SeekBar;
@@ -17,19 +20,28 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.core_data.lyrics.OnlineLyricsRepository;
+import com.example.core_domain.lyrics.ILyricsRepository;
+import com.example.core_domain.lyrics.LyricsLineData;
+import com.example.core_domain.lyrics.LyricsQuery;
+import com.example.core_domain.lyrics.LyricsResult;
 import com.example.flexmusicplayer.databinding.ActivityPlayerBinding;
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.player.LyricsLine;
-import com.example.flexmusicplayer.player.LyricsRepository;
 import com.example.flexmusicplayer.player.PlaybackController;
 import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class PlayerActivity extends AppCompatActivity implements PlaybackController.Listener {
+
+    private static final String TAG = "PlayerActivity";
 
     public static Intent createIntent(@NonNull android.content.Context context) {
         return new Intent(context, PlayerActivity.class);
@@ -38,10 +50,16 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     private ActivityPlayerBinding binding;
     private PlaybackController playbackController;
     private LyricsAdapter lyricsAdapter;
+    private ExecutorService lyricsExecutorService;
+    private Handler mainHandler;
+    private ILyricsRepository lyricsRepository;
     private boolean showingLyrics = false;
     private boolean userSeeking = false;
+    private boolean playRequested = false;
+    private boolean showSeekBufferingMessage = false;
     private final List<LyricsLine> currentLyrics = new ArrayList<>();
-    private long currentLyricsSongId = Long.MIN_VALUE;
+    private String currentLyricsSongKey = "";
+    private long lyricsRequestGeneration = 0L;
     private int currentActiveLyricIndex = RecyclerView.NO_POSITION;
     private String currentFavoriteSongKey = "";
     private FavoriteSongsStore favoriteSongsStore;
@@ -56,13 +74,19 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         playbackController = PlaybackController.getInstance(this);
         favoriteSongsStore = new FavoriteSongsStore(this);
         favoriteRadioStore = new FavoriteRadioStore(this);
+        mainHandler = new Handler(Looper.getMainLooper());
+        lyricsExecutorService = Executors.newSingleThreadExecutor();
+        lyricsRepository = new OnlineLyricsRepository();
         lyricsAdapter = new LyricsAdapter(this::showNowPlayingScreen);
+        playRequested = playbackController.getPlayerState().isPlaying()
+                || playbackController.getPlayerState().isLoading();
 
         binding.lyricsRecycler.setLayoutManager(new LinearLayoutManager(this));
         binding.lyricsRecycler.setAdapter(lyricsAdapter);
         if (binding.lyricsRecycler.getItemAnimator() instanceof DefaultItemAnimator) {
             ((DefaultItemAnimator) binding.lyricsRecycler.getItemAnimator()).setSupportsChangeAnimations(false);
         }
+        binding.lyricsRecycler.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> updateLyricsRecyclerInsets());
 
         binding.btnCollapseNowPlaying.setOnClickListener(v -> finish());
         binding.btnCollapseLyrics.setOnClickListener(v -> showNowPlayingScreen());
@@ -79,7 +103,15 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
 
         binding.btnShuffle.setOnClickListener(v -> playbackController.toggleShuffle());
         binding.btnPreviousLarge.setOnClickListener(v -> playbackController.skipPrevious());
-        binding.btnPlayPauseLarge.setOnClickListener(v -> playbackController.togglePlayPause());
+        binding.btnPlayPauseLarge.setOnClickListener(v -> {
+            PlayerState state = playbackController.getPlayerState();
+            boolean shouldPause = state.isPlaying() || (state.isLoading() && playRequested);
+            playRequested = !shouldPause;
+            showSeekBufferingMessage = false;
+            playbackController.togglePlayPause();
+            updatePlayPauseButton(state);
+            updateBufferStatus(state);
+        });
         binding.btnNextLarge.setOnClickListener(v -> playbackController.skipNext());
         binding.btnSecondaryAction.setOnClickListener(v -> {
             if (showingLyrics) {
@@ -107,7 +139,9 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 userSeeking = false;
                 PlayerState state = playbackController.getPlayerState();
                 int target = (int) ((seekBar.getProgress() / 1000f) * Math.max(state.getDuration(), 1));
+                showSeekBufferingMessage = state.isPlaying() || (state.isLoading() && playRequested);
                 playbackController.seekTo(target);
+                updateBufferStatus(playbackController.getPlayerState());
             }
         });
 
@@ -133,6 +167,19 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     }
 
     @Override
+    protected void onDestroy() {
+        if (playbackController != null) {
+            playbackController.removeListener(this);
+        }
+        if (lyricsExecutorService != null) {
+            lyricsExecutorService.shutdownNow();
+            lyricsExecutorService = null;
+        }
+        binding = null;
+        super.onDestroy();
+    }
+
+    @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putBoolean("showing_lyrics", showingLyrics);
@@ -140,6 +187,9 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
 
     @Override
     public void onPlaybackStateChanged(@NonNull PlayerState state) {
+        if (binding == null || isFinishing() || isDestroyed()) {
+            return;
+        }
         Song currentSong = state.getCurrentSong();
         if (currentSong == null) {
             return;
@@ -171,8 +221,16 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
             binding.playerSeekBar.setProgress(progress);
         }
 
-        binding.btnPlayPauseLarge.setImageResource(state.isPlaying() ? R.drawable.ic_pause : R.drawable.ic_play);
-        binding.btnPlayPauseLarge.setContentDescription(getString(state.isPlaying() ? R.string.player_pause : R.string.player_play));
+        if (state.isPlaying()) {
+            playRequested = true;
+            showSeekBufferingMessage = false;
+        } else if (state.isPaused() || state.isStopped() || state.getState() == PlayerState.State.ERROR) {
+            playRequested = false;
+            showSeekBufferingMessage = false;
+        }
+
+        updatePlayPauseButton(state);
+        updateBufferStatus(state);
         binding.btnPreviousLarge.setAlpha(playbackController.hasPrevious() ? 1f : 0.45f);
         binding.btnNextLarge.setAlpha(playbackController.hasNext() ? 1f : 0.45f);
         binding.iconLike.setImageTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(
@@ -216,18 +274,16 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     private void updateLyrics(@NonNull PlayerState state) {
         Song currentSong = state.getCurrentSong();
         if (currentSong == null || currentSong.isRadioStream()) {
-            currentLyricsSongId = Long.MIN_VALUE;
+            currentLyricsSongKey = "";
             currentLyrics.clear();
             lyricsAdapter.submitLyrics(currentLyrics);
             currentActiveLyricIndex = RecyclerView.NO_POSITION;
             return;
         }
-        if (currentSong.getId() != currentLyricsSongId) {
-            currentLyricsSongId = currentSong.getId();
-            currentLyrics.clear();
-            currentLyrics.addAll(LyricsRepository.getLyrics(this, currentSong));
-            lyricsAdapter.submitLyrics(currentLyrics);
-            currentActiveLyricIndex = RecyclerView.NO_POSITION;
+        String lyricsSongKey = buildSongKey(currentSong);
+        if (!lyricsSongKey.equals(currentLyricsSongKey)) {
+            currentLyricsSongKey = lyricsSongKey;
+            requestLyrics(currentSong, lyricsSongKey);
         }
 
         int activeIndex = resolveActiveLyricIndex(currentLyrics, state.getCurrentPosition());
@@ -242,6 +298,9 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     }
 
     private int resolveActiveLyricIndex(List<LyricsLine> lyrics, int currentPosition) {
+        if (lyrics.isEmpty()) {
+            return RecyclerView.NO_POSITION;
+        }
         int activeIndex = -1;
         for (int i = 0; i < lyrics.size(); i++) {
             if (currentPosition >= lyrics.get(i).getTimestampMs()) {
@@ -324,17 +383,143 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         binding.headerLyrics.setVisibility(showingLyrics ? android.view.View.VISIBLE : android.view.View.GONE);
         binding.lyricsContent.setVisibility(showingLyrics ? android.view.View.VISIBLE : android.view.View.GONE);
         updateControlChrome(state);
+        if (showingLyrics && currentActiveLyricIndex != RecyclerView.NO_POSITION) {
+            scrollActiveLyricIntoView(currentActiveLyricIndex);
+        }
     }
 
     private void scrollActiveLyricIntoView(int activeIndex) {
-        binding.lyricsRecycler.post(() -> {
-            RecyclerView.LayoutManager layoutManager = binding.lyricsRecycler.getLayoutManager();
+        ActivityPlayerBinding currentBinding = binding;
+        if (currentBinding == null) {
+            return;
+        }
+        RecyclerView lyricsRecycler = currentBinding.lyricsRecycler;
+        lyricsRecycler.post(() -> {
+            RecyclerView.LayoutManager layoutManager = lyricsRecycler.getLayoutManager();
             if (layoutManager instanceof LinearLayoutManager) {
+                RecyclerView.ViewHolder viewHolder = lyricsRecycler.findViewHolderForAdapterPosition(activeIndex);
+                int itemHeight = viewHolder == null ? dpToPx(56) : viewHolder.itemView.getHeight();
                 ((LinearLayoutManager) layoutManager).scrollToPositionWithOffset(
                         activeIndex,
-                        Math.max(binding.lyricsRecycler.getHeight() / 3, 0));
+                        Math.max((lyricsRecycler.getHeight() - itemHeight) / 2, 0));
             }
         });
+    }
+
+    private void requestLyrics(@NonNull Song song, @NonNull String lyricsSongKey) {
+        currentLyrics.clear();
+        currentLyrics.add(new LyricsLine(0L, getString(R.string.player_loading_lyrics)));
+        lyricsAdapter.submitLyrics(currentLyrics);
+        currentActiveLyricIndex = 0;
+        if (showingLyrics) {
+            scrollActiveLyricIntoView(0);
+        }
+        if (lyricsExecutorService == null) {
+            return;
+        }
+        long requestGeneration = ++lyricsRequestGeneration;
+        LyricsQuery query = new LyricsQuery(
+                TextUtils.isEmpty(song.getSourceId()) ? lyricsSongKey : song.getSourceId(),
+                song.getTitle() == null ? "" : song.getTitle(),
+                song.getArtist() == null ? "" : song.getArtist(),
+                song.getAlbum() == null ? "" : song.getAlbum(),
+                song.getDuration());
+        lyricsExecutorService.execute(() -> {
+            try {
+                LyricsResult lyricsResult = lyricsRepository.loadLyrics(query);
+                List<LyricsLine> lyricsLines = mapLyricsLines(lyricsResult, song);
+                mainHandler.post(() -> applyLyricsResult(requestGeneration, lyricsSongKey, lyricsLines));
+            } catch (IOException ioException) {
+                Log.e(TAG, "requestLyrics failed sourceId=" + query.getSourceId()
+                        + " title=" + query.getTitle(), ioException);
+                List<LyricsLine> fallbackLines = createFallbackLyrics(song);
+                mainHandler.post(() -> applyLyricsResult(requestGeneration, lyricsSongKey, fallbackLines));
+            }
+        });
+    }
+
+    private void applyLyricsResult(long requestGeneration,
+                                   @NonNull String lyricsSongKey,
+                                   @NonNull List<LyricsLine> lyricsLines) {
+        if (binding == null || requestGeneration != lyricsRequestGeneration) {
+            return;
+        }
+        if (!lyricsSongKey.equals(currentLyricsSongKey)) {
+            return;
+        }
+        currentLyrics.clear();
+        currentLyrics.addAll(lyricsLines);
+        lyricsAdapter.submitLyrics(currentLyrics);
+        currentActiveLyricIndex = RecyclerView.NO_POSITION;
+        PlayerState state = playbackController.getPlayerState();
+        int activeIndex = resolveActiveLyricIndex(currentLyrics, state.getCurrentPosition());
+        currentActiveLyricIndex = activeIndex;
+        lyricsAdapter.updateActiveIndex(RecyclerView.NO_POSITION, activeIndex);
+        if (showingLyrics && activeIndex != RecyclerView.NO_POSITION) {
+            scrollActiveLyricIntoView(activeIndex);
+        }
+    }
+
+    @NonNull
+    private List<LyricsLine> mapLyricsLines(@NonNull LyricsResult lyricsResult, @NonNull Song song) {
+        List<LyricsLine> lines = new ArrayList<>();
+        for (LyricsLineData lineData : lyricsResult.getLines()) {
+            String text = lineData.getText() == null ? "" : lineData.getText().trim();
+            if (text.isEmpty()) {
+                continue;
+            }
+            lines.add(new LyricsLine(lineData.getTimestampMs(), text));
+        }
+        if (lines.isEmpty()) {
+            return createFallbackLyrics(song);
+        }
+        return lines;
+    }
+
+    @NonNull
+    private List<LyricsLine> createFallbackLyrics(@NonNull Song song) {
+        List<LyricsLine> lines = new ArrayList<>();
+        String title = TextUtils.isEmpty(song.getTitle()) ? getString(R.string.player_title) : song.getTitle();
+        String artist = TextUtils.isEmpty(song.getArtist()) ? getString(R.string.player_unknown_artist) : song.getArtist();
+        lines.add(new LyricsLine(0L, title));
+        lines.add(new LyricsLine(8_000L, artist));
+        lines.add(new LyricsLine(16_000L, getString(R.string.player_no_lyrics)));
+        return lines;
+    }
+
+    private void updatePlayPauseButton(@NonNull PlayerState state) {
+        boolean showPause = playRequested
+                && state.getCurrentSong() != null
+                && state.getState() != PlayerState.State.ERROR;
+        binding.btnPlayPauseLarge.setImageResource(showPause ? R.drawable.ic_pause : R.drawable.ic_play);
+        binding.btnPlayPauseLarge.setContentDescription(getString(showPause ? R.string.player_pause : R.string.player_play));
+    }
+
+    private void updateBufferStatus(@NonNull PlayerState state) {
+        boolean showBuffer = state.isLoading() && showSeekBufferingMessage;
+        binding.playerBufferStatus.setVisibility(showBuffer ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (showBuffer) {
+            binding.playerBufferStatus.setText(R.string.player_buffering_after_seek);
+        }
+    }
+
+    private void updateLyricsRecyclerInsets() {
+        ActivityPlayerBinding currentBinding = binding;
+        if (currentBinding == null) {
+            return;
+        }
+        RecyclerView lyricsRecycler = currentBinding.lyricsRecycler;
+        int horizontalPadding = lyricsRecycler.getPaddingLeft();
+        int verticalInset = Math.max((lyricsRecycler.getHeight() / 2) - dpToPx(28), dpToPx(24));
+        if (lyricsRecycler.getPaddingTop() == verticalInset
+                && lyricsRecycler.getPaddingBottom() == verticalInset) {
+            return;
+        }
+        lyricsRecycler.setPadding(horizontalPadding, verticalInset, horizontalPadding, verticalInset);
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
     }
 
     private void showToast(String message) {
@@ -416,13 +601,13 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 lyricText.setText(line.getText());
                 if (distanceFromActive == 0) {
                     lyricText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.player_bar_background));
-                    lyricText.setTextSize(16);
+                    lyricText.setTextSize(20);
                 } else if (distanceFromActive == 1) {
                     lyricText.setTextColor(0xFF8E97AD);
-                    lyricText.setTextSize(13);
+                    lyricText.setTextSize(16);
                 } else {
                     lyricText.setTextColor(0xFFC5CAD5);
-                    lyricText.setTextSize(12);
+                    lyricText.setTextSize(14);
                 }
                 itemView.setOnClickListener(v -> onLyricTapListener.onLyricTap());
             }

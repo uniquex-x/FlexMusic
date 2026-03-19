@@ -12,6 +12,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.example.core_domain.search.SearchTrack;
 import com.example.feature_search.R;
@@ -22,8 +23,16 @@ import java.util.Locale;
 
 public final class SearchResultAdapter extends BaseAdapter {
 
+    public interface ITrackActionListener {
+        void onTrackClicked(@NonNull SearchTrack track);
+
+        void onTrackMoreClicked(@NonNull View anchorView, @NonNull SearchTrack track);
+    }
+
     private final LayoutInflater layoutInflater;
     private final List<SearchTrack> tracks = new ArrayList<>();
+    @Nullable
+    private ITrackActionListener trackActionListener;
 
     public SearchResultAdapter(@NonNull Context context) {
         this.layoutInflater = LayoutInflater.from(context);
@@ -33,6 +42,10 @@ public final class SearchResultAdapter extends BaseAdapter {
         tracks.clear();
         tracks.addAll(newTracks);
         notifyDataSetChanged();
+    }
+
+    public void setTrackActionListener(@Nullable ITrackActionListener trackActionListener) {
+        this.trackActionListener = trackActionListener;
     }
 
     @Override
@@ -50,7 +63,7 @@ public final class SearchResultAdapter extends BaseAdapter {
         return position;
     }
 
-    private static final class ViewHolder {
+    private final class ViewHolder {
         private final FrameLayout artFrameView;
         private final ImageView artIconView;
         private final TextView titleView;
@@ -75,7 +88,11 @@ public final class SearchResultAdapter extends BaseAdapter {
             qualityView.setText(resolveQualityLabel(track.getQualitySummary()));
             metaView.setText(track.getDurationMs() > 0L ? formatDuration(track.getDurationMs()) : "");
             bindArtwork(position);
-            moreButton.setOnClickListener(v -> { });
+            moreButton.setOnClickListener(v -> {
+                if (trackActionListener != null) {
+                    trackActionListener.onTrackMoreClicked(v, track);
+                }
+            });
             artIconView.setAlpha(0.96f);
         }
 
@@ -92,7 +109,7 @@ public final class SearchResultAdapter extends BaseAdapter {
             if (TextUtils.isEmpty(qualitySummary)) {
                 return "ONLINE";
             }
-            String normalized = qualitySummary.toUpperCase();
+            String normalized = qualitySummary.toUpperCase(Locale.ROOT);
             if (normalized.contains("FLAC")) {
                 return "LOSSLESS";
             }
@@ -105,7 +122,7 @@ public final class SearchResultAdapter extends BaseAdapter {
             if (normalized.contains("MP3")) {
                 return "MP3 320";
             }
-            return qualitySummary.toUpperCase();
+            return qualitySummary.toUpperCase(Locale.ROOT);
         }
 
         private void bindArtwork(int position) {
@@ -130,7 +147,13 @@ public final class SearchResultAdapter extends BaseAdapter {
         } else {
             viewHolder = (ViewHolder) convertView.getTag();
         }
-        viewHolder.bind(getItem(position), position);
+        SearchTrack track = getItem(position);
+        viewHolder.bind(track, position);
+        convertView.setOnClickListener(v -> {
+            if (trackActionListener != null) {
+                trackActionListener.onTrackClicked(track);
+            }
+        });
         return convertView;
     }
 }

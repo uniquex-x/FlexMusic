@@ -36,6 +36,14 @@ public interface ISearchSuggestionRepository {
     List<String> getHistory();
 
     /**
+     * @brief Load hot search keywords for the search landing state.
+     * @return Ordered hot search terms ready to render as chips.
+     * @throws IOException When the configured remote hot-search provider fails to load.
+     */
+    @NonNull
+    List<String> getHotSearches() throws IOException;
+
+    /**
      * @brief Remove all persisted local search history.
      */
     void clearHistory();

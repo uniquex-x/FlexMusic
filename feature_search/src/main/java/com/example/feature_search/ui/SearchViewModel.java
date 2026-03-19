@@ -26,11 +26,15 @@ public final class SearchViewModel {
     }
 
     @NonNull
-    public SearchResultPage search(@NonNull String keyword) throws IOException {
+    public SearchResultPage search(@NonNull String keyword,
+                                   @NonNull SearchScope scope,
+                                   int page) throws IOException {
         SearchResultPage resultPage = searchUseCase.execute(new SearchQuery(
                 keyword,
-                new SearchFilter(SearchScope.TRACKS, 1, DEFAULT_PAGE_SIZE)));
-        getSearchSuggestionsUseCase.record(keyword);
+                new SearchFilter(scope, page, DEFAULT_PAGE_SIZE)));
+        if (page == SearchFilter.DEFAULT_PAGE) {
+            getSearchSuggestionsUseCase.record(keyword);
+        }
         return resultPage;
     }
 
@@ -42,6 +46,11 @@ public final class SearchViewModel {
     @NonNull
     public List<String> loadHistory() {
         return getSearchSuggestionsUseCase.getHistory();
+    }
+
+    @NonNull
+    public List<String> loadHotSearches() throws IOException {
+        return getSearchSuggestionsUseCase.getHotSearches();
     }
 
     public void clearHistory() {

@@ -29,6 +29,8 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.search.SearchTrack;
 
+import java.util.List;
+
 public class MainActivity extends AppCompatActivity implements MyFragment.NavigationCallback, ISearchHost {
 
     private static final String PREFS_NAME = "FlexMusicPrefs";
@@ -152,7 +154,8 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
                 || fragment instanceof SleepFragment
                 || fragment instanceof FavoritesFragment
                 || fragment instanceof LocalFragment
-                || fragment instanceof RecentFragment;
+                || fragment instanceof RecentFragment
+                || fragment instanceof SearchFragment;
         boolean showBottomNavigation = !(fragment instanceof SearchFragment);
         boolean hasSong = playbackController.getPlayerState().getCurrentSong() != null;
         binding.bottomNavigation.setVisibility(showBottomNavigation ? View.VISIBLE : View.GONE);
@@ -216,7 +219,25 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     public void onSearchPlaybackRequested(@NonNull SearchTrack track,
                                           @NonNull PlaybackRequest playbackRequest) {
         playbackController.playSearchTrack(track, playbackRequest);
-        getSupportFragmentManager().popBackStack();
+    }
+
+    @Override
+    public void onSearchPlayNextRequested(@NonNull SearchTrack track,
+                                          @NonNull PlaybackRequest playbackRequest) {
+        playbackController.addSearchTrackNext(track, playbackRequest);
+    }
+
+    @Override
+    public void onSearchAddToQueueRequested(@NonNull SearchTrack track,
+                                            @NonNull PlaybackRequest playbackRequest) {
+        playbackController.addSearchTrackToQueue(track, playbackRequest);
+    }
+
+    @Override
+    public void onSearchQueuePlaybackRequested(@NonNull List<SearchTrack> tracks,
+                                               @NonNull List<PlaybackRequest> playbackRequests,
+                                               int startIndex) {
+        playbackController.playSearchQueue(tracks, playbackRequests, startIndex);
     }
 
     @Override

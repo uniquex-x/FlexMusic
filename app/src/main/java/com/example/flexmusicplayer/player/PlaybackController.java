@@ -116,22 +116,50 @@ public final class PlaybackController {
 
     public synchronized void playSearchTrack(@NonNull SearchTrack track,
                                              @NonNull PlaybackRequest request) {
-        Song song = new Song(
-                Math.abs((long) request.getSourceId().hashCode()),
-                track.getTitle(),
-                TextUtils.join(" / ", track.getArtistNames()),
-                track.getAlbumName(),
-                (int) track.getDurationMs(),
-                request.getOriginalUrl());
-        song.setAlbumArtUrl(track.getCoverUrl());
-        song.setLocal(false);
-        song.setRadioStream(request.isLiveStream());
-        song.setSourceId(request.getSourceId());
         Log.d(TAG, "playSearchTrack trackId=" + track.getTrackId()
                 + " providerId=" + track.getProviderId()
                 + " sourceId=" + request.getSourceId()
                 + " url=" + request.getOriginalUrl());
-        playSong(song);
+        playSong(buildSearchSong(track, request));
+    }
+
+    public synchronized void playSearchQueue(@NonNull List<SearchTrack> tracks,
+                                             @NonNull List<PlaybackRequest> requests,
+                                             int startIndex) {
+        List<Song> songs = buildSearchSongs(tracks, requests);
+        if (songs.isEmpty()) {
+            return;
+        }
+        Log.d(TAG, "playSearchQueue size=" + songs.size() + " startIndex=" + startIndex);
+        playQueue(songs, startIndex);
+    }
+
+    public synchronized void addSearchTrackNext(@NonNull SearchTrack track,
+                                                @NonNull PlaybackRequest request) {
+        Song song = buildSearchSong(track, request);
+        if (queue.isEmpty()) {
+            playSong(song);
+            return;
+        }
+        int insertIndex = Math.max(0, Math.min(currentIndex + 1, queue.size()));
+        queue.add(insertIndex, song);
+        Log.d(TAG, "addSearchTrackNext sourceId=" + request.getSourceId()
+                + " insertIndex=" + insertIndex
+                + " queueSize=" + queue.size());
+        dispatchState();
+    }
+
+    public synchronized void addSearchTrackToQueue(@NonNull SearchTrack track,
+                                                   @NonNull PlaybackRequest request) {
+        Song song = buildSearchSong(track, request);
+        if (queue.isEmpty()) {
+            playSong(song);
+            return;
+        }
+        queue.add(song);
+        Log.d(TAG, "addSearchTrackToQueue sourceId=" + request.getSourceId()
+                + " queueSize=" + queue.size());
+        dispatchState();
     }
 
     public synchronized void playQueue(@NonNull List<Song> songs, int index) {
@@ -487,6 +515,40 @@ public final class PlaybackController {
     }
 
     private void notifyListener(@NonNull Listener listener, @NonNull PlayerState snapshot) {
-        mainHandler.post(() -> listener.onPlaybackStateChanged(snapshot));
+        mainHandler.post(() -> {
+            synchronized (PlaybackController.this) {
+                if (!listeners.contains(listener)) {
+                    return;
+                }
+            }
+            listener.onPlaybackStateChanged(snapshot);
+        });
+    }
+
+    @NonNull
+    private List<Song> buildSearchSongs(@NonNull List<SearchTrack> tracks,
+                                        @NonNull List<PlaybackRequest> requests) {
+        List<Song> songs = new ArrayList<>();
+        int count = Math.min(tracks.size(), requests.size());
+        for (int index = 0; index < count; index++) {
+            songs.add(buildSearchSong(tracks.get(index), requests.get(index)));
+        }
+        return songs;
+    }
+
+    @NonNull
+    private Song buildSearchSong(@NonNull SearchTrack track, @NonNull PlaybackRequest request) {
+        Song song = new Song(
+                Math.abs((long) request.getSourceId().hashCode()),
+                track.getTitle(),
+                TextUtils.join(" / ", track.getArtistNames()),
+                track.getAlbumName(),
+                (int) track.getDurationMs(),
+                request.getOriginalUrl());
+        song.setAlbumArtUrl(track.getCoverUrl());
+        song.setLocal(false);
+        song.setRadioStream(request.isLiveStream());
+        song.setSourceId(request.getSourceId());
+        return song;
     }
 }
