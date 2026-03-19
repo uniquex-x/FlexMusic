@@ -33,6 +33,11 @@ std::string avErrorToString(int errorCode) {
     return std::string(buffer);
 }
 
+bool isLoopbackHttpUrl(const std::string& url) {
+    return url.rfind("http://127.0.0.1:", 0) == 0
+            || url.rfind("http://localhost:", 0) == 0;
+}
+
 } // namespace
 
 FfmpegStreamFileIo::FfmpegStreamFileIo() = default;
@@ -46,6 +51,8 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
     ensureFfmpegNetworkInitialized();
     const auto startedAt = std::chrono::steady_clock::now();
     const auto log = flexmusic::core::levelLog("FfmpegStreamIo");
+    const int64_t timeoutUs = isLoopbackHttpUrl(spec.resolvedUrl) ? 20000000LL : 5000000LL;
+    const std::string timeoutText = std::to_string(timeoutUs);
 
     AVDictionary* options = nullptr;
     if (!spec.userAgent.empty()) {
@@ -53,8 +60,8 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
     }
     av_dict_set(&options, "reconnect", "1", 0);
     av_dict_set(&options, "reconnect_streamed", "1", 0);
-    av_dict_set(&options, "timeout", "5000000", 0);
-    av_dict_set(&options, "rw_timeout", "5000000", 0);
+    av_dict_set(&options, "timeout", timeoutText.c_str(), 0);
+    av_dict_set(&options, "rw_timeout", timeoutText.c_str(), 0);
     av_dict_set(&options, "icy", "1", 0);
     av_dict_set(&options, "multiple_requests", "1", 0);
     if (!spec.seekable) {
@@ -69,10 +76,11 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
         }
         const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - startedAt).count();
-        log.e("open failed sourceId=%s url=%s elapsedMs=%lld error=%s",
+        log.e("open failed sourceId=%s url=%s elapsedMs=%lld timeoutUs=%lld error=%s",
               spec.sourceId.c_str(),
               spec.resolvedUrl.c_str(),
               static_cast<long long>(elapsedMs),
+              static_cast<long long>(timeoutUs),
               errorMessage != nullptr ? errorMessage->c_str() : "");
         close();
         return false;
@@ -83,10 +91,11 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
     }
     const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startedAt).count();
-    log.i("open success sourceId=%s url=%s elapsedMs=%lld seekable=%d",
+    log.i("open success sourceId=%s url=%s elapsedMs=%lld timeoutUs=%lld seekable=%d",
           spec.sourceId.c_str(),
           spec.resolvedUrl.c_str(),
           static_cast<long long>(elapsedMs),
+          static_cast<long long>(timeoutUs),
           spec.seekable ? 1 : 0);
     return true;
 }

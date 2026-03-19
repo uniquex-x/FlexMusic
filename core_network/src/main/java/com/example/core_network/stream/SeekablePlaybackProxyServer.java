@@ -131,8 +131,26 @@ public final class SeekablePlaybackProxyServer {
             session.serve(request, outputStream);
             outputStream.flush();
         } catch (IOException ioException) {
+            if (isBenignClientDisconnect(ioException)) {
+                Log.d(TAG, "client disconnected: " + ioException.getMessage());
+                return;
+            }
             Log.e(TAG, "handle client failed", ioException);
         }
+    }
+
+    private static boolean isBenignClientDisconnect(@NonNull IOException exception) {
+        if (!(exception instanceof SocketException)) {
+            return false;
+        }
+        String message = exception.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.US);
+        return normalized.contains("broken pipe")
+                || normalized.contains("connection reset")
+                || normalized.contains("socket closed");
     }
 
     @Nullable
@@ -219,6 +237,7 @@ public final class SeekablePlaybackProxyServer {
         private void serve(@NonNull HttpRequest request,
                            @NonNull OutputStream outputStream) throws IOException {
             lastAccessAtMs = System.currentTimeMillis();
+            long startedAtMs = System.currentTimeMillis();
 
             RangeRequest rangeRequest = RangeRequest.parse(request.headers.get("range"), contentLength);
             boolean partialResponse = rangeRequest.isPartial && contentLength > 0;
@@ -237,6 +256,11 @@ public final class SeekablePlaybackProxyServer {
                         responseStart,
                         upstreamEnd);
                 int responseCode = upstreamConnection.getResponseCode();
+                Log.d(TAG, "upstream ready sourceId=" + sourceId
+                        + " token=" + token
+                        + " code=" + responseCode
+                        + " elapsedMs=" + (System.currentTimeMillis() - startedAtMs)
+                        + " url=" + resolvedUpstreamUrl);
                 updateMetadataFromConnection(upstreamConnection, responseCode);
                 rangeRequest = RangeRequest.parse(request.headers.get("range"), contentLength);
                 partialResponse = rangeRequest.isPartial && contentLength > 0;

@@ -136,7 +136,9 @@ public final class PlaybackController {
             return;
         }
         PlayerKernelState kernelState = playerKernel.getSnapshot().getState();
-        if (kernelState == PlayerKernelState.PLAYING || kernelState == PlayerKernelState.BUFFERING) {
+        if (kernelState == PlayerKernelState.PLAYING
+                || kernelState == PlayerKernelState.BUFFERING
+                || kernelState == PlayerKernelState.PREPARING) {
             pause();
             return;
         }
@@ -151,7 +153,10 @@ public final class PlaybackController {
 
     public synchronized void pause() {
         PlayerKernelState kernelState = playerKernel.getSnapshot().getState();
-        if (kernelState != PlayerKernelState.PLAYING && kernelState != PlayerKernelState.BUFFERING) {
+        if (kernelState != PlayerKernelState.PLAYING
+                && kernelState != PlayerKernelState.BUFFERING
+                && kernelState != PlayerKernelState.PREPARING
+                && kernelState != PlayerKernelState.READY) {
             return;
         }
         playerKernel.pause();
@@ -338,12 +343,16 @@ public final class PlaybackController {
 
         switch (snapshot.getState()) {
             case PREPARING:
+                playerState.setState(PlayerState.State.LOADING);
+                stopProgressTicker();
+                break;
             case READY:
+                playerState.setState(PlayerState.State.PAUSED);
+                stopProgressTicker();
+                break;
             case BUFFERING:
                 playerState.setState(PlayerState.State.LOADING);
-                if (snapshot.getState() == PlayerKernelState.BUFFERING) {
-                    startProgressTicker();
-                }
+                startProgressTicker();
                 break;
             case PLAYING:
                 playerState.setState(PlayerState.State.PLAYING);

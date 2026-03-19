@@ -188,6 +188,35 @@ bool FfmpegAudioDecoder::flush(std::vector<PcmFrame>* outputFrames, std::string*
     return drainFrames(outputFrames, errorMessage);
 }
 
+bool FfmpegAudioDecoder::reset(std::string* errorMessage) {
+    if (codecContext_ == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = "Decoder is not ready";
+        }
+        return false;
+    }
+
+    avcodec_flush_buffers(codecContext_);
+    if (swrContext_ != nullptr) {
+        swr_close(swrContext_);
+        const int result = swr_init(swrContext_);
+        if (result < 0) {
+            if (errorMessage != nullptr) {
+                *errorMessage = avErrorToString(result);
+            }
+            flexmusic::core::levelLog(kDecoderTag).e("reset swr failed error=%s",
+                                                     errorMessage != nullptr ? errorMessage->c_str() : "");
+            return false;
+        }
+    }
+    av_frame_unref(frame_);
+    firstOutputFrameLogged_ = false;
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+    return true;
+}
+
 bool FfmpegAudioDecoder::drainFrames(std::vector<PcmFrame>* outputFrames, std::string* errorMessage) {
     while (true) {
         const int result = avcodec_receive_frame(codecContext_, frame_);

@@ -10,6 +10,7 @@ import com.example.flexmusicplayer.model.Song;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -55,6 +56,7 @@ public final class RecentPlaybackStore {
         }
         Song historyItem = copySong(song);
         historyItem.setLastPlayedDate(System.currentTimeMillis());
+        removeExistingLocked(historyItem);
         recentSongs.addFirst(historyItem);
         while (recentSongs.size() > MAX_RECENT_SONGS) {
             recentSongs.removeLast();
@@ -71,6 +73,28 @@ public final class RecentPlaybackStore {
 
     private void notifyListener(@NonNull Listener listener, @NonNull List<Song> songs) {
         mainHandler.post(() -> listener.onRecentSongsChanged(new ArrayList<>(songs)));
+    }
+
+    private void removeExistingLocked(@NonNull Song song) {
+        Iterator<Song> iterator = recentSongs.iterator();
+        while (iterator.hasNext()) {
+            if (sameSong(iterator.next(), song)) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private boolean sameSong(@NonNull Song left, @NonNull Song right) {
+        return buildPlaybackKey(left).equals(buildPlaybackKey(right));
+    }
+
+    @NonNull
+    private String buildPlaybackKey(@NonNull Song song) {
+        String sourceId = song.getSourceId();
+        if (sourceId == null || sourceId.isEmpty()) {
+            sourceId = String.valueOf(song.getId());
+        }
+        return sourceId + "|" + String.valueOf(song.getAudioUrl());
     }
 
     @NonNull

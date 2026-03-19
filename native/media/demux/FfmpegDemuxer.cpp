@@ -290,6 +290,10 @@ bool FfmpegDemuxer::seekTo(int64_t positionMs, std::string* errorMessage) {
               errorMessage != nullptr ? errorMessage->c_str() : "");
         return false;
     }
+    avformat_flush(formatContext_);
+    log.i("seek success targetMs=%lld streamIndex=%d",
+          static_cast<long long>(positionMs),
+          streamInfo_.streamIndex);
 
     if (errorMessage != nullptr) {
         errorMessage->clear();

@@ -9,6 +9,7 @@ namespace media {
 struct EncodedPacket {
     AVPacket* packet = nullptr;
     bool endOfStream = false;
+    int serial = 0;
 };
 
 } // namespace media

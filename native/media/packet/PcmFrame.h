@@ -14,6 +14,7 @@ struct PcmFrame {
     int64_t positionMs = 0;
     int64_t durationMs = 0;
     bool endOfStream = false;
+    int serial = 0;
 };
 
 } // namespace media

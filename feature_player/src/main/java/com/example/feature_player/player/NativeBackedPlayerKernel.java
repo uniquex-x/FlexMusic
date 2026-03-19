@@ -162,9 +162,18 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
         if (released || currentSource == null || !currentSource.isSeekable()) {
             return;
         }
-        playerJni.seekTo(positionMs);
+        long safePositionMs = Math.max(0L, Math.min(positionMs, Math.max(snapshot.getDurationMs(), positionMs)));
+        playerJni.seekTo(safePositionMs);
+        updateSnapshotLocked(
+                PlayerKernelState.PREPARING,
+                safePositionMs,
+                Math.max(snapshot.getDurationMs(), safePositionMs),
+                true,
+                playerJni.isReady(),
+                currentSource,
+                null,
+                true);
         schedulePollingLocked();
-        refreshSnapshotLocked(true);
     }
 
     @Override

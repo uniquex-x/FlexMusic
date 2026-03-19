@@ -28,19 +28,176 @@ void releasePacket(AVPacket* packet) {
     }
 }
 
+void releaseEncodedPacket(flexmusic::media::EncodedPacket& packet) {
+    releasePacket(packet.packet);
+    packet.packet = nullptr;
+}
+
 } // namespace
 
 PlayerSession::PlayerSession() {
     snapshot_.state = PlayerState::IDLE;
+    controlThread_ = std::thread(&PlayerSession::controlLoop, this);
 }
 
 PlayerSession::~PlayerSession() {
-    stop();
+    Command releaseCommand;
+    releaseCommand.type = CommandType::RELEASE;
+    enqueueCommand(std::move(releaseCommand));
+    if (controlThread_.joinable()) {
+        controlThread_.join();
+    }
 }
 
 bool PlayerSession::setDataSource(const flexmusic::io::DataSourceSpec& spec,
                                   const std::string& backendName,
                                   std::string* errorMessage) {
+    Command command;
+    command.type = CommandType::SET_DATA_SOURCE;
+    command.spec = spec;
+    command.backendName = backendName;
+    enqueueCommand(std::move(command));
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+    return true;
+}
+
+void PlayerSession::prepare() {
+    Command command;
+    command.type = CommandType::PREPARE;
+    enqueueCommand(std::move(command));
+}
+
+void PlayerSession::play() {
+    Command command;
+    command.type = CommandType::PLAY;
+    enqueueCommand(std::move(command));
+}
+
+void PlayerSession::pause() {
+    Command command;
+    command.type = CommandType::PAUSE;
+    enqueueCommand(std::move(command));
+}
+
+void PlayerSession::stop() {
+    Command command;
+    command.type = CommandType::STOP;
+    enqueueCommand(std::move(command));
+}
+
+void PlayerSession::seekTo(int64_t positionMs) {
+    Command command;
+    command.type = CommandType::SEEK;
+    command.positionMs = positionMs;
+    enqueueCommand(std::move(command));
+}
+
+void PlayerSession::setVolume(float volume) {
+    Command command;
+    command.type = CommandType::SET_VOLUME;
+    command.volume = volume;
+    enqueueCommand(std::move(command));
+}
+
+PlayerRuntimeSnapshot PlayerSession::snapshot() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapshot_;
+}
+
+void PlayerSession::enqueueCommand(Command command) {
+    {
+        std::lock_guard<std::mutex> lock(commandMutex_);
+        if (controlThreadExitRequested_) {
+            return;
+        }
+        auto removePendingCommands = [this](CommandType type) {
+            commandQueue_.erase(
+                    std::remove_if(commandQueue_.begin(), commandQueue_.end(), [type](const Command& pending) {
+                        return pending.type == type;
+                    }),
+                    commandQueue_.end());
+        };
+        switch (command.type) {
+            case CommandType::SET_DATA_SOURCE:
+                commandQueue_.clear();
+                break;
+            case CommandType::SEEK:
+                removePendingCommands(CommandType::SEEK);
+                break;
+            case CommandType::PLAY:
+            case CommandType::PAUSE:
+                removePendingCommands(CommandType::PLAY);
+                removePendingCommands(CommandType::PAUSE);
+                break;
+            case CommandType::SET_VOLUME:
+                removePendingCommands(CommandType::SET_VOLUME);
+                break;
+            case CommandType::STOP:
+                commandQueue_.clear();
+                break;
+            case CommandType::PREPARE:
+            case CommandType::RELEASE:
+                break;
+        }
+        commandQueue_.push_back(std::move(command));
+    }
+    commandCondition_.notify_one();
+}
+
+void PlayerSession::controlLoop() {
+    while (true) {
+        Command command;
+        {
+            std::unique_lock<std::mutex> lock(commandMutex_);
+            commandCondition_.wait(lock, [this]() {
+                return controlThreadExitRequested_ || !commandQueue_.empty();
+            });
+            if (controlThreadExitRequested_ && commandQueue_.empty()) {
+                return;
+            }
+            command = std::move(commandQueue_.front());
+            commandQueue_.pop_front();
+        }
+
+        switch (command.type) {
+            case CommandType::SET_DATA_SOURCE:
+                handleSetDataSourceCommand(command.spec, command.backendName);
+                break;
+            case CommandType::PREPARE:
+                handlePrepareCommand();
+                break;
+            case CommandType::PLAY:
+                handlePlayCommand();
+                break;
+            case CommandType::PAUSE:
+                handlePauseCommand();
+                break;
+            case CommandType::STOP:
+                handleStopCommand(true);
+                break;
+            case CommandType::SEEK:
+                handleSeekCommand(command.positionMs);
+                break;
+            case CommandType::SET_VOLUME:
+                handleSetVolumeCommand(command.volume);
+                break;
+            case CommandType::RELEASE:
+                handleStopCommand(true);
+                {
+                    std::lock_guard<std::mutex> lock(commandMutex_);
+                    controlThreadExitRequested_ = true;
+                    commandQueue_.clear();
+                }
+                commandCondition_.notify_all();
+                return;
+        }
+    }
+}
+
+void PlayerSession::handleSetDataSourceCommand(const flexmusic::io::DataSourceSpec& spec,
+                                               const std::string& backendName) {
     std::unique_ptr<std::thread> prepareThread;
     std::unique_ptr<std::thread> demuxThread;
     std::unique_ptr<std::thread> decodeThread;
@@ -65,13 +222,9 @@ bool PlayerSession::setDataSource(const flexmusic::io::DataSourceSpec& spec,
         snapshot_.nativeReady = !backendName.empty();
         hasDataSource_ = true;
     }
-    if (errorMessage != nullptr) {
-        errorMessage->clear();
-    }
-    return true;
 }
 
-void PlayerSession::prepare() {
+void PlayerSession::handlePrepareCommand() {
     std::unique_ptr<std::thread> prepareThread;
     std::unique_ptr<std::thread> demuxThread;
     std::unique_ptr<std::thread> decodeThread;
@@ -96,7 +249,7 @@ void PlayerSession::prepare() {
     }
 }
 
-void PlayerSession::play() {
+void PlayerSession::handlePlayCommand() {
     std::unique_ptr<std::thread> prepareThread;
     std::unique_ptr<std::thread> demuxThread;
     std::unique_ptr<std::thread> decodeThread;
@@ -104,7 +257,20 @@ void PlayerSession::play() {
     bool restartFromZero = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (snapshot_.state == PlayerState::PREPARING) {
+            autoStartOnReady_ = true;
+            snapshot_.playing = true;
+            return;
+        }
+        if (snapshot_.state == PlayerState::READY) {
+            autoStartOnReady_ = true;
+            renderer_.play();
+            snapshot_.playing = true;
+            setStateLocked(PlayerState::PLAYING);
+            return;
+        }
         if (snapshot_.state == PlayerState::PAUSED) {
+            autoStartOnReady_ = true;
             renderer_.play();
             snapshot_.playing = true;
             setStateLocked(PlayerState::PLAYING);
@@ -128,17 +294,23 @@ void PlayerSession::play() {
     }
 }
 
-void PlayerSession::pause() {
+void PlayerSession::handlePauseCommand() {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (snapshot_.state == PlayerState::PREPARING || snapshot_.state == PlayerState::READY) {
+        autoStartOnReady_ = false;
+        snapshot_.playing = false;
+        return;
+    }
     if (snapshot_.state != PlayerState::PLAYING && snapshot_.state != PlayerState::BUFFERING) {
         return;
     }
+    autoStartOnReady_ = false;
     renderer_.pause();
     snapshot_.playing = false;
     setStateLocked(PlayerState::PAUSED);
 }
 
-void PlayerSession::stop() {
+void PlayerSession::handleStopCommand(bool clearDataSource) {
     std::unique_ptr<std::thread> prepareThread;
     std::unique_ptr<std::thread> demuxThread;
     std::unique_ptr<std::thread> decodeThread;
@@ -154,61 +326,82 @@ void PlayerSession::stop() {
     joinThread(&renderThread);
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        finalizeStopLocked(true);
+        finalizeStopLocked(clearDataSource);
     }
 }
 
-void PlayerSession::seekTo(int64_t positionMs) {
-    std::unique_ptr<std::thread> prepareThread;
-    std::unique_ptr<std::thread> demuxThread;
-    std::unique_ptr<std::thread> decodeThread;
-    std::unique_ptr<std::thread> renderThread;
-    bool shouldResume = false;
+void PlayerSession::handleSeekCommand(int64_t positionMs) {
+    flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>* packetQueue = nullptr;
+    flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>* pcmQueue = nullptr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!hasDataSource_ || !snapshot_.seekable) {
             return;
         }
-        shouldResume = snapshot_.state == PlayerState::PLAYING || snapshot_.state == PlayerState::BUFFERING;
-        beginStopLocked();
-        detachThreadsLocked(&prepareThread, &demuxThread, &decodeThread, &renderThread);
+        const int64_t safePositionMs = std::max<int64_t>(0, positionMs);
+        const bool shouldResume = snapshot_.playing
+                || autoStartOnReady_
+                || snapshot_.state == PlayerState::PLAYING
+                || snapshot_.state == PlayerState::BUFFERING;
+        pendingSeekPositionMs_ = safePositionMs;
+        seekRequested_ = true;
+        autoStartOnReady_ = shouldResume;
+        queueSerial_++;
+        firstFrameRendered_ = false;
+        firstPacketLogged_ = false;
+        firstDecodedFrameLogged_ = false;
+        firstRendererSubmitLogged_ = false;
+        pendingPositionRebase_ = true;
+        pendingPositionRebaseSerial_ = queueSerial_;
+        pendingPositionRebaseTargetMs_ = safePositionMs;
+        pipelineStartedAt_ = std::chrono::steady_clock::now();
+        snapshot_.currentPositionMs = safePositionMs;
+        snapshot_.errorMessage.clear();
+        snapshot_.playing = shouldResume;
+        setStateLocked(PlayerState::PREPARING);
+        packetQueue = packetQueue_.get();
+        pcmQueue = pcmQueue_.get();
+        flexmusic::core::levelLog(kPlayerSessionTag).i(
+                "seek request sourceId=%s positionMs=%lld resume=%d serial=%d state=%d",
+                dataSourceSpec_.sourceId.c_str(),
+                static_cast<long long>(safePositionMs),
+                shouldResume ? 1 : 0,
+                queueSerial_,
+                static_cast<int>(snapshot_.state));
     }
-    joinThread(&prepareThread);
-    joinThread(&demuxThread);
-    joinThread(&decodeThread);
-    joinThread(&renderThread);
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        finalizeStopLocked(false);
-        startPipelineLocked(std::max<int64_t>(0, positionMs), shouldResume);
-    }
+    clearPacketQueue(packetQueue);
+    clearPcmQueue(pcmQueue);
+    renderer_.flush();
 }
 
-void PlayerSession::setVolume(float volume) {
+void PlayerSession::handleSetVolumeCommand(float volume) {
     std::lock_guard<std::mutex> lock(mutex_);
     snapshot_.volume = std::max(0.0f, std::min(1.0f, volume));
     renderer_.setVolume(snapshot_.volume);
-}
-
-PlayerRuntimeSnapshot PlayerSession::snapshot() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return snapshot_;
 }
 
 void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart) {
     packetQueue_ = std::make_unique<flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>>(kPacketQueueSize);
     pcmQueue_ = std::make_unique<flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>>(kPcmQueueSize);
     stopRequested_ = false;
+    seekRequested_ = false;
     firstFrameRendered_ = false;
     firstPacketLogged_ = false;
     firstDecodedFrameLogged_ = false;
     firstRendererSubmitLogged_ = false;
     autoStartOnReady_ = autoStart;
+    queueSerial_++;
+    pendingPositionRebase_ = false;
+    activePositionSerial_ = queueSerial_;
+    activePositionOffsetMs_ = 0;
+    pendingPositionRebaseSerial_ = 0;
+    pendingPositionRebaseTargetMs_ = 0;
+    pendingSeekPositionMs_ = startPositionMs;
     pipelineStartedAt_ = std::chrono::steady_clock::now();
     snapshot_.currentPositionMs = startPositionMs;
     snapshot_.durationMs = 0;
     snapshot_.errorMessage.clear();
-    snapshot_.playing = false;
+    snapshot_.playing = autoStart;
     snapshot_.nativeReady = true;
     setStateLocked(PlayerState::PREPARING);
     flexmusic::core::levelLog(kPlayerSessionTag).i(
@@ -218,15 +411,18 @@ void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart)
             static_cast<long long>(startPositionMs),
             autoStart ? 1 : 0);
 
-    prepareThread_ = std::make_unique<std::thread>(&PlayerSession::prepareLoop, this, startPositionMs, autoStart);
+    prepareThread_ = std::make_unique<std::thread>(&PlayerSession::prepareLoop, this, startPositionMs);
 }
 
 void PlayerSession::beginStopLocked() {
     stopRequested_ = true;
+    seekRequested_ = false;
     if (packetQueue_ != nullptr) {
+        clearPacketQueue(packetQueue_.get());
         packetQueue_->close();
     }
     if (pcmQueue_ != nullptr) {
+        clearPcmQueue(pcmQueue_.get());
         pcmQueue_->close();
     }
     renderer_.stop();
@@ -257,6 +453,11 @@ void PlayerSession::finalizeStopLocked(bool clearDataSource) {
     packetQueue_.reset();
     pcmQueue_.reset();
     firstFrameRendered_ = false;
+    pendingPositionRebase_ = false;
+    activePositionSerial_ = 0;
+    activePositionOffsetMs_ = 0;
+    pendingPositionRebaseSerial_ = 0;
+    pendingPositionRebaseTargetMs_ = 0;
     snapshot_.playing = false;
     snapshot_.nativeReady = hasDataSource_ && !snapshot_.backendName.empty();
     if (clearDataSource) {
@@ -264,8 +465,6 @@ void PlayerSession::finalizeStopLocked(bool clearDataSource) {
         dataSourceSpec_ = flexmusic::io::DataSourceSpec();
         snapshot_ = PlayerRuntimeSnapshot();
         snapshot_.state = PlayerState::IDLE;
-    } else {
-        setStateLocked(PlayerState::IDLE);
     }
 }
 
@@ -278,7 +477,86 @@ void PlayerSession::joinThread(std::unique_ptr<std::thread>* thread) {
     }
 }
 
-void PlayerSession::prepareLoop(int64_t startPositionMs, bool autoStart) {
+void PlayerSession::clearPacketQueue(flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>* queue) {
+    if (queue == nullptr) {
+        return;
+    }
+    queue->clearWith([](flexmusic::media::EncodedPacket& packet) {
+        releaseEncodedPacket(packet);
+    });
+}
+
+void PlayerSession::clearPcmQueue(flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>* queue) {
+    if (queue == nullptr) {
+        return;
+    }
+    queue->clearWith([](flexmusic::media::PcmFrame&) {
+    });
+}
+
+bool PlayerSession::applyPendingSeekIfNeeded() {
+    int64_t targetPositionMs = 0;
+    int activeSerial = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!seekRequested_) {
+            return true;
+        }
+        if (stopRequested_) {
+            return false;
+        }
+        targetPositionMs = pendingSeekPositionMs_;
+        activeSerial = queueSerial_;
+    }
+
+    std::string errorMessage;
+    if (!demuxer_.seekTo(targetPositionMs, &errorMessage)) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!stopRequested_) {
+            setErrorLocked(errorMessage.empty() ? "Seek failed" : errorMessage);
+        }
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> decoderLock(decoderMutex_);
+        if (!decoder_.reset(&errorMessage)) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (!stopRequested_) {
+                setErrorLocked(errorMessage.empty() ? "Reset decoder failed" : errorMessage);
+            }
+            return false;
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stopRequested_) {
+            return false;
+        }
+        if (queueSerial_ != activeSerial || pendingSeekPositionMs_ != targetPositionMs) {
+            flexmusic::core::levelLog(kPlayerSessionTag).i(
+                    "seek superseded sourceId=%s positionMs=%lld serial=%d latestSerial=%d latestPositionMs=%lld",
+                    dataSourceSpec_.sourceId.c_str(),
+                    static_cast<long long>(targetPositionMs),
+                    activeSerial,
+                    queueSerial_,
+                    static_cast<long long>(pendingSeekPositionMs_));
+            return true;
+        }
+        seekRequested_ = false;
+        snapshot_.currentPositionMs = targetPositionMs;
+        snapshot_.playing = autoStartOnReady_;
+    }
+
+    flexmusic::core::levelLog(kPlayerSessionTag).i(
+            "seek applied sourceId=%s positionMs=%lld serial=%d autoStart=%d",
+            dataSourceSpec_.sourceId.c_str(),
+            static_cast<long long>(targetPositionMs),
+            activeSerial,
+            autoStartOnReady_ ? 1 : 0);
+    return true;
+}
+
+void PlayerSession::prepareLoop(int64_t startPositionMs) {
     const auto log = flexmusic::core::levelLog(kPlayerSessionTag);
     flexmusic::io::DataSourceSpec dataSourceSpec;
     {
@@ -293,6 +571,9 @@ void PlayerSession::prepareLoop(int64_t startPositionMs, bool autoStart) {
     std::unique_ptr<flexmusic::io::IFileIo> fileIo = flexmusic::io::FileIoRegistry::createForSpec(dataSourceSpec, &errorMessage);
     if (fileIo == nullptr) {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (stopRequested_) {
+            return;
+        }
         setErrorLocked(errorMessage.empty() ? "Create FileIo failed" : errorMessage);
         return;
     }
@@ -305,6 +586,9 @@ void PlayerSession::prepareLoop(int64_t startPositionMs, bool autoStart) {
 
     if (!avioDataSource_.open(std::move(fileIo), dataSourceSpec, &errorMessage)) {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (stopRequested_) {
+            return;
+        }
         setErrorLocked(errorMessage.empty() ? "Open data source failed" : errorMessage);
         return;
     }
@@ -313,6 +597,9 @@ void PlayerSession::prepareLoop(int64_t startPositionMs, bool autoStart) {
           static_cast<long long>(elapsedSincePipelineStartMs()));
     if (!demuxer_.open(&avioDataSource_, &errorMessage)) {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (stopRequested_) {
+            return;
+        }
         setErrorLocked(errorMessage.empty() ? "Open demuxer failed" : errorMessage);
         return;
     }
@@ -323,13 +610,22 @@ void PlayerSession::prepareLoop(int64_t startPositionMs, bool autoStart) {
           demuxer_.isSeekable() ? 1 : 0);
     if (startPositionMs > 0 && demuxer_.isSeekable() && !demuxer_.seekTo(startPositionMs, &errorMessage)) {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (stopRequested_) {
+            return;
+        }
         setErrorLocked(errorMessage.empty() ? "Seek before start failed" : errorMessage);
         return;
     }
-    if (!decoder_.open(demuxer_.audioStreamInfo(), &errorMessage)) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        setErrorLocked(errorMessage.empty() ? "Open decoder failed" : errorMessage);
-        return;
+    {
+        std::lock_guard<std::mutex> decoderLock(decoderMutex_);
+        if (!decoder_.open(demuxer_.audioStreamInfo(), &errorMessage)) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                return;
+            }
+            setErrorLocked(errorMessage.empty() ? "Open decoder failed" : errorMessage);
+            return;
+        }
     }
     log.i("prepare stage=decoder-open sourceId=%s elapsedMs=%lld",
           dataSourceSpec.sourceId.c_str(),
@@ -347,7 +643,7 @@ void PlayerSession::prepareLoop(int64_t startPositionMs, bool autoStart) {
 
     demuxThread_ = std::make_unique<std::thread>(&PlayerSession::demuxLoop, this);
     decodeThread_ = std::make_unique<std::thread>(&PlayerSession::decodeLoop, this);
-    renderThread_ = std::make_unique<std::thread>(&PlayerSession::renderLoop, this, autoStart);
+    renderThread_ = std::make_unique<std::thread>(&PlayerSession::renderLoop, this);
     log.i("prepare complete sourceId=%s totalElapsedMs=%lld",
           dataSourceSpec.sourceId.c_str(),
           static_cast<long long>(elapsedSincePipelineStartMs()));
@@ -356,6 +652,9 @@ void PlayerSession::prepareLoop(int64_t startPositionMs, bool autoStart) {
 void PlayerSession::demuxLoop() {
     const auto log = flexmusic::core::levelLog(kPlayerSessionTag);
     while (true) {
+        if (!applyPendingSeekIfNeeded()) {
+            return;
+        }
         {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopRequested_ || packetQueue_ == nullptr) {
@@ -367,23 +666,39 @@ void PlayerSession::demuxLoop() {
         std::string errorMessage;
         if (!demuxer_.readPacket(&encodedPacket, &errorMessage)) {
             std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                return;
+            }
             setErrorLocked(errorMessage.empty() ? "Read packet failed" : errorMessage);
             if (packetQueue_ != nullptr) {
                 packetQueue_->close();
             }
             return;
         }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                releasePacket(encodedPacket.packet);
+                return;
+            }
+            if (seekRequested_) {
+                releasePacket(encodedPacket.packet);
+                continue;
+            }
+            encodedPacket.serial = queueSerial_;
+        }
+        const AVPacket* packetForLog = encodedPacket.packet;
         if (!packetQueue_->push(std::move(encodedPacket))) {
             releasePacket(encodedPacket.packet);
             return;
         }
-        if (!firstPacketLogged_ && encodedPacket.packet != nullptr) {
+        if (!firstPacketLogged_ && packetForLog != nullptr) {
             firstPacketLogged_ = true;
             log.i("first demux packet sourceId=%s elapsedMs=%lld size=%d pts=%lld",
                   dataSourceSpec_.sourceId.c_str(),
                   static_cast<long long>(elapsedSincePipelineStartMs()),
-                  encodedPacket.packet->size,
-                  static_cast<long long>(encodedPacket.packet->pts));
+                  packetForLog->size,
+                  static_cast<long long>(packetForLog->pts));
         }
         if (encodedPacket.endOfStream) {
             return;
@@ -399,11 +714,33 @@ void PlayerSession::decodeLoop() {
             return;
         }
 
+        int currentSerial = 0;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                releasePacket(encodedPacket.packet);
+                return;
+            }
+            currentSerial = queueSerial_;
+        }
+        if (encodedPacket.serial != currentSerial) {
+            releasePacket(encodedPacket.packet);
+            continue;
+        }
+
         std::vector<flexmusic::media::PcmFrame> decodedFrames;
         std::string errorMessage;
         if (encodedPacket.endOfStream) {
-            if (!decoder_.flush(&decodedFrames, &errorMessage)) {
+            bool flushOk = false;
+            {
+                std::lock_guard<std::mutex> decoderLock(decoderMutex_);
+                flushOk = decoder_.flush(&decodedFrames, &errorMessage);
+            }
+            if (!flushOk) {
                 std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    return;
+                }
                 setErrorLocked(errorMessage.empty() ? "Flush decoder failed" : errorMessage);
                 if (pcmQueue_ != nullptr) {
                     pcmQueue_->close();
@@ -411,21 +748,31 @@ void PlayerSession::decodeLoop() {
                 return;
             }
             for (flexmusic::media::PcmFrame& frame : decodedFrames) {
+                frame.serial = encodedPacket.serial;
                 if (pcmQueue_ == nullptr || !pcmQueue_->push(std::move(frame))) {
                     return;
                 }
             }
             flexmusic::media::PcmFrame eosFrame;
             eosFrame.endOfStream = true;
+            eosFrame.serial = encodedPacket.serial;
             if (pcmQueue_ != nullptr) {
                 pcmQueue_->push(std::move(eosFrame));
             }
             return;
         }
 
-        if (!decoder_.decodePacket(encodedPacket, &decodedFrames, &errorMessage)) {
+        bool decodeOk = false;
+        {
+            std::lock_guard<std::mutex> decoderLock(decoderMutex_);
+            decodeOk = decoder_.decodePacket(encodedPacket, &decodedFrames, &errorMessage);
+        }
+        if (!decodeOk) {
             releasePacket(encodedPacket.packet);
             std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                return;
+            }
             setErrorLocked(errorMessage.empty() ? "Decode packet failed" : errorMessage);
             if (pcmQueue_ != nullptr) {
                 pcmQueue_->close();
@@ -433,6 +780,15 @@ void PlayerSession::decodeLoop() {
             return;
         }
         releasePacket(encodedPacket.packet);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                return;
+            }
+            if (encodedPacket.serial != queueSerial_) {
+                continue;
+            }
+        }
 
         if (!firstDecodedFrameLogged_ && !decodedFrames.empty()) {
             firstDecodedFrameLogged_ = true;
@@ -445,6 +801,26 @@ void PlayerSession::decodeLoop() {
                   firstFrame.data.size());
         }
         for (flexmusic::media::PcmFrame& frame : decodedFrames) {
+            frame.serial = encodedPacket.serial;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (pendingPositionRebase_
+                        && pendingPositionRebaseSerial_ == frame.serial
+                        && pendingPositionRebaseTargetMs_ > 0) {
+                    activePositionSerial_ = frame.serial;
+                    activePositionOffsetMs_ = pendingPositionRebaseTargetMs_ - frame.positionMs;
+                    pendingPositionRebase_ = false;
+                    log.i("position rebase sourceId=%s serial=%d rawPositionMs=%lld targetMs=%lld offsetMs=%lld",
+                          dataSourceSpec_.sourceId.c_str(),
+                          frame.serial,
+                          static_cast<long long>(frame.positionMs),
+                          static_cast<long long>(pendingPositionRebaseTargetMs_),
+                          static_cast<long long>(activePositionOffsetMs_));
+                }
+                if (activePositionSerial_ == frame.serial) {
+                    frame.positionMs = std::max<int64_t>(0, frame.positionMs + activePositionOffsetMs_);
+                }
+            }
             if (pcmQueue_ == nullptr || !pcmQueue_->push(std::move(frame))) {
                 return;
             }
@@ -452,7 +828,7 @@ void PlayerSession::decodeLoop() {
     }
 }
 
-void PlayerSession::renderLoop(bool autoStart) {
+void PlayerSession::renderLoop() {
     const auto log = flexmusic::core::levelLog(kPlayerSessionTag);
     bool bufferingAnnounced = false;
     while (true) {
@@ -472,6 +848,18 @@ void PlayerSession::renderLoop(bool autoStart) {
             continue;
         }
 
+        int currentSerial = 0;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                return;
+            }
+            currentSerial = queueSerial_;
+        }
+        if (pcmFrame.serial != currentSerial) {
+            continue;
+        }
+
         if (pcmFrame.endOfStream) {
             renderer_.waitForDrain();
             std::lock_guard<std::mutex> lock(mutex_);
@@ -487,6 +875,9 @@ void PlayerSession::renderLoop(bool autoStart) {
             std::string errorMessage;
             if (!renderer_.open(pcmFrame.sampleRate, pcmFrame.channelCount, &errorMessage)) {
                 std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    return;
+                }
                 setErrorLocked(errorMessage.empty() ? "Open renderer failed" : errorMessage);
                 return;
             }
@@ -495,8 +886,13 @@ void PlayerSession::renderLoop(bool autoStart) {
                   static_cast<long long>(elapsedSincePipelineStartMs()),
                   pcmFrame.sampleRate,
                   pcmFrame.channelCount);
-            renderer_.setVolume(snapshot_.volume);
-            if (autoStart) {
+            bool shouldAutoStart = false;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                renderer_.setVolume(snapshot_.volume);
+                shouldAutoStart = autoStartOnReady_;
+            }
+            if (shouldAutoStart) {
                 renderer_.play();
             } else {
                 renderer_.pause();
@@ -506,7 +902,27 @@ void PlayerSession::renderLoop(bool autoStart) {
         std::string errorMessage;
         if (!renderer_.enqueueFrame(std::move(pcmFrame), &errorMessage)) {
             std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_ || errorMessage == "Audio renderer is closed") {
+                return;
+            }
             setErrorLocked(errorMessage.empty() ? "Render PCM failed" : errorMessage);
+            return;
+        }
+        bool staleFrameRendered = false;
+        bool stopAfterEnqueue = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stopAfterEnqueue = stopRequested_;
+            staleFrameRendered = pcmFrame.serial != queueSerial_;
+        }
+        if (staleFrameRendered) {
+            renderer_.flush();
+            if (stopAfterEnqueue) {
+                return;
+            }
+            continue;
+        }
+        if (stopAfterEnqueue) {
             return;
         }
         if (!firstRendererSubmitLogged_) {
@@ -520,15 +936,15 @@ void PlayerSession::renderLoop(bool autoStart) {
         snapshot_.currentPositionMs = pcmFrame.positionMs + pcmFrame.durationMs;
         if (!firstFrameRendered_) {
             firstFrameRendered_ = true;
-            snapshot_.playing = autoStart;
-            setStateLocked(autoStart ? PlayerState::PLAYING : PlayerState::READY);
+            snapshot_.playing = autoStartOnReady_;
+            setStateLocked(autoStartOnReady_ ? PlayerState::PLAYING : PlayerState::READY);
             log.i("first frame rendered sourceId=%s elapsedMs=%lld autoStart=%d",
                   dataSourceSpec_.sourceId.c_str(),
                   static_cast<long long>(elapsedSincePipelineStartMs()),
-                  autoStart ? 1 : 0);
+                  autoStartOnReady_ ? 1 : 0);
             continue;
         }
-        if (bufferingAnnounced && autoStart) {
+        if (bufferingAnnounced && autoStartOnReady_) {
             bufferingAnnounced = false;
             snapshot_.playing = true;
             setStateLocked(PlayerState::PLAYING);

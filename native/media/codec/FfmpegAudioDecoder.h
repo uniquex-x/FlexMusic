@@ -27,6 +27,7 @@ public:
                       std::vector<PcmFrame>* outputFrames,
                       std::string* errorMessage);
     bool flush(std::vector<PcmFrame>* outputFrames, std::string* errorMessage);
+    bool reset(std::string* errorMessage);
     void close();
 
 private:

@@ -66,6 +66,16 @@ public:
         notFullCondition_.notify_all();
     }
 
+    template <typename Fn>
+    void clearWith(Fn onDrop) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (T& value : queue_) {
+            onDrop(value);
+        }
+        queue_.clear();
+        notFullCondition_.notify_all();
+    }
+
     void close() {
         std::lock_guard<std::mutex> lock(mutex_);
         closed_ = true;
