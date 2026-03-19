@@ -45,7 +45,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="@string/settings_equalizer_subtitle"
-            android:textColor="#8B88A1"
+            android:textColor="@color/settings_supporting_text"
             android:textSize="13sp" />
     </LinearLayout>
 
@@ -53,6 +53,6 @@
         android:layout_width="18dp"
         android:layout_height="18dp"
         android:src="@drawable/ic_chevron_right"
-        app:tint="#A39EB8" />
+        app:tint="@color/settings_chevron_tint" />
 
 </LinearLayout>

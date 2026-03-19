@@ -50,10 +50,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            app:cardBackgroundColor="@color/card_background_light"
+            app:cardBackgroundColor="?attr/colorSurface"
             app:cardCornerRadius="22dp"
             app:cardElevation="0dp"
-            app:strokeColor="#ECE7F7"
+            app:strokeColor="@color/settings_card_stroke"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -79,10 +79,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            app:cardBackgroundColor="@color/card_background_light"
+            app:cardBackgroundColor="?attr/colorSurface"
             app:cardCornerRadius="22dp"
             app:cardElevation="0dp"
-            app:strokeColor="#ECE7F7"
+            app:strokeColor="@color/settings_card_stroke"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -207,10 +207,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            app:cardBackgroundColor="@color/card_background_light"
+            app:cardBackgroundColor="?attr/colorSurface"
             app:cardCornerRadius="22dp"
             app:cardElevation="0dp"
-            app:strokeColor="#ECE7F7"
+            app:strokeColor="@color/settings_card_stroke"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -235,10 +235,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            app:cardBackgroundColor="@color/card_background_light"
+            app:cardBackgroundColor="?attr/colorSurface"
             app:cardCornerRadius="22dp"
             app:cardElevation="0dp"
-            app:strokeColor="#ECE7F7"
+            app:strokeColor="@color/settings_card_stroke"
             app:strokeWidth="1dp">
 
             <LinearLayout

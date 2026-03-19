@@ -66,4 +66,10 @@
     <!-- Divider -->
     <color name="divider_light">#E0E0E0</color>
     <color name="divider_dark">#2C2C2C</color>
+
+    <!-- Settings -->
+    <color name="settings_card_stroke">#ECE7F7</color>
+    <color name="settings_supporting_text">#8B88A1</color>
+    <color name="settings_chevron_tint">#A39EB8</color>
+    <color name="settings_warning_icon">#8F6C18</color>
 </resources>

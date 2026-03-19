@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="settings_card_stroke">#2E2A38</color>
+    <color name="settings_supporting_text">#B3ADC9</color>
+    <color name="settings_chevron_tint">#9891B1</color>
+    <color name="settings_warning_icon">#D7B867</color>
+</resources>
