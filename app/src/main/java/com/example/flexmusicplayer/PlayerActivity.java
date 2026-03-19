@@ -7,7 +7,9 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -15,6 +17,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -26,16 +29,20 @@ import com.example.core_domain.lyrics.LyricsLineData;
 import com.example.core_domain.lyrics.LyricsQuery;
 import com.example.core_domain.lyrics.LyricsResult;
 import com.example.flexmusicplayer.databinding.ActivityPlayerBinding;
+import com.example.flexmusicplayer.model.Playlist;
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.player.LyricsLine;
 import com.example.flexmusicplayer.player.PlaybackController;
 import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
+import com.example.flexmusicplayer.storage.PlaylistStore;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -64,6 +71,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     private String currentFavoriteSongKey = "";
     private FavoriteSongsStore favoriteSongsStore;
     private FavoriteRadioStore favoriteRadioStore;
+    private PlaylistStore playlistStore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,6 +82,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         playbackController = PlaybackController.getInstance(this);
         favoriteSongsStore = new FavoriteSongsStore(this);
         favoriteRadioStore = new FavoriteRadioStore(this);
+        playlistStore = new PlaylistStore(this);
         mainHandler = new Handler(Looper.getMainLooper());
         lyricsExecutorService = Executors.newSingleThreadExecutor();
         lyricsRepository = new OnlineLyricsRepository();
@@ -90,8 +99,8 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
 
         binding.btnCollapseNowPlaying.setOnClickListener(v -> finish());
         binding.btnCollapseLyrics.setOnClickListener(v -> showNowPlayingScreen());
-        binding.btnMoreNowPlaying.setOnClickListener(v -> showPlaybackQueueDialog());
-        binding.btnMoreLyrics.setOnClickListener(v -> showPlaybackQueueDialog());
+        binding.btnMoreNowPlaying.setOnClickListener(this::showPlayerOptionsMenu);
+        binding.btnMoreLyrics.setOnClickListener(this::showPlayerOptionsMenu);
 
         binding.actionLike.setOnClickListener(v -> toggleFavorite());
         binding.actionSave.setOnClickListener(v -> showToast(getString(R.string.player_save_placeholder)));
@@ -350,6 +359,142 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    private void showPlayerOptionsMenu(@NonNull View anchorView) {
+        PopupMenu popupMenu = new PopupMenu(this, anchorView);
+        popupMenu.inflate(R.menu.menu_player_more);
+        popupMenu.getMenu()
+                .findItem(R.id.action_playback_speed)
+                .setTitle(getString(
+                        R.string.player_menu_speed,
+                        formatSpeed(playbackController.getPlayerState().getPlaybackSpeed())));
+        popupMenu.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.action_add_to_playlist) {
+                showAddToPlaylistDialog();
+                return true;
+            }
+            if (itemId == R.id.action_share) {
+                shareCurrentSong();
+                return true;
+            }
+            if (itemId == R.id.action_playback_speed) {
+                showPlaybackSpeedDialog();
+                return true;
+            }
+            return false;
+        });
+        popupMenu.show();
+    }
+
+    private void showAddToPlaylistDialog() {
+        Song currentSong = playbackController.getPlayerState().getCurrentSong();
+        if (currentSong == null) {
+            return;
+        }
+        List<Playlist> playlists = playlistStore.loadPlaylists();
+        if (playlists.isEmpty()) {
+            showCreatePlaylistDialog(currentSong);
+            return;
+        }
+        CharSequence[] items = new CharSequence[playlists.size() + 1];
+        items[0] = getString(R.string.playlist_create_and_add);
+        for (int index = 0; index < playlists.size(); index++) {
+            Playlist playlist = playlists.get(index);
+            items[index + 1] = playlist.getName() + "  (" + getString(R.string.songs_count, playlist.getSongCount()) + ")";
+        }
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.playlist_choose_target)
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        showCreatePlaylistDialog(currentSong);
+                        return;
+                    }
+                    Playlist targetPlaylist = playlists.get(which - 1);
+                    PlaylistStore.AddSongResult result =
+                            playlistStore.addSongToPlaylist(targetPlaylist.getId(), currentSong);
+                    if (result == PlaylistStore.AddSongResult.ADDED) {
+                        showToast(getString(R.string.playlist_song_added));
+                    } else if (result == PlaylistStore.AddSongResult.ALREADY_EXISTS) {
+                        showToast(getString(R.string.playlist_song_exists));
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void showCreatePlaylistDialog(@NonNull Song currentSong) {
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_create_playlist, null);
+        EditText nameInput = dialogView.findViewById(R.id.playlist_name_input);
+        EditText descriptionInput = dialogView.findViewById(R.id.playlist_description_input);
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.create_playlist)
+                .setView(dialogView)
+                .setPositiveButton(R.string.save, null)
+                .setNegativeButton(R.string.cancel, null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String name = nameInput.getText().toString().trim();
+            String description = descriptionInput.getText().toString().trim();
+            if (TextUtils.isEmpty(name)) {
+                nameInput.setError(getString(R.string.playlist_name_required));
+                return;
+            }
+            playlistStore.createPlaylistWithSong(name, description, currentSong);
+            showToast(getString(R.string.playlist_song_added));
+            dialog.dismiss();
+        }));
+        dialog.show();
+    }
+
+    private void shareCurrentSong() {
+        Song currentSong = playbackController.getPlayerState().getCurrentSong();
+        if (currentSong == null) {
+            return;
+        }
+        String artist = TextUtils.isEmpty(currentSong.getArtist())
+                ? getString(R.string.player_unknown_artist)
+                : currentSong.getArtist();
+        String shareText = getString(R.string.player_share_text, currentSong.getTitle(), artist);
+        if (!TextUtils.isEmpty(currentSong.getAudioUrl())) {
+            shareText = shareText + "\n" + currentSong.getAudioUrl();
+        }
+        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+        shareIntent.setType("text/plain");
+        shareIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+        startActivity(Intent.createChooser(shareIntent, getString(R.string.player_share_chooser)));
+    }
+
+    private void showPlaybackSpeedDialog() {
+        float[] speedValues = {0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+        String[] speedLabels = new String[speedValues.length];
+        int checkedIndex = 1;
+        float currentSpeed = playbackController.getPlayerState().getPlaybackSpeed();
+        for (int index = 0; index < speedValues.length; index++) {
+            speedLabels[index] = formatSpeed(speedValues[index]) + "x";
+            if (Math.abs(speedValues[index] - currentSpeed) < 0.001f) {
+                checkedIndex = index;
+            }
+        }
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.player_speed_title)
+                .setSingleChoiceItems(speedLabels, checkedIndex, (dialog, which) -> {
+                    float selectedSpeed = speedValues[which];
+                    playbackController.setPlaybackSpeed(selectedSpeed);
+                    showToast(getString(R.string.player_speed_pending_kernel, formatSpeed(selectedSpeed)));
+                    dialog.dismiss();
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    @NonNull
+    private String formatSpeed(float speed) {
+        if (Math.abs(speed - Math.round(speed)) < 0.001f) {
+            return String.format(Locale.getDefault(), "%d", Math.round(speed));
+        }
+        return String.format(Locale.getDefault(), "%.2f", speed).replaceAll("0+$", "").replaceAll("\\.$", "");
     }
 
     private void showLyricsScreen() {

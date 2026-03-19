@@ -231,6 +231,13 @@ public final class PlaybackController {
         dispatchState();
     }
 
+    public synchronized void setPlaybackSpeed(float playbackSpeed) {
+        float safeSpeed = Math.max(0.5f, Math.min(2.0f, playbackSpeed));
+        playerState.setPlaybackSpeed(safeSpeed);
+        Log.d(TAG, "setPlaybackSpeed speed=" + safeSpeed + " nativeSupported=false");
+        dispatchState();
+    }
+
     public synchronized void skipNext() {
         if (!hasNextInternal()) {
             return;

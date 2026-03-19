@@ -83,9 +83,26 @@
     <string name="delete_playlist">删除歌单</string>
     <string name="add_to_playlist">添加到歌单</string>
     <string name="playlist_name">歌单名称</string>
+    <string name="playlist_description">歌单描述</string>
     <string name="playlist_created">歌单已创建</string>
     <string name="playlist_deleted">歌单已删除</string>
     <string name="songs_count">%d 首歌曲</string>
+    <string name="playlist_meta_with_description">%1$s • %2$d 首歌曲</string>
+    <string name="playlist_song_added">已添加到歌单</string>
+    <string name="playlist_song_exists">这首歌已经在歌单里了</string>
+    <string name="playlist_choose_target">选择歌单</string>
+    <string name="playlist_create_and_add">新建歌单</string>
+    <string name="playlist_name_required">请输入歌单名称</string>
+    <string name="playlist_detail_header">歌单</string>
+    <string name="playlist_detail_badge">精选收藏</string>
+    <string name="playlist_detail_play_all">全部播放</string>
+    <string name="playlist_detail_collected_songs">收藏歌曲</string>
+    <string name="playlist_detail_summary">%1$d 首歌曲 • %2$s</string>
+    <string name="playlist_detail_add_to_other_playlist">添加到其它歌单</string>
+    <string name="playlist_detail_remove_song">从歌单中移除</string>
+    <string name="playlist_detail_removed">已从歌单中移除</string>
+    <string name="playlist_detail_no_other_playlists">请先创建其它歌单</string>
+    <string name="playlist_detail_empty_songs">这个歌单里还没有歌曲</string>
 
     <!-- Settings -->
     <string name="settings_title">设置</string>
@@ -149,6 +166,13 @@
     <string name="player_no_lyrics">暂未找到这首歌的同步歌词</string>
     <string name="player_loading_lyrics">正在加载歌词…</string>
     <string name="player_buffering_after_seek">正在缓存中，请稍后</string>
+    <string name="player_menu_add_to_playlist">添加到歌单</string>
+    <string name="player_menu_share">分享</string>
+    <string name="player_menu_speed">倍速：%1$sx</string>
+    <string name="player_speed_title">播放倍速</string>
+    <string name="player_share_text">%1$s - %2$s</string>
+    <string name="player_share_chooser">分享歌曲</string>
+    <string name="player_speed_pending_kernel">已选择 %1$sx，当前版本先记录倍速状态，原生内核真实变速链路还未接入。</string>
 
     <!-- Common -->
     <string name="search">搜索</string>
@@ -166,4 +190,5 @@
     <string name="confirm">确认</string>
     <string name="done">完成</string>
     <string name="loading">加载中…</string>
+    <string name="my_playlists_empty">还没有歌单，创建一个来收藏歌曲</string>
 </resources>

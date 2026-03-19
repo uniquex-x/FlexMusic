@@ -18,6 +18,7 @@ import com.example.flexmusicplayer.ui.FavoritesFragment;
 import com.example.flexmusicplayer.ui.LocalFragment;
 import com.example.flexmusicplayer.ui.MainPageFragment;
 import com.example.flexmusicplayer.ui.MyFragment;
+import com.example.flexmusicplayer.ui.PlaylistDetailFragment;
 import com.example.flexmusicplayer.ui.RecentFragment;
 import com.example.flexmusicplayer.ui.SettingsFragment;
 import com.example.flexmusicplayer.ui.SleepFragment;
@@ -155,8 +156,10 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
                 || fragment instanceof FavoritesFragment
                 || fragment instanceof LocalFragment
                 || fragment instanceof RecentFragment
+                || fragment instanceof PlaylistDetailFragment
                 || fragment instanceof SearchFragment;
-        boolean showBottomNavigation = !(fragment instanceof SearchFragment);
+        boolean showBottomNavigation = !(fragment instanceof SearchFragment
+                || fragment instanceof PlaylistDetailFragment);
         boolean hasSong = playbackController.getPlayerState().getCurrentSong() != null;
         binding.bottomNavigation.setVisibility(showBottomNavigation ? View.VISIBLE : View.GONE);
         binding.playerMiniBar.setVisibility(showMiniPlayer && hasSong ? View.VISIBLE : View.GONE);
@@ -188,6 +191,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
                 || currentFragment instanceof FavoritesFragment
                 || currentFragment instanceof RecentFragment
                 || currentFragment instanceof LocalFragment
+                || currentFragment instanceof PlaylistDetailFragment
                 || currentFragment instanceof TranscodeFragment) {
             restoreSelectedRoot();
             return;
@@ -213,6 +217,11 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     @Override
     public void navigateToTranscode() {
         loadSecondaryFragment(new TranscodeFragment());
+    }
+
+    @Override
+    public void navigateToPlaylistDetail(long playlistId) {
+        loadSecondaryFragment(PlaylistDetailFragment.newInstance(playlistId));
     }
 
     @Override

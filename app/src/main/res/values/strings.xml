@@ -80,9 +80,26 @@
     <string name="delete_playlist">Delete Playlist</string>
     <string name="add_to_playlist">Add to Playlist</string>
     <string name="playlist_name">Playlist Name</string>
+    <string name="playlist_description">Description</string>
     <string name="playlist_created">Playlist created</string>
     <string name="playlist_deleted">Playlist deleted</string>
     <string name="songs_count">%d songs</string>
+    <string name="playlist_meta_with_description">%1$s • %2$d songs</string>
+    <string name="playlist_song_added">Added to playlist</string>
+    <string name="playlist_song_exists">This song is already in the playlist</string>
+    <string name="playlist_choose_target">Choose Playlist</string>
+    <string name="playlist_create_and_add">Create Playlist</string>
+    <string name="playlist_name_required">Playlist name is required</string>
+    <string name="playlist_detail_header">Playlist</string>
+    <string name="playlist_detail_badge">CURATED SELECTION</string>
+    <string name="playlist_detail_play_all">Play All</string>
+    <string name="playlist_detail_collected_songs">Collected Songs</string>
+    <string name="playlist_detail_summary">%1$d tracks • %2$s</string>
+    <string name="playlist_detail_add_to_other_playlist">Add to Other Playlist</string>
+    <string name="playlist_detail_remove_song">Remove from Playlist</string>
+    <string name="playlist_detail_removed">Removed from playlist</string>
+    <string name="playlist_detail_no_other_playlists">Create another playlist first</string>
+    <string name="playlist_detail_empty_songs">This playlist has no songs yet</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
@@ -169,6 +186,13 @@
     <string name="player_no_lyrics">No synced lyrics available for this song.</string>
     <string name="player_loading_lyrics">Loading lyrics…</string>
     <string name="player_buffering_after_seek">Buffering, please wait.</string>
+    <string name="player_menu_add_to_playlist">Add to Playlist</string>
+    <string name="player_menu_share">Share</string>
+    <string name="player_menu_speed">Speed: %1$sx</string>
+    <string name="player_speed_title">Playback Speed</string>
+    <string name="player_share_text">%1$s - %2$s</string>
+    <string name="player_share_chooser">Share track</string>
+    <string name="player_speed_pending_kernel">Selected %1$sx. Native time-stretch is not connected yet.</string>
     <string name="player_unknown_artist">Unknown Artist</string>
     <string name="player_unknown_album">Unknown Album</string>
     <string name="player_demo_line_one">Waiting in a car</string>
@@ -291,6 +315,7 @@
     <string name="my_transcode_meta">2 active tasks</string>
     <string name="my_playlists_title">My Playlists</string>
     <string name="my_create_playlist">+ Create</string>
+    <string name="my_playlists_empty">No playlists yet. Create one to save tracks.</string>
 
     <string name="sleep_title">Sleep Mode</string>
     <string name="sleep_ambience_title">Ambience Mixer</string>

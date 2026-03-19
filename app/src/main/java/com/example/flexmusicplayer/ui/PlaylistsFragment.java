@@ -15,8 +15,10 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Playlist;
+import com.example.flexmusicplayer.storage.PlaylistStore;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -31,6 +33,7 @@ public class PlaylistsFragment extends Fragment {
     private MaterialButton createEmptyButton;
     private PlaylistVerticalAdapter playlistsAdapter;
     private List<Playlist> playlists;
+    private PlaylistStore playlistStore;
 
     @Nullable
     @Override
@@ -38,11 +41,18 @@ public class PlaylistsFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_playlists, container, false);
 
+        playlistStore = new PlaylistStore(requireContext());
         initViews(view);
         setupClickListeners();
         loadPlaylists();
 
         return view;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadPlaylists();
     }
 
     private void initViews(View view) {
@@ -67,8 +77,7 @@ public class PlaylistsFragment extends Fragment {
     }
 
     private void loadPlaylists() {
-        // TODO: Load actual playlists from database
-        playlists = createMockPlaylists();
+        playlists = playlistStore.loadPlaylists();
 
         if (playlists.isEmpty()) {
             playlistsRecycler.setVisibility(View.GONE);
@@ -78,24 +87,6 @@ public class PlaylistsFragment extends Fragment {
             emptyState.setVisibility(View.GONE);
             playlistsAdapter.setPlaylists(playlists);
         }
-    }
-
-    private List<Playlist> createMockPlaylists() {
-        List<Playlist> playlists = new ArrayList<>();
-
-        Playlist playlist1 = new Playlist(1, "My Favorites", "My favorite songs collection");
-        playlist1.setCoverUrl("https://example.com/cover1.jpg");
-        playlists.add(playlist1);
-
-        Playlist playlist2 = new Playlist(2, "Workout Mix", "High energy songs for working out");
-        playlist2.setCoverUrl("https://example.com/cover2.jpg");
-        playlists.add(playlist2);
-
-        Playlist playlist3 = new Playlist(3, "Chill Vibes", "Relaxing music for chilling");
-        playlist3.setCoverUrl("https://example.com/cover3.jpg");
-        playlists.add(playlist3);
-
-        return playlists;
     }
 
     private void showCreatePlaylistDialog() {
@@ -108,32 +99,25 @@ public class PlaylistsFragment extends Fragment {
         AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.create_playlist)
                 .setView(dialogView)
-                .setPositiveButton(R.string.save, (d, which) -> {
-                    String name = nameInput.getText().toString().trim();
-                    String description = descriptionInput.getText().toString().trim();
-
-                    if (!TextUtils.isEmpty(name)) {
-                        createPlaylist(name, description);
-                    }
-                })
+                .setPositiveButton(R.string.save, null)
                 .setNegativeButton(R.string.cancel, null)
                 .create();
-
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String name = nameInput.getText().toString().trim();
+            String description = descriptionInput.getText().toString().trim();
+            if (TextUtils.isEmpty(name)) {
+                nameInput.setError(getString(R.string.playlist_name_required));
+                return;
+            }
+            createPlaylist(name, description);
+            dialog.dismiss();
+        }));
         dialog.show();
     }
 
     private void createPlaylist(String name, String description) {
-        Playlist newPlaylist = new Playlist(System.currentTimeMillis(), name, description);
-        playlists.add(newPlaylist);
-
-        if (playlists.size() == 1) {
-            playlistsRecycler.setVisibility(View.VISIBLE);
-            emptyState.setVisibility(View.GONE);
-        }
-
-        playlistsAdapter.setPlaylists(playlists);
-
-        // TODO: Save to database
+        playlistStore.createPlaylist(name, description);
+        loadPlaylists();
     }
 
     private void showPlaylistOptions(Playlist playlist) {
@@ -166,24 +150,27 @@ public class PlaylistsFragment extends Fragment {
         nameInput.setText(playlist.getName());
         descriptionInput.setText(playlist.getDescription());
 
-        new MaterialAlertDialogBuilder(requireContext())
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.edit_playlist)
                 .setView(dialogView)
-                .setPositiveButton(R.string.save, (d, which) -> {
-                    String name = nameInput.getText().toString().trim();
-                    String description = descriptionInput.getText().toString().trim();
-
-                    if (!TextUtils.isEmpty(name)) {
-                        playlist.setName(name);
-                        playlist.setDescription(description);
-                        playlist.setModifiedDate(System.currentTimeMillis());
-                        playlistsAdapter.notifyDataSetChanged();
-
-                        // TODO: Update in database
-                    }
-                })
+                .setPositiveButton(R.string.save, null)
                 .setNegativeButton(R.string.cancel, null)
-                .show();
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String name = nameInput.getText().toString().trim();
+            String description = descriptionInput.getText().toString().trim();
+            if (TextUtils.isEmpty(name)) {
+                nameInput.setError(getString(R.string.playlist_name_required));
+                return;
+            }
+            playlist.setName(name);
+            playlist.setDescription(description);
+            playlist.setModifiedDate(System.currentTimeMillis());
+            playlistStore.updatePlaylist(playlist);
+            loadPlaylists();
+            dialog.dismiss();
+        }));
+        dialog.show();
     }
 
     private void showDeletePlaylistDialog(Playlist playlist) {
@@ -198,15 +185,8 @@ public class PlaylistsFragment extends Fragment {
     }
 
     private void deletePlaylist(Playlist playlist) {
-        playlists.remove(playlist);
-        playlistsAdapter.setPlaylists(playlists);
-
-        if (playlists.isEmpty()) {
-            playlistsRecycler.setVisibility(View.GONE);
-            emptyState.setVisibility(View.VISIBLE);
-        }
-
-        // TODO: Delete from database
+        playlistStore.deletePlaylist(playlist.getId());
+        loadPlaylists();
     }
 
     private class PlaylistVerticalAdapter extends RecyclerView.Adapter<PlaylistVerticalAdapter.ViewHolder> {
@@ -252,10 +232,19 @@ public class PlaylistsFragment extends Fragment {
 
             public void bind(Playlist playlist) {
                 playlistName.setText(playlist.getName());
-                songCount.setText(getString(R.string.songs_count, playlist.getSongCount()));
+                if (TextUtils.isEmpty(playlist.getDescription())) {
+                    songCount.setText(getString(R.string.songs_count, playlist.getSongCount()));
+                } else {
+                    songCount.setText(getString(
+                            R.string.playlist_meta_with_description,
+                            playlist.getDescription(),
+                            playlist.getSongCount()));
+                }
 
                 itemView.setOnClickListener(v -> {
-                    // TODO: Open playlist
+                    if (getActivity() instanceof MainActivity) {
+                        ((MainActivity) getActivity()).navigateToPlaylistDetail(playlist.getId());
+                    }
                 });
 
                 itemView.findViewById(R.id.options_button).setOnClickListener(v -> {

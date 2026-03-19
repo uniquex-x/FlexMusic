@@ -226,6 +226,17 @@
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
             tools:listitem="@layout/item_playlist_vertical" />
 
+        <TextView
+            android:id="@+id/playlists_empty_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:text="@string/my_playlists_empty"
+            android:textColor="#8B88A1"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
     </LinearLayout>
 
 </androidx.core.widget.NestedScrollView>
