@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.ChipGroup;
@@ -68,7 +69,7 @@ public class TranscodeFragment extends Fragment {
         startTranscodeButton = view.findViewById(R.id.btn_start_transcode);
         transcodeAgainButton = view.findViewById(R.id.btn_transcode_again);
         formatChipGroup = view.findViewById(R.id.transcode_format_group);
-        backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        backButton.setOnClickListener(v -> navigateBack());
         view.findViewById(R.id.btn_remove_selected_file).setOnClickListener(v -> clearSelectedFile());
     }
 
@@ -147,5 +148,13 @@ public class TranscodeFragment extends Fragment {
             return "wav";
         }
         return "mp3";
+    }
+
+    private void navigateBack() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onBackPressed();
+            return;
+        }
+        requireActivity().finish();
     }
 }

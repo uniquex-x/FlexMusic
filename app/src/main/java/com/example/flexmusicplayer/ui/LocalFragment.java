@@ -102,7 +102,7 @@ public class LocalFragment extends Fragment {
         artistsRecycler = view.findViewById(R.id.artists_recycler);
         emptyState = view.findViewById(R.id.empty_state);
         loadingState = view.findViewById(R.id.loading_state);
-        backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        backButton.setOnClickListener(v -> navigateBack());
         localMusicStore = new LocalMusicStore(requireContext());
         favoriteSongsStore = new FavoriteSongsStore(requireContext());
 
@@ -139,6 +139,14 @@ public class LocalFragment extends Fragment {
                 getString(R.string.local_upload_success) + " (" + uris.size() + " files)",
                 Snackbar.LENGTH_SHORT).show();
         loadLocalMusic();
+    }
+
+    private void navigateBack() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onBackPressed();
+            return;
+        }
+        requireActivity().finish();
     }
 
     private void setupTabLayout() {

@@ -86,7 +86,7 @@ public class FavoritesFragment extends Fragment {
         radiosTabText = view.findViewById(R.id.tab_radios_text);
         songsTabIndicator = view.findViewById(R.id.tab_songs_indicator);
         radiosTabIndicator = view.findViewById(R.id.tab_radios_indicator);
-        backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        backButton.setOnClickListener(v -> navigateBack());
         favoriteSongsStore = new FavoriteSongsStore(requireContext());
         favoriteRadioStore = new FavoriteRadioStore(requireContext());
 
@@ -133,6 +133,14 @@ public class FavoritesFragment extends Fragment {
             emptyState.setVisibility(View.GONE);
             favoritesAdapter.setSongs(favorites, selectedTab);
         }
+    }
+
+    private void navigateBack() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onBackPressed();
+            return;
+        }
+        requireActivity().finish();
     }
 
     private void updateTabUi() {

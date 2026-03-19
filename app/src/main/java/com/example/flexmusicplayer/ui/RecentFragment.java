@@ -56,7 +56,7 @@ public class RecentFragment extends Fragment implements RecentPlaybackStore.List
         recentRecycler = view.findViewById(R.id.recent_recycler);
         emptyState = view.findViewById(R.id.empty_state);
         browseButton = view.findViewById(R.id.browse_button);
-        backButton.setOnClickListener(v -> requireActivity().getOnBackPressedDispatcher().onBackPressed());
+        backButton.setOnClickListener(v -> navigateBack());
 
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         recentRecycler.setLayoutManager(layoutManager);
@@ -111,6 +111,14 @@ public class RecentFragment extends Fragment implements RecentPlaybackStore.List
         }
 
         recentAdapter.notifyDataSetChanged();
+    }
+
+    private void navigateBack() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).onBackPressed();
+            return;
+        }
+        requireActivity().finish();
     }
 
     private String getDateLabel(long dateKey) {
