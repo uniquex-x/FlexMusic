@@ -300,6 +300,7 @@ public final class PlaybackController {
             return;
         }
         Log.d(TAG, "onSourceResolved sourceId=" + resolvedSource.getSourceId()
+                + " originalUrl=" + resolvedSource.getOriginalUrl()
                 + " resolvedUrl=" + resolvedSource.getResolvedUrl()
                 + " local=" + resolvedSource.isLocalSource()
                 + " seekable=" + resolvedSource.isSeekable());

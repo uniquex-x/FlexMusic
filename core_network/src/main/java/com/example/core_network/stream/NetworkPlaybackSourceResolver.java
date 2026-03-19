@@ -1,6 +1,7 @@
 package com.example.core_network.stream;
 
 import android.text.TextUtils;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -15,6 +16,7 @@ import java.util.Map;
 
 public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
 
+    private static final String TAG = "PlaybackSourceResolver";
     private static final long CACHE_TTL_MS = 2 * 60 * 1000L;
 
     private final AudioStreamProbeApi audioStreamProbeApi;
@@ -49,38 +51,49 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver {
                     0L);
         }
 
-        ResolvedPlayableSource cachedSource = getCachedSource(originalUrl);
-        if (cachedSource != null) {
-            return cachedSource;
+        Log.d(TAG, "skip cold-start probe sourceId=" + request.getSourceId()
+                + " url=" + originalUrl
+                + " live=" + request.isLiveStream());
+        String playbackUrl = originalUrl;
+        if (shouldUseSeekableProxy(request, originalUrl)) {
+            try {
+                SeekablePlaybackProxyServer.ProxySessionHandle proxySessionHandle =
+                        SeekablePlaybackProxyServer.getInstance().openSession(
+                                request.getSourceId(),
+                                originalUrl,
+                                AudioStreamProbeApi.DEFAULT_USER_AGENT);
+                playbackUrl = proxySessionHandle.getLocalUrl();
+                Log.d(TAG, "use seekable proxy sourceId=" + request.getSourceId()
+                        + " remoteUrl=" + originalUrl
+                        + " localUrl=" + playbackUrl);
+            } catch (IOException ioException) {
+                Log.w(TAG, "seekable proxy open failed sourceId=" + request.getSourceId()
+                        + " url=" + originalUrl, ioException);
+            }
         }
+        return new ResolvedPlayableSource(
+                request.getSourceId(),
+                originalUrl,
+                playbackUrl,
+                "",
+                AudioStreamProbeApi.DEFAULT_USER_AGENT,
+                request.isLiveStream(),
+                false,
+                !request.isLiveStream(),
+                0L);
+    }
 
-        try {
-            AudioStreamProbeResult result = audioStreamProbeApi.probe(originalUrl);
-            boolean liveStream = resolveLiveStreamFlag(request, result);
-            ResolvedPlayableSource resolvedSource = new ResolvedPlayableSource(
-                    request.getSourceId(),
-                    originalUrl,
-                    result.getResolvedUrl(),
-                    result.getContentType(),
-                    AudioStreamProbeApi.DEFAULT_USER_AGENT,
-                    liveStream,
-                    false,
-                    !liveStream,
-                    result.getProbeLatencyMs());
-            cacheResolvedSource(originalUrl, resolvedSource);
-            return resolvedSource;
-        } catch (IOException probeError) {
-            return new ResolvedPlayableSource(
-                    request.getSourceId(),
-                    originalUrl,
-                    originalUrl,
-                    "",
-                    AudioStreamProbeApi.DEFAULT_USER_AGENT,
-                    request.isLiveStream(),
-                    false,
-                    !request.isLiveStream(),
-                    -1L);
+    private boolean shouldUseSeekableProxy(@NonNull PlaybackRequest request, @NonNull String originalUrl) {
+        if (request.isLiveStream()) {
+            return false;
         }
+        String normalizedUrl = originalUrl.toLowerCase(Locale.ROOT);
+        return !(normalizedUrl.contains(".m3u8")
+                || normalizedUrl.contains(".m3u")
+                || normalizedUrl.contains(".pls")
+                || normalizedUrl.contains(".xspf")
+                || normalizedUrl.contains("/live")
+                || normalizedUrl.contains("playlist"));
     }
 
     private boolean resolveLiveStreamFlag(@NonNull PlaybackRequest request,

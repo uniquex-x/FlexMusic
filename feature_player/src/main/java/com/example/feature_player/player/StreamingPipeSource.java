@@ -1,6 +1,7 @@
 package com.example.feature_player.player;
 
 import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -34,7 +35,8 @@ final class StreamingPipeSource implements AutoCloseable {
 
     @NonNull
     static StreamingPipeSource open(@NonNull ResolvedPlayableSource source) throws IOException {
-        // This transport is kept as an HTTPS fallback when FFmpeg direct open fails.
+        // This transport remains a single-shot HTTPS fallback when the native FFmpeg path
+        // fails during prepare.
         ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
         ParcelFileDescriptor readSide = pipe[0];
         ParcelFileDescriptor writeSide = pipe[1];
@@ -70,6 +72,8 @@ final class StreamingPipeSource implements AutoCloseable {
     private void streamToPipe(@NonNull ResolvedPlayableSource source,
                               @NonNull ParcelFileDescriptor writeSide) {
         HttpURLConnection localConnection = null;
+        long connectStartedAt = SystemClock.elapsedRealtime();
+        boolean firstChunkLogged = false;
         try (OutputStream outputStream = new ParcelFileDescriptor.AutoCloseOutputStream(writeSide)) {
             URL url = new URL(source.getResolvedUrl());
             localConnection = (HttpURLConnection) url.openConnection();
@@ -77,13 +81,17 @@ final class StreamingPipeSource implements AutoCloseable {
             localConnection.setConnectTimeout(CONNECT_TIMEOUT_MS);
             localConnection.setReadTimeout(READ_TIMEOUT_MS);
             localConnection.setInstanceFollowRedirects(true);
+            localConnection.setUseCaches(false);
             localConnection.setRequestMethod("GET");
             if (!source.getUserAgent().isEmpty()) {
                 localConnection.setRequestProperty("User-Agent", source.getUserAgent());
             }
+            localConnection.setRequestProperty("Icy-MetaData", "1");
             localConnection.connect();
             int responseCode = localConnection.getResponseCode();
-            Log.d(TAG, "connected sourceId=" + source.getSourceId() + " code=" + responseCode);
+            Log.d(TAG, "connected sourceId=" + source.getSourceId()
+                    + " code=" + responseCode
+                    + " elapsedMs=" + (SystemClock.elapsedRealtime() - connectStartedAt));
 
             try (InputStream inputStream = localConnection.getInputStream()) {
                 byte[] buffer = new byte[16 * 1024];
@@ -94,6 +102,12 @@ final class StreamingPipeSource implements AutoCloseable {
                     }
                     outputStream.write(buffer, 0, readSize);
                     outputStream.flush();
+                    if (!firstChunkLogged) {
+                        firstChunkLogged = true;
+                        Log.d(TAG, "first chunk sourceId=" + source.getSourceId()
+                                + " bytes=" + readSize
+                                + " elapsedMs=" + (SystemClock.elapsedRealtime() - connectStartedAt));
+                    }
                 }
             }
             Log.d(TAG, "stream finished sourceId=" + source.getSourceId());

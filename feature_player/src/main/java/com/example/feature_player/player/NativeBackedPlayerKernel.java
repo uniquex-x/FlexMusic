@@ -99,6 +99,7 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
         currentSource = nativePlaybackSource;
         currentHttpsUsingPipeFallback = nativeSourceDescriptor.httpsPipeFallback;
         Log.d(TAG, "prepare sourceId=" + nativePlaybackSource.getSourceId()
+                + " originalUrl=" + nativePlaybackSource.getOriginalUrl()
                 + " url=" + nativePlaybackSource.getResolvedUrl()
                 + " transport=" + nativeSourceDescriptor.transportName
                 + " local=" + nativePlaybackSource.isLocalSource()
@@ -232,8 +233,8 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
         String scheme = uri.getScheme();
         if ("https".equalsIgnoreCase(scheme)) {
             if (useHttpsPipeFallback) {
-                // HTTPS normally goes straight to FFmpeg. Keep the Java pipe path as a
-                // single-shot fallback when the native transport fails during prepare.
+                // Keep the Java pipe path as a single-shot fallback when the native HTTPS
+                // transport fails during prepare.
                 activeStreamingPipeSource = StreamingPipeSource.open(source);
                 Log.w(TAG, "fallback to https pipe sourceId=" + source.getSourceId()
                         + " url=" + source.getResolvedUrl());
@@ -245,7 +246,12 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
                         true,
                         "pipe_fd");
             }
-            Log.d(TAG, "prefer ffmpeg https sourceId=" + source.getSourceId()
+            Log.d(TAG, "prefer ffmpeg network sourceId=" + source.getSourceId()
+                    + " url=" + source.getResolvedUrl());
+            return new NativeSourceDescriptor(-1, 0L, -1L, false, false, "ffmpeg");
+        }
+        if ("http".equalsIgnoreCase(scheme)) {
+            Log.d(TAG, "prefer ffmpeg network sourceId=" + source.getSourceId()
                     + " url=" + source.getResolvedUrl());
             return new NativeSourceDescriptor(-1, 0L, -1L, false, false, "ffmpeg");
         }

@@ -18,7 +18,16 @@ namespace source {
 namespace {
 
 constexpr int kAvioBufferSize = 32 * 1024;
+constexpr int kLowLatencyAvioBufferSize = 4 * 1024;
 constexpr char kAvioTag[] = "AvioDataSource";
+
+int resolveAvioBufferSize(const flexmusic::io::DataSourceSpec& spec) {
+    std::string scheme = flexmusic::io::resolveScheme(spec.resolvedUrl);
+    if (!spec.seekable && (scheme == "http" || scheme == "https")) {
+        return kLowLatencyAvioBufferSize;
+    }
+    return kAvioBufferSize;
+}
 
 } // namespace
 
@@ -57,7 +66,8 @@ bool AvioDataSource::open(std::unique_ptr<flexmusic::io::IFileIo> fileIo,
         return false;
     }
 
-    buffer_ = static_cast<uint8_t*>(av_malloc(kAvioBufferSize));
+    const int avioBufferSize = resolveAvioBufferSize(spec);
+    buffer_ = static_cast<uint8_t*>(av_malloc(avioBufferSize));
     if (buffer_ == nullptr) {
         fileIo->close();
         if (errorMessage != nullptr) {
@@ -70,7 +80,7 @@ bool AvioDataSource::open(std::unique_ptr<flexmusic::io::IFileIo> fileIo,
     spec_ = spec;
     context_ = avio_alloc_context(
             buffer_,
-            kAvioBufferSize,
+            avioBufferSize,
             0,
             this,
             &AvioDataSource::readPacket,
@@ -91,12 +101,13 @@ bool AvioDataSource::open(std::unique_ptr<flexmusic::io::IFileIo> fileIo,
     }
     const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startedAt).count();
-    log.i("open success sourceId=%s url=%s impl=%s elapsedMs=%lld seekable=%d",
+    log.i("open success sourceId=%s url=%s impl=%s elapsedMs=%lld seekable=%d avioBuffer=%d",
           spec.sourceId.c_str(),
           spec.resolvedUrl.c_str(),
           fileIo_->implementationName(),
           static_cast<long long>(elapsedMs),
-          spec.seekable ? 1 : 0);
+          spec.seekable ? 1 : 0,
+          avioBufferSize);
     return true;
 }
 

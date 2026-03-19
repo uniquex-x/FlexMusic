@@ -54,6 +54,12 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
     av_dict_set(&options, "reconnect", "1", 0);
     av_dict_set(&options, "reconnect_streamed", "1", 0);
     av_dict_set(&options, "timeout", "5000000", 0);
+    av_dict_set(&options, "rw_timeout", "5000000", 0);
+    av_dict_set(&options, "icy", "1", 0);
+    av_dict_set(&options, "multiple_requests", "1", 0);
+    if (!spec.seekable) {
+        av_dict_set(&options, "seekable", "0", 0);
+    }
 
     int result = avio_open2(&ioContext_, spec.resolvedUrl.c_str(), AVIO_FLAG_READ, nullptr, &options);
     av_dict_free(&options);
@@ -77,10 +83,11 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
     }
     const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startedAt).count();
-    log.i("open success sourceId=%s url=%s elapsedMs=%lld",
+    log.i("open success sourceId=%s url=%s elapsedMs=%lld seekable=%d",
           spec.sourceId.c_str(),
           spec.resolvedUrl.c_str(),
-          static_cast<long long>(elapsedMs));
+          static_cast<long long>(elapsedMs),
+          spec.seekable ? 1 : 0);
     return true;
 }
 

@@ -31,6 +31,21 @@ bool FdFileIo::open(const DataSourceSpec& spec, std::string* errorMessage) {
     startOffset_ = spec.fdStartOffset;
     length_ = spec.fdLength;
     position_ = 0;
+    seekable_ = spec.seekable;
+
+    if (!seekable_) {
+        if (startOffset_ != 0) {
+            if (errorMessage != nullptr) {
+                *errorMessage = "Unseekable detached fd cannot honor a non-zero start offset";
+            }
+            close();
+            return false;
+        }
+        if (errorMessage != nullptr) {
+            errorMessage->clear();
+        }
+        return true;
+    }
 
     if (lseek(fd_, startOffset_, SEEK_SET) < 0) {
         if (errorMessage != nullptr) {
@@ -54,6 +69,7 @@ void FdFileIo::close() {
     startOffset_ = 0;
     length_ = -1;
     position_ = 0;
+    seekable_ = false;
 }
 
 bool FdFileIo::isOpen() const {
@@ -85,6 +101,9 @@ int64_t FdFileIo::seek(int64_t offset, int whence) {
     }
     if (whence == AVSEEK_SIZE) {
         return resolveLogicalSize();
+    }
+    if (!seekable_) {
+        return -1;
     }
 
     int64_t targetPosition = 0;
@@ -124,6 +143,9 @@ const char* FdFileIo::implementationName() const {
 int64_t FdFileIo::resolveLogicalSize() const {
     if (length_ >= 0) {
         return length_;
+    }
+    if (!seekable_) {
+        return -1;
     }
     struct stat fileStat {};
     if (fstat(fd_, &fileStat) != 0) {

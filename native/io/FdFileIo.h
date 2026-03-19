@@ -24,6 +24,7 @@ private:
     int64_t startOffset_ = 0;
     int64_t length_ = -1;
     int64_t position_ = 0;
+    bool seekable_ = false;
 };
 
 class FdFileIoFactory final : public IFileIoFactory {

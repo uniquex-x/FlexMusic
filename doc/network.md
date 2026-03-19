@@ -38,6 +38,38 @@
 
 如果这些步骤全部在点击后串行发生，用户体感就会明显超过 2 秒。
 
+本项目最近两轮实测可以更具体地说明这一点：
+
+1. 第一阶段
+- Java 侧先做同步 probe，再进入 native
+- 同一条 URL 在点击后被“探测一次 + 真正打开一次”
+- 结果是典型双重冷启动
+
+2. 第二阶段
+- 去掉了阻塞 probe
+- 但改成默认 Java pipe 后，首播仍然偏慢
+- 新日志显示远端首字节约 `1260ms`
+- 这说明真正的下限已经被上游 TTFB 卡住
+
+3. 第三阶段
+- 恢复在线音频必须 seekable 的要求
+- 引入本地 loopback HTTP 代理，向播放器暴露 `Range`
+- 远端真实网络请求由 Java 网络栈处理，FFmpeg 只连 localhost
+- 这条链路的目标是同时满足：
+  - 保留 seek
+  - 利用 Java 栈更快的首连
+  - 为后续 warmup / 小块预读复用同一层代理
+
+4. 第四阶段
+- 日志证明“自动 warmup 完成后再放行首播”会把首播卡到 `4s+`
+- 因此冷启动代理必须走透明转发，不能等待预读完成
+- warmup 只能作为显式 warm path，而不是 cold path 默认步骤
+
+结论：
+
+- 对未预热的远端资源，`点击后 < 1s 出声` 不能只靠“调 demux 参数”实现
+- 当远端 TTFB 已经接近或超过 `1s` 时，只有“点击前预热 / 连接复用 / 本地缓存代理”才可能把体感压到 `1s` 内
+
 ### 2.2 当前代码组织的问题
 
 1. 搜索、在线播放、电台查询没有共享统一的网络客户端和请求策略。
@@ -63,6 +95,22 @@
 1. 搜索请求具备防抖、结果缓存、在途去重。
 2. 联网音频点击播放后，链路尽量从“点击后全量串行”改成“点击前可复用、点击后最短路径”。
 3. 关键链路具备超时、重试、快速失败和候选回退。
+4. 指标定义必须区分：
+   - cold start 点击到首声
+   - warm start 点击到首声
+   - 远端 TTFB
+   - demux ready
+   - first PCM
+   - first render
+
+说明：
+
+- `cold start < 1s` 不是靠拍脑袋写目标就能达成的
+- 如果上游首字节就要 `1.2s`，那这个目标只适用于：
+  - 已预连
+  - 已预探测
+  - 已有本地前置缓存
+  - 已有同 host 复用连接
 
 ## 3.3 架构目标
 
@@ -180,6 +228,17 @@
 - 获取首包耗时
 - 获取是否为 HLS / MP3 / AAC / Redirect
 
+约束更新：
+
+- probe 不应默认落在“点击播放的同步关键路径”上
+- probe 更适合：
+  - 列表曝光后的后台预热
+  - 下一首预热
+  - 候选源可用性排序
+  - 失败后回退决策
+
+不要再把 probe 作为每次冷启动的必经步骤
+
 ### `resolver/EndpointResolver`
 
 负责多域名 / 多镜像切换：
@@ -258,6 +317,108 @@
 `UI 点击`
 -> `PrepareOnlinePlaybackUseCase`
 -> `OnlineAudioRepository`
+
+再细化为两条模式：
+
+#### A. 冷启动最短路径
+
+`UI 点击`
+-> `ResolvePlayableSourceUseCase`
+-> 创建 seekable loopback proxy session
+-> 返回 localhost proxy URL 与基础元数据
+-> `feature_player` 走 native ffmpeg
+-> native 直接建链
+-> 尽快首帧/首声
+
+这条链路的原则是：
+
+- 不做阻塞 probe
+- 非 live 渐进式音频优先通过本地代理保留 seekable
+- 代理层负责：
+  - Range 转发
+  - 未来的小块预读与连接复用
+  - 冷启动透明转发
+- 只保留必要的错误日志和 fallback
+
+#### B. 预热链路
+
+`列表曝光 / 当前项高亮 / 即将自动播放下一首`
+-> `NetworkWarmupManager`
+-> 预连接
+-> 预探测
+-> 小块预读
+-> 记录 warm handle / metrics
+-> 点击后复用现成结果
+
+只有 B 链路到位后，`<1s` 才会从“运气好能碰到”变成“有工程保证的目标”。
+
+这也是 `ijkplayer` / `VLC` 一类播放器给我们的启发：
+
+- `ijkplayer`
+  - 暴露 `packet-buffering`、`infbuf`、`find_stream_info`、多级 high-water mark 等参数
+  - 说明它把“读线程缓冲”和“首播/卡顿恢复策略”作为独立治理问题，而不是只依赖一次 `prepare`
+- `VLC`
+  - 长期区分 `network-caching` 和 `live-network-caching`
+  - 说明 seekable 网络源与 live / non-seekable 源不应使用同一套缓存策略
+
+对本项目的直接结论是：
+
+- seekable 在线音频：
+  - 需要独立代理 / 缓存层来保留 Range 能力
+  - 更适合 warm path、带缓存、允许更完整元数据
+- non-seekable 在线音频：
+  - 更适合 live / radio 类源
+  - 不应再拿来覆盖“普通可 seek 在线歌曲”的主路径
+
+## 6.3 当前实现落点
+
+当前代码已经开始向这个方向收口：
+
+1. 冷启动默认不再做阻塞 probe
+2. 非 live 渐进式 `http/https` 默认优先创建本地 seekable proxy URL
+3. 代理层支持：
+   - `Range` 转发
+   - localhost 暴露 seekable HTTP
+   - 冷启动透明转发
+4. 直接 FFmpeg 网络路径仍保留：
+   - `multiple_requests=1`
+   - `seekable=0` 仅用于明确非 seekable 的直连 fallback
+5. `StreamingPipeSource` 仅保留为 HTTPS fallback
+
+这还不是最终方案，因为 `<1s` 仍然被上游 TTFB 约束。
+
+## 6.4 下一阶段网络优化项
+
+接下来应优先做这些能力，而不是继续单纯堆 FFmpeg option：
+
+1. `NetworkWarmupManager`
+- 暴露：
+  - `warm(url)`
+  - `warmNext(playQueue, currentIndex)`
+  - `consumeWarmResult(url)`
+
+2. 连接复用
+- 统一客户端，不要每次都新建孤立网络栈
+- 记录 host 级 warm 命中率
+
+3. 小块预读 / ring buffer
+- 预热阶段先拿首 `32KB ~ 128KB`
+- 由本地代理直接把首块喂给 localhost 请求，减少首包等待
+
+4. 候选源排序
+- 同一内容有多个 CDN / 镜像时，按近期 TTFB、失败率、地区命中率排序
+
+5. 指标体系
+- 强制记录：
+  - source resolve
+  - network connect
+  - first byte
+  - demux open
+  - first packet
+  - first decoded pcm
+  - first render
+
+没有这套指标，就无法判断是网络、容器、解码还是渲染在拖时间
 -> `AudioStreamProbeApi`
 -> `ResolvedPlayableSource`
 -> `PlaybackController`

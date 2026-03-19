@@ -2,6 +2,8 @@
 
 #include "../../core/logger/logger.h"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -26,6 +28,45 @@ std::string avErrorToString(int errorCode) {
     char buffer[AV_ERROR_MAX_STRING_SIZE] = {0};
     av_strerror(errorCode, buffer, sizeof(buffer));
     return std::string(buffer);
+}
+
+std::string toLowerCopy(const std::string& value) {
+    std::string result = value;
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char current) {
+        return static_cast<char>(std::tolower(current));
+    });
+    return result;
+}
+
+bool isProgressiveAudioLowLatencyCandidate(const flexmusic::io::DataSourceSpec& spec) {
+    const std::string scheme = flexmusic::io::resolveScheme(spec.resolvedUrl);
+    if (spec.seekable || (scheme != "http" && scheme != "https")) {
+        return false;
+    }
+
+    const std::string resolvedUrl = toLowerCopy(spec.resolvedUrl);
+    if (resolvedUrl.find(".m3u8") != std::string::npos
+            || resolvedUrl.find(".m3u") != std::string::npos
+            || resolvedUrl.find(".pls") != std::string::npos
+            || resolvedUrl.find(".xspf") != std::string::npos
+            || resolvedUrl.find("/live") != std::string::npos
+            || resolvedUrl.find("playlist") != std::string::npos) {
+        return false;
+    }
+
+    const std::string contentType = toLowerCopy(spec.contentType);
+    if (contentType.find("mpegurl") != std::string::npos
+            || contentType.find("vnd.apple.mpegurl") != std::string::npos
+            || contentType.find("application/x-mpegurl") != std::string::npos) {
+        return false;
+    }
+
+    return resolvedUrl.find(".mp3") != std::string::npos
+            || resolvedUrl.find(".aac") != std::string::npos
+            || resolvedUrl.find(".m4a") != std::string::npos
+            || resolvedUrl.find(".ogg") != std::string::npos
+            || resolvedUrl.find(".opus") != std::string::npos
+            || contentType.find("audio/") != std::string::npos;
 }
 
 } // namespace
@@ -60,10 +101,19 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
     formatContext_->pb->seekable = dataSource->spec().seekable ? AVIO_SEEKABLE_NORMAL : 0;
 
     AVDictionary* options = nullptr;
-    av_dict_set(&options, "probesize", "32768", 0);
-    av_dict_set(&options, "analyzeduration", "200000", 0);
+    const bool lowLatencyOpen = isProgressiveAudioLowLatencyCandidate(dataSource->spec());
+    av_dict_set(&options, "probesize", lowLatencyOpen ? "4096" : "32768", 0);
+    av_dict_set(&options, "analyzeduration", lowLatencyOpen ? "0" : "200000", 0);
+    if (lowLatencyOpen) {
+        av_dict_set(&options, "fpsprobesize", "0", 0);
+        av_dict_set(&options, "max_probe_packets", "1", 0);
+    }
     av_dict_set(&options, "fflags", "nobuffer", 0);
     av_dict_set(&options, "flush_packets", "1", 0);
+    log.i("open tuning sourceId=%s url=%s lowLatency=%d",
+          dataSource->spec().sourceId.c_str(),
+          dataSource->spec().resolvedUrl.c_str(),
+          lowLatencyOpen ? 1 : 0);
 
     const auto openInputStartedAt = std::chrono::steady_clock::now();
     int result = avformat_open_input(&formatContext_, nullptr, nullptr, &options);
