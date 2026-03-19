@@ -48,4 +48,5 @@ dependencies {
     implementation project(":core_domain")
     implementation project(":core_network")
     implementation project(":feature_player")
+    implementation project(":feature_search")
 }

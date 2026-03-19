@@ -15,6 +15,7 @@ import com.example.core_domain.player.PlayerKernel;
 import com.example.core_domain.player.PlayerKernelSnapshot;
 import com.example.core_domain.player.PlayerKernelState;
 import com.example.core_domain.player.ResolvedPlayableSource;
+import com.example.core_domain.search.SearchTrack;
 import com.example.core_network.stream.NetworkPlaybackSourceResolver;
 import com.example.feature_player.player.FeaturePlayerFactory;
 import com.example.flexmusicplayer.model.PlayerState;
@@ -111,6 +112,26 @@ public final class PlaybackController {
         List<Song> single = new ArrayList<>();
         single.add(song);
         playQueue(single, 0);
+    }
+
+    public synchronized void playSearchTrack(@NonNull SearchTrack track,
+                                             @NonNull PlaybackRequest request) {
+        Song song = new Song(
+                Math.abs((long) request.getSourceId().hashCode()),
+                track.getTitle(),
+                TextUtils.join(" / ", track.getArtistNames()),
+                track.getAlbumName(),
+                (int) track.getDurationMs(),
+                request.getOriginalUrl());
+        song.setAlbumArtUrl(track.getCoverUrl());
+        song.setLocal(false);
+        song.setRadioStream(request.isLiveStream());
+        song.setSourceId(request.getSourceId());
+        Log.d(TAG, "playSearchTrack trackId=" + track.getTrackId()
+                + " providerId=" + track.getProviderId()
+                + " sourceId=" + request.getSourceId()
+                + " url=" + request.getOriginalUrl());
+        playSong(song);
     }
 
     public synchronized void playQueue(@NonNull List<Song> songs, int index) {

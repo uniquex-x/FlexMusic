@@ -23,6 +23,7 @@ import java.util.List;
 
 public class MainPageFragment extends Fragment {
 
+    private View searchBarContainer;
     private RecyclerView resultsRecycler;
     private SearchResultAdapter adapter;
 
@@ -34,6 +35,7 @@ public class MainPageFragment extends Fragment {
 
         ImageButton settingsButton = view.findViewById(R.id.btn_settings);
         ImageButton avatarButton = view.findViewById(R.id.btn_avatar);
+        searchBarContainer = view.findViewById(R.id.search_bar_container);
         resultsRecycler = view.findViewById(R.id.results_recycler);
 
         settingsButton.setOnClickListener(v -> openSettings());
@@ -41,6 +43,7 @@ public class MainPageFragment extends Fragment {
             BottomNavigationView navigationView = requireActivity().findViewById(R.id.bottom_navigation);
             navigationView.setSelectedItemId(R.id.nav_my);
         });
+        searchBarContainer.setOnClickListener(v -> openSearch());
 
         resultsRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
         resultsRecycler.setNestedScrollingEnabled(false);
@@ -54,6 +57,12 @@ public class MainPageFragment extends Fragment {
     private void openSettings() {
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).openSettings();
+        }
+    }
+
+    private void openSearch() {
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).openSearch();
         }
     }
 

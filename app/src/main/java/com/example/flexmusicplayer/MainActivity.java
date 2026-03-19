@@ -22,9 +22,14 @@ import com.example.flexmusicplayer.ui.RecentFragment;
 import com.example.flexmusicplayer.ui.SettingsFragment;
 import com.example.flexmusicplayer.ui.SleepFragment;
 import com.example.flexmusicplayer.ui.TranscodeFragment;
+import com.example.feature_search.ISearchHost;
+import com.example.feature_search.ui.SearchFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
-public class MainActivity extends AppCompatActivity implements MyFragment.NavigationCallback {
+import com.example.core_domain.player.PlaybackRequest;
+import com.example.core_domain.search.SearchTrack;
+
+public class MainActivity extends AppCompatActivity implements MyFragment.NavigationCallback, ISearchHost {
 
     private static final String PREFS_NAME = "FlexMusicPrefs";
     private ActivityMainBinding binding;
@@ -158,6 +163,15 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         }
     }
 
+    public void openSearch() {
+        SearchFragment fragment = new SearchFragment();
+        FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+        transaction.replace(R.id.fragment_container, fragment);
+        transaction.addToBackStack("search");
+        transaction.commit();
+        updateChromeForFragment(fragment);
+    }
+
     public void openSettings() {
         loadSecondaryFragment(new SettingsFragment());
     }
@@ -194,6 +208,13 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     @Override
     public void navigateToTranscode() {
         loadSecondaryFragment(new TranscodeFragment());
+    }
+
+    @Override
+    public void onSearchPlaybackRequested(@NonNull SearchTrack track,
+                                          @NonNull PlaybackRequest playbackRequest) {
+        playbackController.playSearchTrack(track, playbackRequest);
+        getSupportFragmentManager().popBackStack();
     }
 
     @Override

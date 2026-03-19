@@ -29,6 +29,8 @@ dependencies {
 
     implementation libs.appcompat
     implementation libs.material
+    implementation project(":core_domain")
+    implementation project(":core_data")
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core

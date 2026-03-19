@@ -2,15 +2,33 @@ plugins {
     id 'com.android.library'
 }
 
+import java.util.Properties
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { inputStream ->
+        localProperties.load(inputStream)
+    }
+}
+
 android {
     namespace 'com.example.core_network'
     compileSdk 28
+
+    def jamendoClientId = (
+            localProperties.getProperty("jamendo.clientId")
+                    ?: project.findProperty("jamendoClientId")
+                    ?: System.getenv("JAMENDO_CLIENT_ID")
+                    ?: ""
+    ).toString()
 
     defaultConfig {
         minSdk 21
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
+        buildConfigField "String", "JAMENDO_CLIENT_ID", "\"${jamendoClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
     }
 
     buildTypes {
@@ -22,6 +40,9 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+    }
+    buildFeatures {
+        buildConfig true
     }
 }
 
