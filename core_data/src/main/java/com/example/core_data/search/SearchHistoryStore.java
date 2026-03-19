@@ -56,6 +56,10 @@ public class SearchHistoryStore {
         return history;
     }
 
+    public synchronized void clearHistory() {
+        sharedPreferences.edit().remove(KEY_HISTORY).apply();
+    }
+
     @NonNull
     private String encodeHistory(@NonNull List<String> history) {
         JSONArray jsonArray = new JSONArray();

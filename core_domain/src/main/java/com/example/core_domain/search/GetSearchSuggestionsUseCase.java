@@ -26,4 +26,8 @@ public final class GetSearchSuggestionsUseCase {
     public List<String> getHistory() {
         return suggestionRepository.getHistory();
     }
+
+    public void clearHistory() {
+        suggestionRepository.clearHistory();
+    }
 }

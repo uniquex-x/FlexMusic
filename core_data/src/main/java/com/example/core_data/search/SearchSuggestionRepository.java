@@ -45,4 +45,9 @@ public class SearchSuggestionRepository implements ISearchSuggestionRepository {
     public List<String> getHistory() {
         return searchHistoryStore.readHistory();
     }
+
+    @Override
+    public void clearHistory() {
+        searchHistoryStore.clearHistory();
+    }
 }

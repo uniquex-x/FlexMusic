@@ -43,4 +43,8 @@ public final class SearchViewModel {
     public List<String> loadHistory() {
         return getSearchSuggestionsUseCase.getHistory();
     }
+
+    public void clearHistory() {
+        getSearchSuggestionsUseCase.clearHistory();
+    }
 }

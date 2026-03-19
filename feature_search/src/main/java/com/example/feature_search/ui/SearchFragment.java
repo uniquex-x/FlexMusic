@@ -12,14 +12,14 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
-import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import com.example.core_data.search.OnlineSearchRepository;
@@ -35,6 +35,9 @@ import com.example.core_domain.search.SearchUseCase;
 import com.example.feature_search.R;
 import com.example.feature_search.ISearchHost;
 import com.example.feature_search.action.SearchPlaybackCoordinator;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -51,9 +54,12 @@ public class SearchFragment extends Fragment {
     private SearchPlaybackCoordinator searchPlaybackCoordinator;
 
     private EditText searchInput;
+    private TextView resultCountView;
     private TextView statusView;
-    private LinearLayout suggestionContainer;
-    private ListView resultListView;
+    private TextView featuredTitleView;
+    private TextView featuredSubtitleView;
+    private ChipGroup suggestionContainer;
+    private LinearLayout resultContainer;
     private SearchResultAdapter resultAdapter;
 
     @Override
@@ -88,18 +94,35 @@ public class SearchFragment extends Fragment {
 
     private void initViews(@NonNull View rootView) {
         searchInput = rootView.findViewById(R.id.search_input);
+        resultCountView = rootView.findViewById(R.id.search_result_count);
         statusView = rootView.findViewById(R.id.search_status);
         suggestionContainer = rootView.findViewById(R.id.search_suggestion_container);
-        resultListView = rootView.findViewById(R.id.search_result_list);
+        resultContainer = rootView.findViewById(R.id.search_result_container);
+        featuredTitleView = rootView.findViewById(R.id.search_featured_title);
+        featuredSubtitleView = rootView.findViewById(R.id.search_featured_subtitle);
         resultAdapter = new SearchResultAdapter(requireContext());
-        resultListView.setAdapter(resultAdapter);
     }
 
     private void bindListeners(@NonNull View rootView) {
-        TextView backButton = rootView.findViewById(R.id.search_back_action);
-        Button searchButton = rootView.findViewById(R.id.search_action);
+        ImageButton backButton = rootView.findViewById(R.id.search_back_action);
+        MaterialButton searchButton = rootView.findViewById(R.id.search_action);
+        TextView clearHistoryButton = rootView.findViewById(R.id.search_clear_history_action);
+        MaterialButton featuredPlayButton = rootView.findViewById(R.id.search_featured_play_action);
         backButton.setOnClickListener(v -> requireActivity().getSupportFragmentManager().popBackStack());
         searchButton.setOnClickListener(v -> submitSearch(searchInput.getText().toString()));
+        clearHistoryButton.setOnClickListener(v -> {
+            searchViewModel.clearHistory();
+            renderSuggestions(Collections.emptyList());
+            loadSuggestions("");
+        });
+        featuredPlayButton.setOnClickListener(v -> {
+            if (resultAdapter.getCount() > 0) {
+                SearchTrack track = resultAdapter.getItem(0);
+                searchInput.setText(track.getTitle());
+                searchInput.setSelection(track.getTitle().length());
+                playTrack(track);
+            }
+        });
         searchInput.setOnEditorActionListener(this::handleEditorAction);
         searchInput.addTextChangedListener(new TextWatcher() {
             @Override
@@ -114,32 +137,6 @@ public class SearchFragment extends Fragment {
             public void afterTextChanged(Editable editable) {
                 loadSuggestions(editable == null ? "" : editable.toString());
             }
-        });
-        resultListView.setOnItemClickListener((parent, view, position, id) -> {
-            SearchTrack track = resultAdapter.getItem(position);
-            statusView.setVisibility(View.VISIBLE);
-            statusView.setText(R.string.feature_search_status_resolving);
-            searchPlaybackCoordinator.play(track, new SearchPlaybackCoordinator.IListener() {
-                @Override
-                public void onPlaybackResolved(@NonNull SearchTrack resolvedTrack,
-                                               @NonNull PlaybackRequest playbackRequest) {
-                    if (!isAdded()) {
-                        return;
-                    }
-                    statusView.setText(R.string.feature_search_status_playing);
-                    searchHost.onSearchPlaybackRequested(resolvedTrack, playbackRequest);
-                }
-
-                @Override
-                public void onPlaybackResolveFailed(@NonNull SearchTrack failedTrack,
-                                                    @NonNull IOException exception) {
-                    if (!isAdded()) {
-                        return;
-                    }
-                    statusView.setVisibility(View.VISIBLE);
-                    statusView.setText(getString(R.string.feature_search_status_playback_failed, exception.getMessage()));
-                }
-            });
         });
     }
 
@@ -156,14 +153,21 @@ public class SearchFragment extends Fragment {
     }
 
     private void submitSearch(@NonNull String keyword) {
+        if (resultCountView == null || statusView == null) {
+            return;
+        }
         String trimmedKeyword = keyword.trim();
         if (TextUtils.isEmpty(trimmedKeyword)) {
             resultAdapter.submitTracks(Collections.emptyList());
+            renderResultCards();
+            resultCountView.setText(R.string.feature_search_status_idle);
             statusView.setVisibility(View.VISIBLE);
             statusView.setText(R.string.feature_search_status_empty_query);
+            updateFeaturedCard(null);
             loadSuggestions("");
             return;
         }
+        resultCountView.setText(R.string.feature_search_status_loading);
         statusView.setVisibility(View.VISIBLE);
         statusView.setText(R.string.feature_search_status_loading);
         final Handler handler = mainHandler;
@@ -182,6 +186,9 @@ public class SearchFragment extends Fragment {
                         return;
                     }
                     resultAdapter.submitTracks(Collections.emptyList());
+                    renderResultCards();
+                    resultCountView.setText(R.string.feature_search_status_idle);
+                    updateFeaturedCard(null);
                     statusView.setVisibility(View.VISIBLE);
                     statusView.setText(getString(R.string.feature_search_status_error, ioException.getMessage()));
                 });
@@ -197,13 +204,16 @@ public class SearchFragment extends Fragment {
         }
         renderSuggestions(history);
         resultAdapter.submitTracks(resultPage.getTracks());
+        renderResultCards();
+        updateFeaturedCard(resultPage);
         if (resultPage.getTracks().isEmpty()) {
+            resultCountView.setText(R.string.feature_search_status_idle);
             statusView.setVisibility(View.VISIBLE);
             statusView.setText(getString(R.string.feature_search_status_no_result, keyword));
             return;
         }
-        statusView.setVisibility(View.VISIBLE);
-        statusView.setText(getString(R.string.feature_search_status_result_count, resultPage.getTracks().size()));
+        resultCountView.setText(getString(R.string.feature_search_status_result_count, resultPage.getTotalCount()));
+        statusView.setVisibility(View.GONE);
     }
 
     private void loadSuggestions(@NonNull String keyword) {
@@ -227,25 +237,97 @@ public class SearchFragment extends Fragment {
         }
         suggestionContainer.removeAllViews();
         if (suggestions.isEmpty()) {
-            TextView emptyView = new TextView(requireContext());
-            emptyView.setText(R.string.feature_search_history_empty);
-            emptyView.setTextColor(0xFF8B88A1);
-            suggestionContainer.addView(emptyView);
             return;
         }
         for (String suggestion : suggestions) {
-            Button button = new Button(requireContext());
-            button.setAllCaps(false);
-            button.setText(suggestion);
-            button.setTextSize(13f);
-            button.setBackgroundResource(android.R.drawable.btn_default_small);
-            button.setOnClickListener(v -> {
+            Chip chip = new Chip(requireContext());
+            chip.setText(suggestion);
+            chip.setTextSize(13f);
+            chip.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.black));
+            chip.setCheckable(false);
+            chip.setClickable(true);
+            chip.setChipBackgroundColorResource(android.R.color.white);
+            chip.setChipCornerRadius(22f);
+            chip.setEnsureMinTouchTargetSize(false);
+            chip.setCloseIconVisible(true);
+            chip.setCloseIconResource(R.drawable.ic_feature_search_close);
+            chip.setCloseIconTintResource(android.R.color.darker_gray);
+            chip.setOnClickListener(v -> {
                 searchInput.setText(suggestion);
                 searchInput.setSelection(suggestion.length());
                 submitSearch(suggestion);
             });
-            suggestionContainer.addView(button);
+            chip.setOnCloseIconClickListener(v -> {
+                searchInput.setText(suggestion);
+                searchInput.setSelection(suggestion.length());
+            });
+            suggestionContainer.addView(chip);
         }
+    }
+
+    private void renderResultCards() {
+        if (!isAdded() || resultContainer == null || resultAdapter == null) {
+            return;
+        }
+        resultContainer.removeAllViews();
+        for (int index = 0; index < resultAdapter.getCount(); index++) {
+            View itemView = resultAdapter.getView(index, null, resultContainer);
+            final SearchTrack track = resultAdapter.getItem(index);
+            itemView.setOnClickListener(v -> playTrack(track));
+            resultContainer.addView(itemView);
+        }
+    }
+
+    private void playTrack(@NonNull SearchTrack track) {
+        statusView.setVisibility(View.VISIBLE);
+        statusView.setText(R.string.feature_search_status_resolving);
+        searchPlaybackCoordinator.play(track, new SearchPlaybackCoordinator.IListener() {
+            @Override
+            public void onPlaybackResolved(@NonNull SearchTrack resolvedTrack,
+                                           @NonNull PlaybackRequest playbackRequest) {
+                if (!isAdded()) {
+                    return;
+                }
+                statusView.setText(R.string.feature_search_status_playing);
+                searchHost.onSearchPlaybackRequested(resolvedTrack, playbackRequest);
+            }
+
+            @Override
+            public void onPlaybackResolveFailed(@NonNull SearchTrack failedTrack,
+                                                @NonNull IOException exception) {
+                if (!isAdded()) {
+                    return;
+                }
+                statusView.setVisibility(View.VISIBLE);
+                statusView.setText(getString(R.string.feature_search_status_playback_failed, exception.getMessage()));
+            }
+        });
+    }
+
+    private void updateFeaturedCard(@Nullable SearchResultPage resultPage) {
+        if (featuredTitleView == null || featuredSubtitleView == null) {
+            return;
+        }
+        if (resultPage == null || resultPage.getTracks().isEmpty()) {
+            featuredTitleView.setText(R.string.feature_search_featured_title);
+            featuredSubtitleView.setText(R.string.feature_search_featured_subtitle);
+            return;
+        }
+        SearchTrack topTrack = resultPage.getTracks().get(0);
+        String featuredTitle = topTrack.getAlbumName().isEmpty() ? topTrack.getTitle() : topTrack.getAlbumName();
+        featuredTitleView.setText(featuredTitle);
+        String subtitle = topTrack.getArtistNames().isEmpty()
+                ? getString(R.string.feature_search_featured_subtitle)
+                : topTrack.getArtistNames().get(0) + " · " + formatYearAndType(topTrack);
+        featuredSubtitleView.setText(subtitle);
+    }
+
+    @NonNull
+    private String formatYearAndType(@NonNull SearchTrack track) {
+        if (track.getDurationMs() > 0L) {
+            return "Single";
+        }
+        return "Featured";
     }
 
     @Override
@@ -258,9 +340,12 @@ public class SearchFragment extends Fragment {
         searchViewModel = null;
         searchPlaybackCoordinator = null;
         suggestionContainer = null;
-        resultListView = null;
+        resultContainer = null;
         resultAdapter = null;
         searchInput = null;
+        resultCountView = null;
+        featuredTitleView = null;
+        featuredSubtitleView = null;
         statusView = null;
         super.onDestroyView();
     }

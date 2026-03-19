@@ -34,4 +34,9 @@ public interface ISearchSuggestionRepository {
      */
     @NonNull
     List<String> getHistory();
+
+    /**
+     * @brief Remove all persisted local search history.
+     */
+    void clearHistory();
 }

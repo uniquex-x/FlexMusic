@@ -153,7 +153,9 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
                 || fragment instanceof FavoritesFragment
                 || fragment instanceof LocalFragment
                 || fragment instanceof RecentFragment;
+        boolean showBottomNavigation = !(fragment instanceof SearchFragment);
         boolean hasSong = playbackController.getPlayerState().getCurrentSong() != null;
+        binding.bottomNavigation.setVisibility(showBottomNavigation ? View.VISIBLE : View.GONE);
         binding.playerMiniBar.setVisibility(showMiniPlayer && hasSong ? View.VISIBLE : View.GONE);
     }
 
