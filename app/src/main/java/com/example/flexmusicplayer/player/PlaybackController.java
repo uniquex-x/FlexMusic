@@ -291,6 +291,15 @@ public final class PlaybackController {
         dispatchState();
     }
 
+    public synchronized void setRepeatMode(@NonNull PlayerState.RepeatMode repeatMode) {
+        if (playerState.getRepeatMode() == repeatMode) {
+            return;
+        }
+        playerState.setRepeatMode(repeatMode);
+        onQueueTopologyChangedLocked();
+        dispatchState();
+    }
+
     public synchronized boolean hasNext() {
         return hasNextInternal();
     }
@@ -361,15 +370,19 @@ public final class PlaybackController {
     }
 
     private void resolveAndPrepare(@NonNull Song song, long generation) {
+        long startedAtMs = System.currentTimeMillis();
         try {
             String source = resolvePlayableSource(song);
             Log.d(TAG, "resolveAndPrepare sourceId=" + resolveSourceId(song) + " source=" + source);
             PlaybackRequest request = new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
             ResolvedPlayableSource resolvedSource = playbackSourceResolver.resolve(request);
-            mainHandler.post(() -> onSourceResolved(generation, resolvedSource));
+            Log.d(TAG, "resolveAndPrepare resolved sourceId=" + resolvedSource.getSourceId()
+                    + " elapsedMs=" + Math.max(System.currentTimeMillis() - startedAtMs, 0L)
+                    + " resolvedUrl=" + resolvedSource.getResolvedUrl());
+            onSourceResolved(generation, resolvedSource);
         } catch (IOException e) {
             Log.e(TAG, "resolveAndPrepare failed sourceId=" + resolveSourceId(song), e);
-            mainHandler.post(() -> onSourceResolveFailed(generation));
+            onSourceResolveFailed(generation);
         }
     }
 
@@ -425,11 +438,19 @@ public final class PlaybackController {
                 break;
             case BUFFERING:
                 playerState.setState(PlayerState.State.LOADING);
-                startProgressTicker();
+                if (currentSong.isRadioStream()) {
+                    stopProgressTicker();
+                } else {
+                    startProgressTicker();
+                }
                 break;
             case PLAYING:
                 playerState.setState(PlayerState.State.PLAYING);
-                startProgressTicker();
+                if (currentSong.isRadioStream()) {
+                    stopProgressTicker();
+                } else {
+                    startProgressTicker();
+                }
                 if (pendingRecentKey.equals(buildPlaybackKey(currentSong))) {
                     recentPlaybackStore.recordPlayback(currentSong);
                     pendingRecentKey = "";

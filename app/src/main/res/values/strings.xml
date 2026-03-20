@@ -341,10 +341,10 @@
     <string name="sleep_feature_title">Midnight Piano</string>
     <string name="sleep_feature_subtitle">Gentle keys for deep resting</string>
     <string name="sleep_default_mix_title">Default Sleep Mix</string>
-    <string name="sleep_default_mix_subtitle">Offline white-noise blend for quick rest</string>
+    <string name="sleep_default_mix_subtitle">Streaming ambience cached locally after first play</string>
     <string name="sleep_default_mix_play">Play Default Mix</string>
     <string name="sleep_default_mix_stop">Stop Default Mix</string>
-    <string name="sleep_offline_ready">Offline ambience loop</string>
+    <string name="sleep_offline_ready">Cached locally after first play</string>
     <string name="sleep_timer_not_set">Not set</string>
     <string name="sleep_recent_title">Recent Sessions</string>
     <string name="sleep_results_title">Radio Results</string>
@@ -353,9 +353,10 @@
     <string name="sleep_play">PLAY</string>
     <string name="sleep_stop">STOP</string>
     <string name="sleep_recent_empty">Your recent sleep sounds and stations will appear here.</string>
-    <string name="sleep_session_idle">Tap play to start the offline default sleep mix.</string>
+    <string name="sleep_session_idle">Tap play to start the default sleep ambience.</string>
     <string name="sleep_session_timer">Timer: %1$s</string>
     <string name="sleep_session_volume">Fade volume %1$d%%</string>
+    <string name="sleep_sound_error">Unable to play this sleep sound right now.</string>
     <string name="sleep_radio_error">Unable to load this station right now.</string>
     <string name="sleep_radio_search_error">Unable to search stations right now.</string>
     <string name="sleep_source_official">Official</string>

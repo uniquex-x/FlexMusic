@@ -60,6 +60,7 @@
     <string name="sleep_fm_no_results">当前调频检索没有匹配结果</string>
     <string name="sleep_default_mix_play">播放默认白噪音</string>
     <string name="sleep_default_mix_stop">停止默认白噪音</string>
+    <string name="sleep_sound_error">当前无法播放该白噪音</string>
 
     <!-- Local -->
     <string name="local_title">本地音乐</string>

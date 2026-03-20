@@ -38,6 +38,62 @@ std::string toLowerCopy(const std::string& value) {
     return result;
 }
 
+bool containsManifestHint(const std::string& resolvedUrl, const std::string& contentType) {
+    if (resolvedUrl.find(".m3u8") != std::string::npos
+            || resolvedUrl.find(".m3u") != std::string::npos
+            || resolvedUrl.find(".pls") != std::string::npos
+            || resolvedUrl.find(".xspf") != std::string::npos
+            || resolvedUrl.find("playlist") != std::string::npos) {
+        return true;
+    }
+    return contentType.find("mpegurl") != std::string::npos
+            || contentType.find("vnd.apple.mpegurl") != std::string::npos
+            || contentType.find("application/x-mpegurl") != std::string::npos;
+}
+
+bool hasProgressiveAudioHint(const std::string& resolvedUrl, const std::string& contentType) {
+    return resolvedUrl.find(".mp3") != std::string::npos
+            || resolvedUrl.find(".aac") != std::string::npos
+            || resolvedUrl.find(".m4a") != std::string::npos
+            || resolvedUrl.find(".ogg") != std::string::npos
+            || resolvedUrl.find(".opus") != std::string::npos
+            || contentType.find("audio/") != std::string::npos;
+}
+
+const AVInputFormat* resolveInputFormatHint(const flexmusic::io::DataSourceSpec& spec,
+                                            std::string* formatHintName) {
+    const std::string resolvedUrl = toLowerCopy(spec.resolvedUrl);
+    const std::string contentType = toLowerCopy(spec.contentType);
+    if (containsManifestHint(resolvedUrl, contentType)) {
+        return nullptr;
+    }
+    if (resolvedUrl.find(".mp3") != std::string::npos
+            || contentType.find("audio/mpeg") != std::string::npos
+            || contentType.find("audio/mp3") != std::string::npos) {
+        if (formatHintName != nullptr) {
+            *formatHintName = "mp3";
+        }
+        return av_find_input_format("mp3");
+    }
+    if (resolvedUrl.find(".aac") != std::string::npos
+            || contentType.find("audio/aac") != std::string::npos
+            || contentType.find("audio/aacp") != std::string::npos) {
+        if (formatHintName != nullptr) {
+            *formatHintName = "aac";
+        }
+        return av_find_input_format("aac");
+    }
+    if (resolvedUrl.find(".ogg") != std::string::npos
+            || contentType.find("audio/ogg") != std::string::npos
+            || contentType.find("application/ogg") != std::string::npos) {
+        if (formatHintName != nullptr) {
+            *formatHintName = "ogg";
+        }
+        return av_find_input_format("ogg");
+    }
+    return nullptr;
+}
+
 bool isProgressiveAudioLowLatencyCandidate(const flexmusic::io::DataSourceSpec& spec) {
     const std::string scheme = flexmusic::io::resolveScheme(spec.resolvedUrl);
     if (spec.seekable || (scheme != "http" && scheme != "https")) {
@@ -45,28 +101,11 @@ bool isProgressiveAudioLowLatencyCandidate(const flexmusic::io::DataSourceSpec& 
     }
 
     const std::string resolvedUrl = toLowerCopy(spec.resolvedUrl);
-    if (resolvedUrl.find(".m3u8") != std::string::npos
-            || resolvedUrl.find(".m3u") != std::string::npos
-            || resolvedUrl.find(".pls") != std::string::npos
-            || resolvedUrl.find(".xspf") != std::string::npos
-            || resolvedUrl.find("/live") != std::string::npos
-            || resolvedUrl.find("playlist") != std::string::npos) {
-        return false;
-    }
-
     const std::string contentType = toLowerCopy(spec.contentType);
-    if (contentType.find("mpegurl") != std::string::npos
-            || contentType.find("vnd.apple.mpegurl") != std::string::npos
-            || contentType.find("application/x-mpegurl") != std::string::npos) {
+    if (containsManifestHint(resolvedUrl, contentType)) {
         return false;
     }
-
-    return resolvedUrl.find(".mp3") != std::string::npos
-            || resolvedUrl.find(".aac") != std::string::npos
-            || resolvedUrl.find(".m4a") != std::string::npos
-            || resolvedUrl.find(".ogg") != std::string::npos
-            || resolvedUrl.find(".opus") != std::string::npos
-            || contentType.find("audio/") != std::string::npos;
+    return hasProgressiveAudioHint(resolvedUrl, contentType);
 }
 
 } // namespace
@@ -102,6 +141,10 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
 
     AVDictionary* options = nullptr;
     const bool lowLatencyOpen = isProgressiveAudioLowLatencyCandidate(dataSource->spec());
+    std::string inputFormatHintName;
+    const AVInputFormat* inputFormatHint = resolveInputFormatHint(
+            dataSource->spec(),
+            &inputFormatHintName);
     av_dict_set(&options, "probesize", lowLatencyOpen ? "4096" : "32768", 0);
     av_dict_set(&options, "analyzeduration", lowLatencyOpen ? "0" : "200000", 0);
     if (lowLatencyOpen) {
@@ -110,13 +153,17 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
     }
     av_dict_set(&options, "fflags", "nobuffer", 0);
     av_dict_set(&options, "flush_packets", "1", 0);
-    log.i("open tuning sourceId=%s url=%s lowLatency=%d",
+    log.i("open tuning sourceId=%s url=%s lowLatency=%d formatHint=%s",
           dataSource->spec().sourceId.c_str(),
           dataSource->spec().resolvedUrl.c_str(),
-          lowLatencyOpen ? 1 : 0);
+          lowLatencyOpen ? 1 : 0,
+          inputFormatHintName.empty() ? "none" : inputFormatHintName.c_str());
 
     const auto openInputStartedAt = std::chrono::steady_clock::now();
-    int result = avformat_open_input(&formatContext_, nullptr, nullptr, &options);
+    const char* formatOpenUrl = dataSource->spec().resolvedUrl.empty()
+            ? nullptr
+            : dataSource->spec().resolvedUrl.c_str();
+    int result = avformat_open_input(&formatContext_, formatOpenUrl, inputFormatHint, &options);
     av_dict_free(&options);
     if (result < 0 || formatContext_ == nullptr) {
         if (errorMessage != nullptr) {

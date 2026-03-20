@@ -1,15 +1,15 @@
 package com.example.flexmusicplayer.sleep;
 
 import android.content.Context;
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioTrack;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.example.core_data.radio.RadioRepository;
+import com.example.core_data.sleep.SleepAudioRepository;
 import com.example.core_domain.radio.RadioStation;
+import com.example.core_domain.sleep.SleepAudioPlaybackSource;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
@@ -17,15 +17,19 @@ import com.example.flexmusicplayer.player.PlaybackController;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Random;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class SleepPlaybackController implements PlaybackController.Listener {
+
+    private static final String TAG = "SleepPlaybackController";
+    private static final String SLEEP_AMBIENCE_SOURCE_PREFIX = "sleep_ambience:";
 
     public interface Listener {
         void onSleepStateChanged(@NonNull SleepPlaybackState state);
@@ -42,9 +46,16 @@ public final class SleepPlaybackController implements PlaybackController.Listene
     private final Set<Listener> listeners = new LinkedHashSet<>();
     private final PlaybackController playbackController;
     private final RadioRepository radioRepository;
+    private final SleepAudioRepository sleepAudioRepository;
     private final ExecutorService radioSearchExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService ambienceExecutor = Executors.newSingleThreadExecutor();
     private final SleepPlaybackState state = new SleepPlaybackState();
-    private final AmbientEngine ambientEngine = new AmbientEngine();
+    @Nullable
+    private SleepPlaybackState lastDispatchedState;
+    private long ambiencePrepareGeneration = 0L;
+    @NonNull
+    private PlayerState.RepeatMode repeatModeBeforeSleep = PlayerState.RepeatMode.OFF;
+    private boolean sleepManagedRepeatMode;
     private final Runnable timerTicker = new Runnable() {
         @Override
         public void run() {
@@ -69,6 +80,7 @@ public final class SleepPlaybackController implements PlaybackController.Listene
                 applyVolume();
 
                 if (remainingSeconds <= 0) {
+                    Log.d(TAG, "timer expired sessionType=" + state.getSessionType());
                     stopCurrentLocked();
                     state.setTimerEndAtMs(0L);
                     state.setTimerRemainingSeconds(0);
@@ -88,6 +100,7 @@ public final class SleepPlaybackController implements PlaybackController.Listene
         appContext = context.getApplicationContext();
         playbackController = PlaybackController.getInstance(appContext);
         radioRepository = new RadioRepository();
+        sleepAudioRepository = new SleepAudioRepository(appContext);
         playbackController.addListener(this);
     }
 
@@ -112,16 +125,30 @@ public final class SleepPlaybackController implements PlaybackController.Listene
         return snapshotState();
     }
 
+    @NonNull
+    public synchronized List<SleepRadioStation> getFeaturedStations() {
+        return SleepRadioCatalog.featuredStations();
+    }
+
     public void searchStations(@Nullable String query, @NonNull SearchCallback callback) {
-        String safeQuery = query == null ? "" : query;
+        String trimmedQuery = query == null ? "" : query.trim();
         radioSearchExecutor.execute(() -> {
+            List<SleepRadioStation> localMatches = SleepRadioCatalog.search(trimmedQuery);
+            if (trimmedQuery.isEmpty()) {
+                mainHandler.post(() -> callback.onSearchResult(SleepRadioCatalog.featuredStations(), null));
+                return;
+            }
+
             try {
-                List<RadioStation> stations = radioRepository.search(safeQuery);
-                List<SleepRadioStation> mappedStations = mapToSleepRadioStations(stations);
-                mainHandler.post(() -> callback.onSearchResult(mappedStations, null));
+                List<RadioStation> stations = radioRepository.search(trimmedQuery);
+                List<SleepRadioStation> mergedStations = mergeStations(mapToSleepRadioStations(stations), localMatches);
+                mainHandler.post(() -> callback.onSearchResult(mergedStations, null));
             } catch (IOException e) {
-                mainHandler.post(() -> callback.onSearchResult(new ArrayList<>(),
-                        appContext.getString(R.string.sleep_radio_search_error)));
+                Log.e(TAG, "searchStations failed query=" + trimmedQuery, e);
+                String errorMessage = localMatches.isEmpty()
+                        ? appContext.getString(R.string.sleep_radio_search_error)
+                        : null;
+                mainHandler.post(() -> callback.onSearchResult(localMatches, errorMessage));
             }
         });
     }
@@ -144,6 +171,7 @@ public final class SleepPlaybackController implements PlaybackController.Listene
     }
 
     public synchronized void playRadio(@NonNull SleepRadioStation station) {
+        Log.d(TAG, "playRadio stationId=" + station.getId() + " stream=" + station.getStreamUrl());
         stopCurrentLocked();
 
         state.setSessionType(SleepPlaybackState.SessionType.RADIO);
@@ -235,19 +263,123 @@ public final class SleepPlaybackController implements PlaybackController.Listene
         state.setErrorMessage(null);
         dispatchState();
 
-        ambientEngine.start(sound, () -> {
-            synchronized (SleepPlaybackController.this) {
-                state.setLoading(false);
-                state.setPlaying(true);
-                state.setErrorMessage(null);
-                dispatchState();
-                ensureTimerTicker();
+        long prepareGeneration = ++ambiencePrepareGeneration;
+        ambienceExecutor.execute(() -> prepareAmbienceSource(sound, prepareGeneration));
+    }
+
+    private void prepareAmbienceSource(@NonNull SleepSound sound, long prepareGeneration) {
+        String assetId = sound.getAssetId();
+        try {
+            if (!sleepAudioRepository.isCached(assetId)) {
+                Log.d(TAG, "cache miss for ambience sound=" + sound.name()
+                        + " assetId=" + assetId
+                        + ", downloading before playback");
+                sleepAudioRepository.cacheForOffline(assetId);
             }
-        });
+            SleepAudioPlaybackSource playbackSource = sleepAudioRepository.resolvePlaybackSource(assetId);
+            Log.d(TAG, "prepareAmbience sound=" + sound.name()
+                    + " assetId=" + assetId
+                    + " source=" + playbackSource.getSource()
+                    + " cached=" + playbackSource.isCached());
+            Song ambienceSong = buildAmbienceSong(sound, playbackSource.getSource());
+            mainHandler.post(() -> startPreparedAmbience(sound, ambienceSong, prepareGeneration));
+        } catch (IOException e) {
+            Log.e(TAG, "prepareAmbience failed sound=" + sound.name() + " assetId=" + assetId, e);
+            mainHandler.post(() -> handleAmbiencePrepareFailed(prepareGeneration, sound));
+        }
+    }
+
+    private void startPreparedAmbience(@NonNull SleepSound sound,
+                                       @NonNull Song ambienceSong,
+                                       long prepareGeneration) {
+        synchronized (this) {
+            if (prepareGeneration != ambiencePrepareGeneration
+                    || state.getSessionType() != SleepPlaybackState.SessionType.AMBIENCE
+                    || state.getCurrentSound() != sound) {
+                return;
+            }
+            rememberAndForceRepeatOneLocked();
+            playbackController.setVolume(state.getVolumeScale());
+            playbackController.playSong(ambienceSong);
+            ensureTimerTicker();
+        }
+    }
+
+    private void handleAmbiencePrepareFailed(long prepareGeneration, @NonNull SleepSound sound) {
+        synchronized (this) {
+            if (prepareGeneration != ambiencePrepareGeneration
+                    || state.getSessionType() != SleepPlaybackState.SessionType.AMBIENCE
+                    || state.getCurrentSound() != sound) {
+                return;
+            }
+            state.setLoading(false);
+            state.setPlaying(false);
+            state.setErrorMessage(appContext.getString(R.string.sleep_sound_error));
+            dispatchState();
+        }
     }
 
     private void pauseMainMusic() {
         playbackController.pause();
+    }
+
+    @NonNull
+    private Song buildAmbienceSong(@NonNull SleepSound sound, @NonNull String localPath) {
+        Song song = new Song(Math.abs((long) (SLEEP_AMBIENCE_SOURCE_PREFIX + sound.name()).hashCode()),
+                resolveSoundTitle(sound),
+                appContext.getString(R.string.sleep_title),
+                resolveSoundSubtitle(sound),
+                0,
+                localPath);
+        song.setLocal(true);
+        song.setDownloaded(true);
+        song.setRadioStream(false);
+        song.setSourceId(buildAmbienceSourceId(sound));
+        return song;
+    }
+
+    @NonNull
+    private String buildAmbienceSourceId(@NonNull SleepSound sound) {
+        return SLEEP_AMBIENCE_SOURCE_PREFIX + sound.name();
+    }
+
+    @Nullable
+    private SleepSound resolveSleepSound(@Nullable Song song) {
+        if (song == null || song.getSourceId() == null) {
+            return null;
+        }
+        String sourceId = song.getSourceId();
+        if (!sourceId.startsWith(SLEEP_AMBIENCE_SOURCE_PREFIX)) {
+            return null;
+        }
+        String enumName = sourceId.substring(SLEEP_AMBIENCE_SOURCE_PREFIX.length());
+        try {
+            return SleepSound.valueOf(enumName);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isSleepAmbienceSong(@Nullable Song song) {
+        return resolveSleepSound(song) != null;
+    }
+
+    private void rememberAndForceRepeatOneLocked() {
+        if (!sleepManagedRepeatMode) {
+            repeatModeBeforeSleep = playbackController.getPlayerState().getRepeatMode();
+            sleepManagedRepeatMode = true;
+        }
+        playbackController.setRepeatMode(PlayerState.RepeatMode.ONE);
+    }
+
+    private void restoreRepeatModeIfNeededLocked() {
+        if (!sleepManagedRepeatMode) {
+            return;
+        }
+        sleepManagedRepeatMode = false;
+        if (playbackController.getPlayerState().getRepeatMode() == PlayerState.RepeatMode.ONE) {
+            playbackController.setRepeatMode(repeatModeBeforeSleep);
+        }
     }
 
     @NonNull
@@ -281,14 +413,33 @@ public final class SleepPlaybackController implements PlaybackController.Listene
                 station.isOfficial());
     }
 
+    @NonNull
+    private List<SleepRadioStation> mergeStations(@NonNull List<SleepRadioStation> primary,
+                                                  @NonNull List<SleepRadioStation> fallback) {
+        Map<String, SleepRadioStation> merged = new LinkedHashMap<>();
+        for (SleepRadioStation station : primary) {
+            merged.put(station.getId(), station);
+        }
+        for (SleepRadioStation station : fallback) {
+            merged.put(station.getId(), station);
+        }
+        return new ArrayList<>(merged.values());
+    }
+
     private void stopCurrentLocked() {
-        ambientEngine.stop();
+        ambiencePrepareGeneration++;
         Song currentSong = playbackController.getPlayerState().getCurrentSong();
-        if (state.getSessionType() == SleepPlaybackState.SessionType.RADIO
+        boolean currentIsSleepAmbience = isSleepAmbienceSong(currentSong);
+        if ((state.getSessionType() == SleepPlaybackState.SessionType.RADIO
                 && currentSong != null
-                && currentSong.isRadioStream()) {
+                && currentSong.isRadioStream())
+                || currentIsSleepAmbience) {
             playbackController.pause();
         }
+        if (state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE || currentIsSleepAmbience) {
+            restoreRepeatModeIfNeededLocked();
+        }
+        Log.d(TAG, "stopCurrent sessionType=" + state.getSessionType());
         state.setPlaying(false);
         state.setLoading(false);
         state.setSessionType(SleepPlaybackState.SessionType.NONE);
@@ -316,10 +467,142 @@ public final class SleepPlaybackController implements PlaybackController.Listene
 
     private void applyVolume() {
         float volume = Math.max(0f, Math.min(1f, state.getVolumeScale()));
-        ambientEngine.setVolume(volume);
         Song currentSong = playbackController.getPlayerState().getCurrentSong();
-        if (currentSong != null && currentSong.isRadioStream()) {
+        if (currentSong != null && (currentSong.isRadioStream() || isSleepAmbienceSong(currentSong))) {
             playbackController.setVolume(volume);
+        }
+    }
+
+    @NonNull
+    private SleepPlaybackState snapshotState() {
+        SleepPlaybackState snapshot = new SleepPlaybackState();
+        snapshot.setSessionType(state.getSessionType());
+        snapshot.setPlaying(state.isPlaying());
+        snapshot.setLoading(state.isLoading());
+        snapshot.setFadeOutEnabled(state.isFadeOutEnabled());
+        snapshot.setTimerEndAtMs(state.getTimerEndAtMs());
+        snapshot.setTimerRemainingSeconds(state.getTimerRemainingSeconds());
+        snapshot.setVolumeScale(state.getVolumeScale());
+        snapshot.setCurrentSound(state.getCurrentSound());
+        snapshot.setCurrentStation(state.getCurrentStation());
+        snapshot.setErrorMessage(state.getErrorMessage());
+        return snapshot;
+    }
+
+    private void dispatchState() {
+        SleepPlaybackState snapshot = snapshotState();
+        if (lastDispatchedState != null && sameState(lastDispatchedState, snapshot)) {
+            return;
+        }
+        lastDispatchedState = snapshot;
+        for (Listener listener : listeners) {
+            notifyListener(listener, snapshot);
+        }
+    }
+
+    private void notifyListener(@NonNull Listener listener, @NonNull SleepPlaybackState snapshot) {
+        mainHandler.post(() -> {
+            synchronized (SleepPlaybackController.this) {
+                if (!listeners.contains(listener)) {
+                    return;
+                }
+            }
+            listener.onSleepStateChanged(snapshot);
+        });
+    }
+
+    private boolean sameState(@NonNull SleepPlaybackState left, @NonNull SleepPlaybackState right) {
+        return left.getSessionType() == right.getSessionType()
+                && left.isPlaying() == right.isPlaying()
+                && left.isLoading() == right.isLoading()
+                && left.isFadeOutEnabled() == right.isFadeOutEnabled()
+                && left.getTimerEndAtMs() == right.getTimerEndAtMs()
+                && left.getTimerRemainingSeconds() == right.getTimerRemainingSeconds()
+                && Math.abs(left.getVolumeScale() - right.getVolumeScale()) < 0.0001f
+                && left.getCurrentSound() == right.getCurrentSound()
+                && sameStation(left.getCurrentStation(), right.getCurrentStation())
+                && sameNullableString(left.getErrorMessage(), right.getErrorMessage());
+    }
+
+    private boolean sameStation(@Nullable SleepRadioStation left, @Nullable SleepRadioStation right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        return sameNullableString(left.getId(), right.getId())
+                && sameNullableString(left.getStreamUrl(), right.getStreamUrl());
+    }
+
+    private boolean sameNullableString(@Nullable String left, @Nullable String right) {
+        if (left == null) {
+            return right == null;
+        }
+        return left.equals(right);
+    }
+
+    @Override
+    public synchronized void onPlaybackStateChanged(@NonNull PlayerState playerState) {
+        Song currentSong = playerState.getCurrentSong();
+        SleepSound currentSleepSound = resolveSleepSound(currentSong);
+        if (currentSleepSound != null) {
+            if (state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE
+                    && state.isLoading()
+                    && state.getCurrentSound() != null
+                    && state.getCurrentSound() != currentSleepSound) {
+                Log.d(TAG, "ignore stale ambience callback callbackSound=" + currentSleepSound.name()
+                        + " requestedSound=" + state.getCurrentSound().name()
+                        + " playerState=" + playerState.getState());
+                return;
+            }
+            state.setSessionType(SleepPlaybackState.SessionType.AMBIENCE);
+            state.setCurrentSound(currentSleepSound);
+            state.setCurrentStation(null);
+            state.setPlaying(playerState.isPlaying());
+            state.setLoading(playerState.isLoading());
+            state.setErrorMessage(playerState.getState() == PlayerState.State.ERROR
+                    ? appContext.getString(R.string.sleep_sound_error)
+                    : null);
+            dispatchState();
+            return;
+        }
+
+        if (currentSong != null && currentSong.isRadioStream()) {
+            SleepRadioStation station = findStationById(currentSong.getSourceId());
+            if (station == null) {
+                station = new SleepRadioStation(
+                        currentSong.getSourceId() == null ? currentSong.getTitle() : currentSong.getSourceId(),
+                        currentSong.getTitle(),
+                        currentSong.getArtist(),
+                        currentSong.getArtist(),
+                        currentSong.getAudioUrl(),
+                        false);
+            }
+            state.setSessionType(SleepPlaybackState.SessionType.RADIO);
+            state.setCurrentSound(null);
+            state.setCurrentStation(station);
+            state.setPlaying(playerState.isPlaying());
+            state.setLoading(playerState.isLoading());
+            state.setErrorMessage(playerState.getState() == PlayerState.State.ERROR
+                    ? appContext.getString(R.string.sleep_radio_error)
+                    : null);
+            dispatchState();
+            return;
+        }
+
+        if (state.getSessionType() == SleepPlaybackState.SessionType.RADIO
+                || state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE) {
+            playbackController.setVolume(1f);
+            clearTimerLocked();
+            restoreRepeatModeIfNeededLocked();
+            state.setSessionType(SleepPlaybackState.SessionType.NONE);
+            state.setCurrentSound(null);
+            state.setCurrentStation(null);
+            state.setPlaying(false);
+            state.setLoading(false);
+            state.setErrorMessage(null);
+            dispatchState();
         }
     }
 
@@ -346,233 +629,6 @@ public final class SleepPlaybackController implements PlaybackController.Listene
             return appContext.getString(R.string.sleep_default_mix_subtitle);
         }
         return appContext.getString(R.string.sleep_offline_ready);
-    }
-
-    @NonNull
-    private SleepPlaybackState snapshotState() {
-        SleepPlaybackState snapshot = new SleepPlaybackState();
-        snapshot.setSessionType(state.getSessionType());
-        snapshot.setPlaying(state.isPlaying());
-        snapshot.setLoading(state.isLoading());
-        snapshot.setFadeOutEnabled(state.isFadeOutEnabled());
-        snapshot.setTimerEndAtMs(state.getTimerEndAtMs());
-        snapshot.setTimerRemainingSeconds(state.getTimerRemainingSeconds());
-        snapshot.setVolumeScale(state.getVolumeScale());
-        snapshot.setCurrentSound(state.getCurrentSound());
-        snapshot.setCurrentStation(state.getCurrentStation());
-        snapshot.setErrorMessage(state.getErrorMessage());
-        return snapshot;
-    }
-
-    private void dispatchState() {
-        SleepPlaybackState snapshot = snapshotState();
-        for (Listener listener : listeners) {
-            notifyListener(listener, snapshot);
-        }
-    }
-
-    private void notifyListener(@NonNull Listener listener, @NonNull SleepPlaybackState snapshot) {
-        mainHandler.post(() -> listener.onSleepStateChanged(snapshot));
-    }
-
-    @Override
-    public synchronized void onPlaybackStateChanged(@NonNull PlayerState playerState) {
-        Song currentSong = playerState.getCurrentSong();
-        if (currentSong != null && currentSong.isRadioStream()) {
-            SleepRadioStation station = findStationById(currentSong.getSourceId());
-            if (station == null) {
-                station = new SleepRadioStation(
-                        currentSong.getSourceId() == null ? currentSong.getTitle() : currentSong.getSourceId(),
-                        currentSong.getTitle(),
-                        currentSong.getArtist(),
-                        currentSong.getArtist(),
-                        currentSong.getAudioUrl(),
-                        false);
-            }
-            state.setSessionType(SleepPlaybackState.SessionType.RADIO);
-            state.setCurrentSound(null);
-            state.setCurrentStation(station);
-            state.setPlaying(playerState.isPlaying());
-            state.setLoading(playerState.isLoading());
-            state.setErrorMessage(playerState.getState() == PlayerState.State.ERROR
-                    ? appContext.getString(R.string.sleep_radio_error)
-                    : null);
-            dispatchState();
-            return;
-        }
-
-        if (state.getSessionType() == SleepPlaybackState.SessionType.RADIO) {
-            playbackController.setVolume(1f);
-            clearTimerLocked();
-            state.setSessionType(SleepPlaybackState.SessionType.NONE);
-            state.setCurrentStation(null);
-            state.setPlaying(false);
-            state.setLoading(false);
-            state.setErrorMessage(null);
-            dispatchState();
-        }
-    }
-
-    private static final class AmbientEngine {
-        private static final int SAMPLE_RATE = 44_100;
-        private static final int CHANNEL_COUNT = 2;
-        private static final int BUFFER_FRAMES = 2048;
-
-        private final Object lock = new Object();
-        private volatile boolean running;
-        private volatile float volume = 1f;
-        @Nullable
-        private AudioTrack audioTrack;
-        @Nullable
-        private Thread renderThread;
-
-        void start(@NonNull SleepSound sound, @NonNull Runnable onStarted) {
-            stop();
-            int minBufferSize = AudioTrack.getMinBufferSize(
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_OUT_STEREO,
-                    AudioFormat.ENCODING_PCM_16BIT);
-            int bufferSize = Math.max(minBufferSize, BUFFER_FRAMES * CHANNEL_COUNT * 2);
-            AudioTrack track = new AudioTrack(
-                    AudioManager.STREAM_MUSIC,
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_OUT_STEREO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferSize,
-                    AudioTrack.MODE_STREAM);
-            audioTrack = track;
-            running = true;
-            renderThread = new Thread(() -> renderLoop(sound, track, onStarted), "sleep-ambient-renderer");
-            renderThread.start();
-        }
-
-        void stop() {
-            Thread threadToJoin;
-            AudioTrack trackToRelease;
-            synchronized (lock) {
-                running = false;
-                threadToJoin = renderThread;
-                renderThread = null;
-                trackToRelease = audioTrack;
-                audioTrack = null;
-            }
-            if (threadToJoin != null) {
-                try {
-                    threadToJoin.join(300L);
-                } catch (InterruptedException ignored) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            if (trackToRelease != null) {
-                try {
-                    trackToRelease.pause();
-                    trackToRelease.flush();
-                } catch (IllegalStateException ignored) {
-                }
-                trackToRelease.release();
-            }
-        }
-
-        void setVolume(float volume) {
-            this.volume = volume;
-        }
-
-        private void renderLoop(@NonNull SleepSound sound, @NonNull AudioTrack track, @NonNull Runnable onStarted) {
-            AmbientSynth synth = new AmbientSynth();
-            short[] pcm = new short[BUFFER_FRAMES * CHANNEL_COUNT];
-            track.play();
-            onStarted.run();
-
-            while (running) {
-                for (int frame = 0; frame < BUFFER_FRAMES; frame++) {
-                    float sample = synth.next(sound) * volume;
-                    short left = (short) (clamp(sample * (0.98f + synth.randomSpread())) * 32767);
-                    short right = (short) (clamp(sample * (0.98f - synth.randomSpread())) * 32767);
-                    int index = frame * CHANNEL_COUNT;
-                    pcm[index] = left;
-                    pcm[index + 1] = right;
-                }
-                track.write(pcm, 0, pcm.length);
-            }
-        }
-
-        private float clamp(float value) {
-            return Math.max(-1f, Math.min(1f, value));
-        }
-
-        private static final class AmbientSynth {
-            private final Random random = new Random();
-            private float rainLowPass;
-            private float oceanLowPass;
-            private float windLowPass;
-            private float forestLowPass;
-            private float swellPhase;
-            private float gustPhase;
-            private float chirpPhase;
-
-            float next(@NonNull SleepSound sound) {
-                if (sound == SleepSound.DEFAULT_MIX) {
-                    return clamp(
-                            0.45f * nextRain()
-                                    + 0.25f * nextOcean()
-                                    + 0.15f * nextWind()
-                                    + 0.15f * nextForest());
-                }
-                if (sound == SleepSound.RAIN) {
-                    return nextRain();
-                }
-                if (sound == SleepSound.OCEAN) {
-                    return nextOcean();
-                }
-                if (sound == SleepSound.WIND) {
-                    return nextWind();
-                }
-                return nextForest();
-            }
-
-            float randomSpread() {
-                return (random.nextFloat() - 0.5f) * 0.04f;
-            }
-
-            private float nextRain() {
-                float white = white();
-                rainLowPass = rainLowPass * 0.82f + white * 0.18f;
-                return clamp((white - rainLowPass) * 0.65f);
-            }
-
-            private float nextOcean() {
-                float white = white();
-                oceanLowPass = oceanLowPass * 0.985f + white * 0.015f;
-                swellPhase += 0.00045f;
-                float swell = 0.35f + 0.65f * ((float) Math.sin(swellPhase) * 0.5f + 0.5f);
-                return clamp(oceanLowPass * swell * 0.85f);
-            }
-
-            private float nextWind() {
-                float white = white();
-                windLowPass = windLowPass * 0.96f + white * 0.04f;
-                gustPhase += 0.00018f;
-                float gust = 0.25f + 0.75f * ((float) Math.sin(gustPhase) * 0.5f + 0.5f);
-                return clamp(windLowPass * gust * 0.8f);
-            }
-
-            private float nextForest() {
-                float white = white();
-                forestLowPass = forestLowPass * 0.98f + white * 0.02f;
-                chirpPhase += 0.0016f;
-                float chirpGate = Math.max(0f, (float) Math.sin(chirpPhase));
-                float chirp = (float) Math.sin(chirpPhase * 11f) * chirpGate * 0.12f;
-                return clamp(forestLowPass * 0.45f + chirp);
-            }
-
-            private float white() {
-                return (random.nextFloat() * 2f) - 1f;
-            }
-
-            private float clamp(float value) {
-                return Math.max(-1f, Math.min(1f, value));
-            }
-        }
     }
 
     @NonNull

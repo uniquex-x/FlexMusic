@@ -32,6 +32,7 @@ import com.google.android.material.progressindicator.LinearProgressIndicator;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class SleepFragment extends Fragment implements SleepPlaybackController.Listener {
 
@@ -63,6 +64,9 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
     private boolean searching = false;
     private final Runnable searchRunnable = this::requestStations;
     private String lastErrorMessage = null;
+    @Nullable
+    private String renderedCurrentStationId;
+    private boolean renderedCurrentStationPlaying;
 
     @Nullable
     @Override
@@ -220,10 +224,39 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
                     && state.getSessionType() == SleepPlaybackState.SessionType.RADIO
                     && state.isPlaying();
             action.setText(isCurrent ? getString(R.string.sleep_playing) : getString(R.string.sleep_play));
+            item.setTag(station.getId());
+            action.setTag(station.getId());
 
             item.setOnClickListener(v -> sleepPlaybackController.toggleRadio(station));
             radioResultsContainer.addView(item);
         }
+        renderedCurrentStationId = state.getCurrentStation() != null ? state.getCurrentStation().getId() : null;
+        renderedCurrentStationPlaying = state.getSessionType() == SleepPlaybackState.SessionType.RADIO && state.isPlaying();
+    }
+
+    private void renderStationActions(@NonNull SleepPlaybackState state) {
+        if (radioResultsContainer == null || radioResultsContainer.getChildCount() == 0) {
+            return;
+        }
+        String currentStationId = state.getCurrentStation() != null ? state.getCurrentStation().getId() : null;
+        boolean currentStationPlaying = state.getSessionType() == SleepPlaybackState.SessionType.RADIO && state.isPlaying();
+        if (Objects.equals(renderedCurrentStationId, currentStationId)
+                && renderedCurrentStationPlaying == currentStationPlaying) {
+            return;
+        }
+
+        for (int i = 0; i < radioResultsContainer.getChildCount(); i++) {
+            View item = radioResultsContainer.getChildAt(i);
+            View actionView = item.findViewById(R.id.entry_action);
+            if (!(actionView instanceof TextView)) {
+                continue;
+            }
+            String stationId = (String) item.getTag();
+            boolean isCurrent = currentStationPlaying && stationId != null && stationId.equals(currentStationId);
+            ((TextView) actionView).setText(isCurrent ? getString(R.string.sleep_playing) : getString(R.string.sleep_play));
+        }
+        renderedCurrentStationId = currentStationId;
+        renderedCurrentStationPlaying = currentStationPlaying;
     }
 
     private void scheduleStationSearch(long delayMs) {
@@ -235,10 +268,18 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         if (!isAdded()) {
             return;
         }
+        String query = searchInput != null ? searchInput.getText().toString().trim() : "";
         int requestVersion = ++searchRequestVersion;
+        if (query.isEmpty()) {
+            searching = false;
+            displayedStations.clear();
+            displayedStations.addAll(sleepPlaybackController.getFeaturedStations());
+            renderStations();
+            return;
+        }
+
         searching = true;
         renderStations();
-        String query = searchInput != null ? searchInput.getText().toString().trim() : "";
         sleepPlaybackController.searchStations(query, (stations, errorMessage) -> {
             if (!isAdded() || requestVersion != searchRequestVersion) {
                 return;
@@ -259,11 +300,13 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
             return;
         }
 
-        fadeOutSwitch.setChecked(state.isFadeOutEnabled());
+        if (fadeOutSwitch.isChecked() != state.isFadeOutEnabled()) {
+            fadeOutSwitch.setChecked(state.isFadeOutEnabled());
+        }
         renderDefaultMixButton(state);
         renderTracks(state);
         renderTimer(state);
-        renderStations();
+        renderStationActions(state);
         maybeShowError(state.getErrorMessage());
     }
 

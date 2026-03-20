@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 
@@ -28,6 +29,8 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
 
     private final Context appContext;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final HandlerThread snapshotThread;
+    private final Handler snapshotHandler;
     private final Set<PlayerKernelListener> listeners = new LinkedHashSet<>();
     private final PlayerJNI playerJni = new PlayerJNI();
     private final Runnable snapshotPoller = new Runnable() {
@@ -39,7 +42,7 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
                 }
                 refreshSnapshotLocked(true);
                 if (shouldContinuePollingLocked()) {
-                    mainHandler.postDelayed(this, POLL_INTERVAL_MS);
+                    snapshotHandler.postDelayed(this, POLL_INTERVAL_MS);
                 } else {
                     polling = false;
                 }
@@ -59,6 +62,9 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
 
     NativeBackedPlayerKernel(@NonNull Context appContext) {
         this.appContext = appContext;
+        snapshotThread = new HandlerThread("FlexMusicPlayerKernelPoller");
+        snapshotThread.start();
+        snapshotHandler = new Handler(snapshotThread.getLooper());
     }
 
     @Override
@@ -130,7 +136,6 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
         }
         playerJni.play();
         schedulePollingLocked();
-        refreshSnapshotLocked(true);
     }
 
     @Override
@@ -139,7 +144,7 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
             return;
         }
         playerJni.pause();
-        refreshSnapshotLocked(true);
+        schedulePollingLocked();
     }
 
     @Override
@@ -186,12 +191,12 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
 
     @Override
     public synchronized long getCurrentPosition() {
-        return released ? snapshot.getCurrentPositionMs() : playerJni.getCurrentPosition();
+        return snapshot.getCurrentPositionMs();
     }
 
     @Override
     public synchronized long getDuration() {
-        return released ? snapshot.getDurationMs() : playerJni.getDuration();
+        return snapshot.getDurationMs();
     }
 
     @Override
@@ -202,13 +207,12 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
 
     @Override
     public synchronized boolean isNativeReady() {
-        return !released && playerJni.isReady();
+        return snapshot.isNativeReady();
     }
 
     @NonNull
     @Override
     public synchronized PlayerKernelSnapshot getSnapshot() {
-        refreshSnapshotLocked(false);
         return snapshot;
     }
 
@@ -226,6 +230,7 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
         currentHttpsUsingPipeFallback = false;
         httpsPipeFallbackAttempted = false;
         playerJni.release();
+        snapshotThread.quitSafely();
         snapshot = PlayerKernelSnapshot.idle();
     }
 
@@ -391,8 +396,6 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
 
     private boolean sameSnapshot(@NonNull PlayerKernelSnapshot left, @NonNull PlayerKernelSnapshot right) {
         return left.getState() == right.getState()
-                && left.getCurrentPositionMs() == right.getCurrentPositionMs()
-                && left.getDurationMs() == right.getDurationMs()
                 && left.isSeekable() == right.isSeekable()
                 && left.isNativeReady() == right.isNativeReady()
                 && Objects.equals(left.getCurrentSource(), right.getCurrentSource())
@@ -415,12 +418,12 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
             return;
         }
         polling = true;
-        mainHandler.post(snapshotPoller);
+        snapshotHandler.post(snapshotPoller);
     }
 
     private void stopPollingLocked() {
         polling = false;
-        mainHandler.removeCallbacks(snapshotPoller);
+        snapshotHandler.removeCallbacks(snapshotPoller);
     }
 
     private boolean shouldContinuePollingLocked() {

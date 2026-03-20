@@ -2,24 +2,48 @@
 
 ## 1. 当前状态
 
-当前 `sleep` 页只有静态 UI，入口代码位于：
+当前 `sleep` 模块已经不再是纯静态 UI，入口代码位于：
 
 - `app/src/main/java/com/example/flexmusicplayer/ui/SleepFragment.java`
 - `app/src/main/res/layout/fragment_sleep.xml`
 
-页面已经具备两类交互区域：
+当前已落地能力如下：
 
-1. 氛围音/白噪声卡片
-- 雨声
-- 海浪
-- 风声
-- 森林
+1. 白噪声 / 氛围音播放
+- `SleepPlaybackController` 已接入实际播放链路。
+- `Default Mix` 与 `rainfall / ocean waves / night wind / deep forest` 四个默认氛围音都已切到“远端资源首播拉取 + 本地缓存复用”模式。
+- 首次播放会把资源下载到 `files/sleep_audio_cache`，后续直接走本地文件。
+- 缓存采用 LRU 风格淘汰，当前容量上限为 `80MB`。
+- 白噪声播放统一复用主 `PlaybackController`、底部 mini player 与 `PlayerActivity`，不再单独维护 `MediaPlayer` 分支。
+- 白噪声会话会临时切到单曲循环，退出睡眠播放后恢复用户原重复模式。
 
-2. 电台搜索与推荐区域
-- 搜索框
-- 电台分类卡片
+2. 睡眠计时与淡出
+- 已支持 `15 / 30 / 60` 分钟定时。
+- 已支持最后 `30s` 渐弱淡出。
+- 倒计时由 `SleepPlaybackController` 内部 ticker 驱动，并直接作用到当前 sleep 音频音量。
 
-但目前没有实际播放链路、没有睡眠定时状态机、也没有联网电台目录与在线播放能力。
+3. 电台推荐、搜索与在线播放
+- `FM Results` 在空查询时先直接展示 10 个静态精选且可播的 sample catalog，避免初次进入页面出现空列表。
+- sample catalog 已移除不可播站点，只保留当前验证可播的 Qingting 直播源。
+- 非空查询会走 `RadioRepository` 在线搜索，并与本地精选结果合并兜底。
+- 电台播放已接入主播放器 native 播放链路。
+
+4. 当前已完成的性能修复
+- Sleep 页面已对播放状态做去重分发，避免 radio 进度回调触发整页重复刷新。
+- 电台列表只在搜索结果变化时重建，播放态切换只更新按钮文案。
+- native `FfmpegDemuxer` 已修正对 `.../live/.../*.mp3` 的误判，这类 Qingting 渐进式 MP3 现在会走低时延探测路径，减少首播探测耗时。
+
+5. 目前仍未完成的部分
+- 还没有“恢复上次 sleep 会话”的持久化恢复。
+- 还没有电台收藏、最近收听、服务端官方目录聚合能力。
+- 还没有“电台 + 白噪声混合垫底”的双流模式。
+
+当前代码中的关键落地点：
+
+- `app/src/main/java/com/example/flexmusicplayer/sleep/SleepPlaybackController.java`
+- `app/src/main/java/com/example/flexmusicplayer/sleep/SleepRadioCatalog.java`
+- `core_data/src/main/java/com/example/core_data/sleep/SleepAudioRepository.java`
+- `core_network/src/main/java/com/example/core_network/sleep/SleepAudioRemoteService.java`
 
 ## 2. 目标
 
