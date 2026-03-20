@@ -1,5 +1,33 @@
 apply plugin: 'com.android.application'
 
+import java.util.Properties
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { inputStream ->
+        localProperties.load(inputStream)
+    }
+}
+
+def resolveReleaseConfig = { String localKey, String gradleKey, String envKey ->
+    return (
+            localProperties.getProperty(localKey)
+                    ?: project.findProperty(gradleKey)
+                    ?: System.getenv(envKey)
+                    ?: ""
+    ).toString().trim()
+}
+
+def releaseStoreFilePath = resolveReleaseConfig("release.storeFile", "releaseStoreFile", "FLEXMUSIC_RELEASE_STORE_FILE")
+def releaseStorePassword = resolveReleaseConfig("release.storePassword", "releaseStorePassword", "FLEXMUSIC_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = resolveReleaseConfig("release.keyAlias", "releaseKeyAlias", "FLEXMUSIC_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = resolveReleaseConfig("release.keyPassword", "releaseKeyPassword", "FLEXMUSIC_RELEASE_KEY_PASSWORD")
+def hasReleaseSigning = !releaseStoreFilePath.isEmpty()
+        && !releaseStorePassword.isEmpty()
+        && !releaseKeyAlias.isEmpty()
+        && !releaseKeyPassword.isEmpty()
+
 android {
     namespace 'com.example.flexmusicplayer'
     compileSdk 34
@@ -17,10 +45,27 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(releaseStoreFilePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {
@@ -32,6 +77,15 @@ android {
         viewBinding true
     }
     ndkVersion '25.2.9519653'
+
+    applicationVariants.all { variant ->
+        if (variant.buildType.name != "release") {
+            return
+        }
+        variant.outputs.all { output ->
+            outputFileName = "FlexMusic-${variant.name}-v${variant.versionName}-${variant.versionCode}.apk"
+        }
+    }
 }
 
 dependencies {
