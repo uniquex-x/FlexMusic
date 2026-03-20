@@ -21,3 +21,5 @@ RULES.md
 *.jks
 *.keystore
 */release.md
+*/database.md
+*/doc/database.md

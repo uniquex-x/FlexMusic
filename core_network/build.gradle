@@ -12,6 +12,15 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+def resolveNetworkConfig = { String localKey, String gradleKey, String envKey, String fallbackValue ->
+    return (
+            localProperties.getProperty(localKey)
+                    ?: project.findProperty(gradleKey)
+                    ?: System.getenv(envKey)
+                    ?: fallbackValue
+    ).toString().trim()
+}
+
 android {
     namespace 'com.example.core_network'
     compileSdk 28
@@ -22,6 +31,16 @@ android {
                     ?: System.getenv("JAMENDO_CLIENT_ID")
                     ?: ""
     ).toString()
+    def supabaseUrl = resolveNetworkConfig(
+            "supabase.url",
+            "supabaseUrl",
+            "SUPABASE_URL",
+            "")
+    def supabasePublishableKey = resolveNetworkConfig(
+            "supabase.publishableKey",
+            "supabasePublishableKey",
+            "SUPABASE_PUBLISHABLE_KEY",
+            "")
 
     defaultConfig {
         minSdk 21
@@ -29,6 +48,8 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
         buildConfigField "String", "JAMENDO_CLIENT_ID", "\"${jamendoClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "SUPABASE_PUBLISHABLE_KEY", "\"${supabasePublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
     }
 
     buildTypes {

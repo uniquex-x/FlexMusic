@@ -20,6 +20,10 @@
             android:screenOrientation="portrait" />
         <activity
             android:name=".MainActivity"
+            android:exported="false"
+            android:localeConfig="@xml/locale_config" />
+        <activity
+            android:name=".AuthActivity"
             android:exported="true"
             android:localeConfig="@xml/locale_config">
             <intent-filter>

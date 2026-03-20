@@ -1,7 +1,11 @@
 package com.example.flexmusicplayer;
 
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -27,15 +31,25 @@ import com.example.feature_search.ISearchHost;
 import com.example.feature_search.ui.SearchFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
+import com.example.core_data.auth.SupabaseUserAccountRepository;
+import com.example.core_domain.auth.IUserAccountRepository;
 import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.search.SearchResultPage;
 import com.example.core_domain.search.SearchTrack;
 
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class MainActivity extends AppCompatActivity implements MyFragment.NavigationCallback, ISearchHost {
 
+    private static final String TAG = "MainActivity";
     private static final String PREFS_NAME = "FlexMusicPrefs";
     private ActivityMainBinding binding;
     private PlaybackController playbackController;
+    private IUserAccountRepository userAccountRepository;
+    private final ExecutorService authExecutor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final PlaybackController.Listener playbackListener = this::renderMiniPlayer;
     private final androidx.fragment.app.FragmentManager.OnBackStackChangedListener backStackChangedListener = () ->
             updateChromeForFragment(getSupportFragmentManager().findFragmentById(R.id.fragment_container));
@@ -44,6 +58,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     private boolean lastMiniPlayerHasSong = false;
     private int lastBottomNavigationVisibility = View.VISIBLE;
     private int lastMiniBarVisibility = View.GONE;
+    private boolean mainUiInitialized = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,18 +67,56 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         super.onCreate(savedInstanceState);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        binding.getRoot().setVisibility(View.INVISIBLE);
+        userAccountRepository = new SupabaseUserAccountRepository(this);
+        ensureAuthenticatedThenInit(savedInstanceState);
+    }
+
+    private void ensureAuthenticatedThenInit(Bundle savedInstanceState) {
+        authExecutor.execute(() -> {
+            try {
+                if (userAccountRepository.loadCurrentProfile() == null) {
+                    Log.d(TAG, "ensureAuthenticatedThenInit no active session, redirecting");
+                    runOnMainIfActive(this::openAuthGate);
+                    return;
+                }
+                Log.d(TAG, "ensureAuthenticatedThenInit session restored");
+                runOnMainIfActive(() -> initializeUi(savedInstanceState));
+            } catch (IOException ioException) {
+                Log.w(TAG, "ensureAuthenticatedThenInit failed, redirecting", ioException);
+                runOnMainIfActive(this::openAuthGate);
+            }
+        });
+    }
+
+    private void initializeUi(Bundle savedInstanceState) {
+        if (mainUiInitialized || binding == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        mainUiInitialized = true;
         playbackController = PlaybackController.getInstance(this);
         getSupportFragmentManager().addOnBackStackChangedListener(backStackChangedListener);
-
         setupBottomNavigation();
         setupMiniPlayer();
-
         if (savedInstanceState == null) {
             binding.bottomNavigation.setSelectedItemId(R.id.nav_main_page);
             loadRootFragment(new MainPageFragment());
         } else {
             updateChromeForFragment(getSupportFragmentManager().findFragmentById(R.id.fragment_container));
         }
+        binding.getRoot().setVisibility(View.VISIBLE);
+        if (getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+            playbackController.addListener(playbackListener);
+        }
+    }
+
+    private void openAuthGate() {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        Intent intent = AuthActivity.createIntent(this);
+        startActivity(intent);
+        finish();
     }
 
     private void applySavedTheme() {
@@ -112,7 +165,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     }
 
     private void renderMiniPlayer(@NonNull PlayerState state) {
-        if (binding == null) {
+        if (binding == null || !mainUiInitialized) {
             return;
         }
         Song currentSong = state.getCurrentSong();
@@ -173,6 +226,9 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     }
 
     private void updateChromeForFragment(Fragment fragment) {
+        if (binding == null || playbackController == null) {
+            return;
+        }
         boolean showMiniPlayer = fragment instanceof MainPageFragment
                 || fragment instanceof MyFragment
                 || fragment instanceof SleepFragment
@@ -197,6 +253,9 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     }
 
     private void openPlayerScreen() {
+        if (playbackController == null) {
+            return;
+        }
         if (playbackController.getPlayerState().getCurrentSong() != null) {
             startActivity(PlayerActivity.createIntent(this));
         }
@@ -283,7 +342,10 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
 
     @Override
     protected void onDestroy() {
-        getSupportFragmentManager().removeOnBackStackChangedListener(backStackChangedListener);
+        authExecutor.shutdownNow();
+        if (mainUiInitialized) {
+            getSupportFragmentManager().removeOnBackStackChangedListener(backStackChangedListener);
+        }
         super.onDestroy();
         binding = null;
     }
@@ -291,12 +353,24 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     @Override
     protected void onStart() {
         super.onStart();
-        playbackController.addListener(playbackListener);
+        if (mainUiInitialized && playbackController != null) {
+            playbackController.addListener(playbackListener);
+        }
     }
 
     @Override
     protected void onStop() {
-        playbackController.removeListener(playbackListener);
+        if (mainUiInitialized && playbackController != null) {
+            playbackController.removeListener(playbackListener);
+        }
         super.onStop();
+    }
+
+    private void runOnMainIfActive(@NonNull Runnable action) {
+        mainHandler.post(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                action.run();
+            }
+        });
     }
 }

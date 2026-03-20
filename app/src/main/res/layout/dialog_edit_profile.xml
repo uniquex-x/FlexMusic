@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="8dp">
+
+    <ImageView
+        android:id="@+id/profile_avatar_preview"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_avatar_badge"
+        android:contentDescription="@string/account_avatar"
+        android:padding="18dp"
+        android:src="@drawable/ic_person"
+        android:tint="@color/primary_700" />
+
+    <TextView
+        android:id="@+id/profile_email_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:textColor="?attr/colorOnBackground"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/input_username"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:autofillHints="username"
+        android:hint="@string/account_username_optional"
+        android:importantForAutofill="yes"
+        android:inputType="textPersonName"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/profile_avatar_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/account_avatar_not_selected"
+        android:textColor="#8B88A1"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/btn_select_avatar"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_premium_badge"
+        android:gravity="center"
+        android:minWidth="92dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/account_select_avatar"
+        android:textColor="@color/primary_500"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+</LinearLayout>
