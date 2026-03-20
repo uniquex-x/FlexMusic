@@ -547,6 +547,15 @@ public final class SleepPlaybackController implements PlaybackController.Listene
         Song currentSong = playerState.getCurrentSong();
         SleepSound currentSleepSound = resolveSleepSound(currentSong);
         if (currentSleepSound != null) {
+            if (state.isLoading()
+                    && state.getSessionType() == SleepPlaybackState.SessionType.RADIO
+                    && state.getCurrentStation() != null) {
+                Log.d(TAG, "ignore stale ambience callback while switching to radio callbackSound="
+                        + currentSleepSound.name()
+                        + " requestedStation=" + state.getCurrentStation().getId()
+                        + " playerState=" + playerState.getState());
+                return;
+            }
             if (state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE
                     && state.isLoading()
                     && state.getCurrentSound() != null
@@ -569,6 +578,25 @@ public final class SleepPlaybackController implements PlaybackController.Listene
         }
 
         if (currentSong != null && currentSong.isRadioStream()) {
+            if (state.isLoading()
+                    && state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE
+                    && state.getCurrentSound() != null) {
+                Log.d(TAG, "ignore stale radio callback while switching to ambience callbackStation="
+                        + (currentSong.getSourceId() == null ? currentSong.getTitle() : currentSong.getSourceId())
+                        + " requestedSound=" + state.getCurrentSound().name()
+                        + " playerState=" + playerState.getState());
+                return;
+            }
+            if (state.isLoading()
+                    && state.getSessionType() == SleepPlaybackState.SessionType.RADIO
+                    && state.getCurrentStation() != null
+                    && !sameNullableString(state.getCurrentStation().getId(), currentSong.getSourceId())) {
+                Log.d(TAG, "ignore stale radio callback callbackStation="
+                        + (currentSong.getSourceId() == null ? currentSong.getTitle() : currentSong.getSourceId())
+                        + " requestedStation=" + state.getCurrentStation().getId()
+                        + " playerState=" + playerState.getState());
+                return;
+            }
             SleepRadioStation station = findStationById(currentSong.getSourceId());
             if (station == null) {
                 station = new SleepRadioStation(

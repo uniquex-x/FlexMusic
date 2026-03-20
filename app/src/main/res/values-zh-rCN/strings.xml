@@ -130,6 +130,10 @@
     <string name="settings_download_location">下载位置</string>
     <string name="settings_clear_cache">清除缓存</string>
     <string name="settings_cache_size">缓存大小</string>
+    <string name="settings_cache_size_value">当前占用 %1$s</string>
+    <string name="settings_cache_size_empty">当前占用 0 MB</string>
+    <string name="settings_cache_cleared">缓存已清除</string>
+    <string name="settings_cache_clear_failed">部分缓存文件未能删除</string>
 
     <!-- Appearance Settings -->
     <string name="settings_theme">主题</string>

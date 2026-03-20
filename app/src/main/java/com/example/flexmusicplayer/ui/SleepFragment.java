@@ -28,7 +28,6 @@ import com.example.flexmusicplayer.sleep.SleepSound;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.progressindicator.LinearProgressIndicator;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -47,14 +46,6 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
     private MaterialCardView trackOceanCard;
     private MaterialCardView trackWindCard;
     private MaterialCardView trackForestCard;
-    private TextView trackRainValue;
-    private TextView trackOceanValue;
-    private TextView trackWindValue;
-    private TextView trackForestValue;
-    private LinearProgressIndicator trackRainProgress;
-    private LinearProgressIndicator trackOceanProgress;
-    private LinearProgressIndicator trackWindProgress;
-    private LinearProgressIndicator trackForestProgress;
     private LinearLayout radioResultsContainer;
     private View radioResultsEmpty;
 
@@ -97,14 +88,6 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         trackOceanCard = view.findViewById(R.id.track_ocean_card);
         trackWindCard = view.findViewById(R.id.track_wind_card);
         trackForestCard = view.findViewById(R.id.track_forest_card);
-        trackRainValue = view.findViewById(R.id.track_rain_value);
-        trackOceanValue = view.findViewById(R.id.track_ocean_value);
-        trackWindValue = view.findViewById(R.id.track_wind_value);
-        trackForestValue = view.findViewById(R.id.track_forest_value);
-        trackRainProgress = view.findViewById(R.id.track_rain_progress);
-        trackOceanProgress = view.findViewById(R.id.track_ocean_progress);
-        trackWindProgress = view.findViewById(R.id.track_wind_progress);
-        trackForestProgress = view.findViewById(R.id.track_forest_progress);
 
         radioResultsContainer = view.findViewById(R.id.radio_results_container);
         radioResultsEmpty = view.findViewById(R.id.radio_results_empty);
@@ -318,18 +301,15 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
     }
 
     private void renderTracks(@NonNull SleepPlaybackState state) {
-        updateTrackCard(trackRainCard, trackRainValue, trackRainProgress, state, SleepSound.RAIN, 65);
-        updateTrackCard(trackOceanCard, trackOceanValue, trackOceanProgress, state, SleepSound.OCEAN, 40);
-        updateTrackCard(trackWindCard, trackWindValue, trackWindProgress, state, SleepSound.WIND, 20);
-        updateTrackCard(trackForestCard, trackForestValue, trackForestProgress, state, SleepSound.FOREST, 0);
+        updateTrackCard(trackRainCard, state, SleepSound.RAIN);
+        updateTrackCard(trackOceanCard, state, SleepSound.OCEAN);
+        updateTrackCard(trackWindCard, state, SleepSound.WIND);
+        updateTrackCard(trackForestCard, state, SleepSound.FOREST);
     }
 
     private void updateTrackCard(@NonNull MaterialCardView card,
-                                 @NonNull TextView valueText,
-                                 @NonNull LinearProgressIndicator progressIndicator,
                                  @NonNull SleepPlaybackState state,
-                                 @NonNull SleepSound sound,
-                                 int defaultPercent) {
+                                 @NonNull SleepSound sound) {
         boolean active = state.getSessionType() == SleepPlaybackState.SessionType.AMBIENCE
                 && state.getCurrentSound() == sound
                 && state.isPlaying();
@@ -337,8 +317,6 @@ public class SleepFragment extends Fragment implements SleepPlaybackController.L
         card.setStrokeWidth(active ? dpToPx(2) : dpToPx(1));
         card.setCardBackgroundColor(ContextCompat.getColor(requireContext(),
                 active ? R.color.primary_50 : R.color.card_background_light));
-        valueText.setText(active ? getString(R.string.sleep_playing) : defaultPercent + "%");
-        progressIndicator.setProgress(active ? 100 : defaultPercent);
     }
 
     private void renderTimer(@NonNull SleepPlaybackState state) {

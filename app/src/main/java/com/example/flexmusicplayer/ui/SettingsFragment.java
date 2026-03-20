@@ -1,8 +1,12 @@
 package com.example.flexmusicplayer.ui;
 
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.format.Formatter;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,6 +24,10 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.snackbar.Snackbar;
 
+import java.io.File;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class SettingsFragment extends Fragment {
 
     private static final String PREFS_NAME = "FlexMusicPrefs";
@@ -29,6 +37,7 @@ public class SettingsFragment extends Fragment {
     private static final String THEME_DARK = "dark";
     private static final String LANG_EN = "en";
     private static final String LANG_ZH = "zh";
+    private static final String SLEEP_AUDIO_CACHE_DIRECTORY = "sleep_audio_cache";
 
     private SwitchCompat darkModeSwitch;
     private TextView languageValue;
@@ -36,13 +45,18 @@ public class SettingsFragment extends Fragment {
     private MaterialButtonToggleGroup streamingQualityGroup;
     private MaterialButtonToggleGroup playbackModeGroup;
     private SharedPreferences prefs;
+    private Context appContext;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor();
+    private boolean cacheOperationInFlight;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_settings, container, false);
-        prefs = requireContext().getSharedPreferences(PREFS_NAME, 0);
+        appContext = requireContext().getApplicationContext();
+        prefs = appContext.getSharedPreferences(PREFS_NAME, 0);
 
         initViews(view);
         loadSettings();
@@ -64,7 +78,8 @@ public class SettingsFragment extends Fragment {
         darkModeSwitch.setChecked(isDark);
         languageValue.setText(LANG_ZH.equals(prefs.getString(KEY_LANGUAGE, LANG_EN))
                 ? R.string.settings_language_chinese : R.string.settings_language_english);
-        cacheSizeValue.setText(R.string.settings_cache_size_mock);
+        cacheSizeValue.setText(R.string.loading);
+        refreshCacheSizeAsync();
         streamingQualityGroup.check(R.id.quality_high_btn);
         playbackModeGroup.check(R.id.playback_sequential_btn);
     }
@@ -116,12 +131,139 @@ public class SettingsFragment extends Fragment {
         new AlertDialog.Builder(requireContext())
                 .setTitle(R.string.dialog_clear_cache_title)
                 .setMessage(R.string.dialog_clear_cache_message)
-                .setPositiveButton(R.string.confirm, (dialog, which) -> cacheSizeValue.setText(R.string.settings_cache_size_empty))
+                .setPositiveButton(R.string.confirm, (dialog, which) -> clearCacheAsync())
                 .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
+    private void refreshCacheSizeAsync() {
+        cacheExecutor.execute(() -> {
+            long cacheBytes = measureClearableCacheBytes();
+            String displayText = formatCacheSize(cacheBytes);
+            mainHandler.post(() -> {
+                if (!isAdded() || cacheSizeValue == null) {
+                    return;
+                }
+                cacheSizeValue.setText(displayText);
+            });
+        });
+    }
+
+    private void clearCacheAsync() {
+        if (cacheOperationInFlight) {
+            return;
+        }
+        cacheOperationInFlight = true;
+        cacheSizeValue.setText(R.string.loading);
+        cacheExecutor.execute(() -> {
+            boolean success = clearClearableCache();
+            long remainingBytes = measureClearableCacheBytes();
+            String displayText = formatCacheSize(remainingBytes);
+            mainHandler.post(() -> {
+                cacheOperationInFlight = false;
+                if (!isAdded() || getView() == null || cacheSizeValue == null) {
+                    return;
+                }
+                cacheSizeValue.setText(displayText);
+                Snackbar.make(
+                                getView(),
+                                success ? R.string.settings_cache_cleared : R.string.settings_cache_clear_failed,
+                                Snackbar.LENGTH_SHORT)
+                        .show();
+            });
+        });
+    }
+
+    private long measureClearableCacheBytes() {
+        long totalBytes = 0L;
+        totalBytes += directorySize(appContext.getCacheDir());
+        totalBytes += directorySize(new File(appContext.getFilesDir(), SLEEP_AUDIO_CACHE_DIRECTORY));
+        File[] externalCacheDirectories = appContext.getExternalCacheDirs();
+        if (externalCacheDirectories != null) {
+            for (File directory : externalCacheDirectories) {
+                totalBytes += directorySize(directory);
+            }
+        }
+        return totalBytes;
+    }
+
+    private boolean clearClearableCache() {
+        boolean success = true;
+        success &= clearDirectoryContents(appContext.getCacheDir());
+        success &= clearDirectoryContents(new File(appContext.getFilesDir(), SLEEP_AUDIO_CACHE_DIRECTORY));
+        File[] externalCacheDirectories = appContext.getExternalCacheDirs();
+        if (externalCacheDirectories != null) {
+            for (File directory : externalCacheDirectories) {
+                success &= clearDirectoryContents(directory);
+            }
+        }
+        return success;
+    }
+
+    private long directorySize(@Nullable File directory) {
+        if (directory == null || !directory.exists()) {
+            return 0L;
+        }
+        if (directory.isFile()) {
+            return directory.length();
+        }
+        long totalBytes = 0L;
+        File[] children = directory.listFiles();
+        if (children == null) {
+            return 0L;
+        }
+        for (File child : children) {
+            totalBytes += directorySize(child);
+        }
+        return totalBytes;
+    }
+
+    private boolean clearDirectoryContents(@Nullable File directory) {
+        if (directory == null || !directory.exists()) {
+            return true;
+        }
+        File[] children = directory.listFiles();
+        if (children == null) {
+            return true;
+        }
+        boolean success = true;
+        for (File child : children) {
+            success &= deleteRecursively(child);
+        }
+        return success;
+    }
+
+    private boolean deleteRecursively(@NonNull File target) {
+        boolean success = true;
+        if (target.isDirectory()) {
+            File[] children = target.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    success &= deleteRecursively(child);
+                }
+            }
+        }
+        if (target.exists() && !target.delete()) {
+            success = false;
+        }
+        return success;
+    }
+
+    @NonNull
+    private String formatCacheSize(long cacheBytes) {
+        if (cacheBytes <= 0L) {
+            return getString(R.string.settings_cache_size_empty);
+        }
+        return getString(R.string.settings_cache_size_value, Formatter.formatShortFileSize(appContext, cacheBytes));
+    }
+
     private void showPlaceholder(View root) {
         Snackbar.make(root, R.string.settings_placeholder_message, Snackbar.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onDestroy() {
+        cacheExecutor.shutdownNow();
+        super.onDestroy();
     }
 }

@@ -381,8 +381,10 @@
     <string name="settings_version_value">v2.4.12-pro</string>
     <string name="settings_user_agreement">User Agreement</string>
     <string name="settings_logout">Log Out</string>
-    <string name="settings_cache_size_mock">Currently using 245.8 MB</string>
+    <string name="settings_cache_size_value">Currently using %1$s</string>
     <string name="settings_cache_size_empty">Currently using 0 MB</string>
+    <string name="settings_cache_cleared">Cache cleared</string>
+    <string name="settings_cache_clear_failed">Some cache files could not be removed</string>
     <string name="settings_placeholder_message">UI placeholder only. Logic not connected yet.</string>
 
     <string name="mock_player_title">Midnight Melodies</string>
