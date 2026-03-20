@@ -39,6 +39,11 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     private final PlaybackController.Listener playbackListener = this::renderMiniPlayer;
     private final androidx.fragment.app.FragmentManager.OnBackStackChangedListener backStackChangedListener = () ->
             updateChromeForFragment(getSupportFragmentManager().findFragmentById(R.id.fragment_container));
+    private String lastMiniPlayerSongKey = "";
+    private boolean lastMiniPlayerPlaying = false;
+    private boolean lastMiniPlayerHasSong = false;
+    private int lastBottomNavigationVisibility = View.VISIBLE;
+    private int lastMiniBarVisibility = View.GONE;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,10 +116,26 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
             return;
         }
         Song currentSong = state.getCurrentSong();
-        binding.playerSongTitle.setText(currentSong != null ? currentSong.getTitle() : getString(R.string.mock_player_title));
-        binding.playerArtistName.setText(currentSong != null ? currentSong.getArtist() : getString(R.string.mock_player_artist));
-        binding.playerPlayPause.setImageResource(state.isPlaying() ? R.drawable.ic_pause : R.drawable.ic_play);
-        binding.playerPlayPause.setContentDescription(getString(state.isPlaying() ? R.string.player_pause : R.string.player_play));
+        boolean hasSong = currentSong != null;
+        String songKey = hasSong
+                ? (currentSong.getSourceId() + "|" + currentSong.getTitle() + "|" + currentSong.getArtist())
+                : "";
+        if (!songKey.equals(lastMiniPlayerSongKey) || hasSong != lastMiniPlayerHasSong) {
+            binding.playerSongTitle.setText(hasSong
+                    ? currentSong.getTitle()
+                    : getString(R.string.mock_player_title));
+            binding.playerArtistName.setText(hasSong
+                    ? currentSong.getArtist()
+                    : getString(R.string.mock_player_artist));
+            lastMiniPlayerSongKey = songKey;
+            lastMiniPlayerHasSong = hasSong;
+        }
+        if (state.isPlaying() != lastMiniPlayerPlaying || hasSong != lastMiniPlayerHasSong) {
+            binding.playerPlayPause.setImageResource(state.isPlaying() ? R.drawable.ic_pause : R.drawable.ic_play);
+            binding.playerPlayPause.setContentDescription(getString(
+                    state.isPlaying() ? R.string.player_pause : R.string.player_play));
+            lastMiniPlayerPlaying = state.isPlaying();
+        }
         Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
         updateChromeForFragment(currentFragment);
     }
@@ -163,8 +184,16 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         boolean showBottomNavigation = !(fragment instanceof SearchFragment
                 || fragment instanceof PlaylistDetailFragment);
         boolean hasSong = playbackController.getPlayerState().getCurrentSong() != null;
-        binding.bottomNavigation.setVisibility(showBottomNavigation ? View.VISIBLE : View.GONE);
-        binding.playerMiniBar.setVisibility(showMiniPlayer && hasSong ? View.VISIBLE : View.GONE);
+        int bottomNavigationVisibility = showBottomNavigation ? View.VISIBLE : View.GONE;
+        int miniBarVisibility = showMiniPlayer && hasSong ? View.VISIBLE : View.GONE;
+        if (lastBottomNavigationVisibility != bottomNavigationVisibility) {
+            binding.bottomNavigation.setVisibility(bottomNavigationVisibility);
+            lastBottomNavigationVisibility = bottomNavigationVisibility;
+        }
+        if (lastMiniBarVisibility != miniBarVisibility) {
+            binding.playerMiniBar.setVisibility(miniBarVisibility);
+            lastMiniBarVisibility = miniBarVisibility;
+        }
     }
 
     private void openPlayerScreen() {

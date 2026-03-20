@@ -86,6 +86,8 @@ public class SearchFragment extends Fragment {
     private String currentKeyword = "";
     private SearchResultPage currentResultPage;
     private int suggestionRequestVersion = 0;
+    private int searchRequestVersion = 0;
+    private int landingContentRequestVersion = 0;
     private boolean hotSearchesLoaded = false;
     @NonNull
     private List<String> cachedHistory = Collections.emptyList();
@@ -187,6 +189,7 @@ public class SearchFragment extends Fragment {
             public void afterTextChanged(Editable editable) {
                 String keyword = editable == null ? "" : editable.toString().trim();
                 if (keyword.isEmpty()) {
+                    searchRequestVersion++;
                     cancelPendingSuggestionWork();
                     showLandingSuggestionState();
                     loadLandingContent(false);
@@ -256,12 +259,15 @@ public class SearchFragment extends Fragment {
     private void submitSearch(@NonNull String keyword) {
         String trimmedKeyword = keyword.trim();
         if (TextUtils.isEmpty(trimmedKeyword)) {
+            searchRequestVersion++;
             clearResults();
             showLandingSuggestionState();
             loadLandingContent(false);
             return;
         }
         cancelPendingSuggestionWork();
+        int requestVersion = ++searchRequestVersion;
+        landingContentRequestVersion++;
         currentKeyword = trimmedKeyword;
         if (resultCountView != null) {
             resultCountView.setText(R.string.feature_search_status_loading);
@@ -276,9 +282,9 @@ public class SearchFragment extends Fragment {
             try {
                 SearchResultPage resultPage = viewModel.search(trimmedKeyword, selectedScope, SearchFilter.DEFAULT_PAGE);
                 List<String> history = viewModel.loadHistory();
-                handler.post(() -> renderSearchResult(trimmedKeyword, resultPage, history));
+                handler.post(() -> renderSearchResult(requestVersion, trimmedKeyword, resultPage, history));
             } catch (IOException ioException) {
-                handler.post(() -> renderSearchError(ioException));
+                handler.post(() -> renderSearchError(requestVersion, trimmedKeyword, ioException));
             }
         });
     }
@@ -341,7 +347,11 @@ public class SearchFragment extends Fragment {
         if (viewModel == null || handler == null || suggestionExecutorService == null) {
             return;
         }
+        final int requestVersion = ++landingContentRequestVersion;
         if (hotSearchesLoaded && !forceRefreshHotSearches) {
+            if (!isSearchInputEmpty()) {
+                return;
+            }
             renderLandingSuggestions(cachedHistory, cachedHotSearches);
             return;
         }
@@ -359,14 +369,23 @@ public class SearchFragment extends Fragment {
             cachedHotSearches = hotSearches;
             hotSearchesLoaded = true;
             List<String> finalHotSearches = hotSearches;
-            handler.post(() -> renderLandingSuggestions(history, finalHotSearches));
+            handler.post(() -> {
+                if (requestVersion != landingContentRequestVersion || !isSearchInputEmpty()) {
+                    return;
+                }
+                renderLandingSuggestions(history, finalHotSearches);
+            });
         });
     }
 
-    private void renderSearchResult(@NonNull String keyword,
+    private void renderSearchResult(int requestVersion,
+                                    @NonNull String keyword,
                                     @NonNull SearchResultPage resultPage,
                                     @NonNull List<String> history) {
         if (!isAdded()) {
+            return;
+        }
+        if (requestVersion != searchRequestVersion || !keyword.equals(getCurrentInputKeyword())) {
             return;
         }
         currentKeyword = keyword;
@@ -404,8 +423,13 @@ public class SearchFragment extends Fragment {
         hideStatus();
     }
 
-    private void renderSearchError(@NonNull IOException ioException) {
+    private void renderSearchError(int requestVersion,
+                                   @NonNull String keyword,
+                                   @NonNull IOException ioException) {
         if (!isAdded()) {
+            return;
+        }
+        if (requestVersion != searchRequestVersion || !keyword.equals(getCurrentInputKeyword())) {
             return;
         }
         clearResults();
@@ -834,6 +858,18 @@ public class SearchFragment extends Fragment {
             mainHandler.removeCallbacks(suggestionDebounceRunnable);
         }
         suggestionDebounceRunnable = null;
+    }
+
+    @NonNull
+    private String getCurrentInputKeyword() {
+        if (searchInput == null) {
+            return "";
+        }
+        return searchInput.getText() == null ? "" : searchInput.getText().toString().trim();
+    }
+
+    private boolean isSearchInputEmpty() {
+        return TextUtils.isEmpty(getCurrentInputKeyword());
     }
 
     private void showStatus(@NonNull String message) {

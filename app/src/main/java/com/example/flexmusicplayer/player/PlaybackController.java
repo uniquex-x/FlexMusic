@@ -74,6 +74,7 @@ public final class PlaybackController {
     private final ExecutorService sourceResolveExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService warmupExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService searchQueueExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService searchWarmupResolveExecutor = Executors.newSingleThreadExecutor();
     private final PlayerKernel playerKernel;
     private final PlaybackSourceResolver playbackSourceResolver;
     private final IPlaybackWarmupEngine playbackWarmupEngine;
@@ -110,6 +111,8 @@ public final class PlaybackController {
     private SearchQueueSession searchQueueSession;
     private long searchQueueSessionGeneration = 0L;
     private boolean searchQueueExpansionInFlight = false;
+    private boolean searchWarmupResolveInFlight = false;
+    private String activeSearchWarmupResolveKey = "";
 
     private PlaybackController(@NonNull Context context) {
         appContext = context.getApplicationContext();
@@ -672,11 +675,36 @@ public final class PlaybackController {
     }
 
     private void scheduleWarmupLocked() {
-        List<PlaybackRequest> queueRequests = buildQueueRequestsLocked();
+        if (currentIndex < 0 || currentIndex >= queue.size()) {
+            return;
+        }
+        Song currentSong = queue.get(currentIndex);
+        PlaybackRequest currentRequest = buildWarmupPlaybackRequestLocked(currentSong);
+        if (currentRequest == null) {
+            return;
+        }
+
+        int nextIndex = resolveNextIndex();
+        PlaybackRequest nextRequest = null;
+        if (nextIndex >= 0 && nextIndex < queue.size() && nextIndex != currentIndex) {
+            Song nextSong = queue.get(nextIndex);
+            nextRequest = buildWarmupPlaybackRequestLocked(nextSong);
+            if (nextRequest == null && isSearchQueueSong(nextSong)) {
+                scheduleSearchWarmupResolutionLocked(nextSong);
+            }
+        }
+
+        List<PlaybackRequest> warmupCandidates = new ArrayList<>(2);
+        warmupCandidates.add(currentRequest);
+        int nextWarmupIndex = -1;
+        if (nextRequest != null) {
+            warmupCandidates.add(nextRequest);
+            nextWarmupIndex = 1;
+        }
         PlaybackWarmupRequest warmupRequest = playbackWarmupCoordinator.planWarmup(
-                queueRequests,
-                currentIndex,
-                resolveNextIndex());
+                warmupCandidates,
+                0,
+                nextWarmupIndex);
         if (warmupRequest == null) {
             if (!TextUtils.isEmpty(activeWarmupSourceId)) {
                 playbackWarmupEngine.cancelWarmup(activeWarmupSourceId);
@@ -721,22 +749,6 @@ public final class PlaybackController {
                     + " completed=" + snapshot.getCompletedLevel()
                     + " totalLatencyMs=" + snapshot.getTotalLatencyMs());
         }
-    }
-
-    @NonNull
-    private List<PlaybackRequest> buildQueueRequestsLocked() {
-        List<PlaybackRequest> requests = new ArrayList<>(queue.size());
-        for (Song queuedSong : queue) {
-            String source = resolveWarmupPlayableSourceLocked(queuedSong);
-            if (TextUtils.isEmpty(source)) {
-                continue;
-            }
-            requests.add(new PlaybackRequest(
-                    resolveSourceId(queuedSong),
-                    source,
-                    queuedSong.isRadioStream()));
-        }
-        return requests;
     }
 
     @NonNull
@@ -835,6 +847,15 @@ public final class PlaybackController {
         return cachedRequest.getOriginalUrl();
     }
 
+    @Nullable
+    private PlaybackRequest buildWarmupPlaybackRequestLocked(@NonNull Song song) {
+        String source = resolveWarmupPlayableSourceLocked(song);
+        if (TextUtils.isEmpty(source)) {
+            return null;
+        }
+        return new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
+    }
+
     private void scheduleSearchQueueExpansionIfNeededLocked() {
         if (searchQueueSession == null) {
             return;
@@ -862,6 +883,63 @@ public final class PlaybackController {
         long sessionGeneration = searchQueueSessionGeneration;
         searchQueueExpansionInFlight = true;
         searchQueueExecutor.execute(() -> expandSearchQueue(sessionGeneration, targetQueueSize));
+    }
+
+    private void scheduleSearchWarmupResolutionLocked(@NonNull Song song) {
+        String sourceId = resolveSourceId(song);
+        if (searchQueueSession == null) {
+            return;
+        }
+        if (searchWarmupResolveInFlight) {
+            return;
+        }
+        SearchTrack searchTrack = searchQueueSession.findTrack(sourceId);
+        if (searchTrack == null) {
+            return;
+        }
+        long sessionGeneration = searchQueueSessionGeneration;
+        searchWarmupResolveInFlight = true;
+        activeSearchWarmupResolveKey = sourceId;
+        Log.d(TAG, "schedule search warmup resolve sourceId=" + sourceId
+                + " title=" + song.getTitle());
+        searchWarmupResolveExecutor.execute(() -> resolveSearchWarmupCandidate(sessionGeneration, sourceId, searchTrack));
+    }
+
+    private void resolveSearchWarmupCandidate(long sessionGeneration,
+                                              @NonNull String sourceId,
+                                              @NonNull SearchTrack searchTrack) {
+        try {
+            PlaybackRequest playbackRequest = playTrackFromSearchUseCase.execute(searchTrack);
+            synchronized (this) {
+                if (!isSearchQueueSessionActiveLocked(sessionGeneration)) {
+                    return;
+                }
+                if (!sourceId.equals(activeSearchWarmupResolveKey)) {
+                    return;
+                }
+                if (searchQueueSession != null) {
+                    searchQueueSession.putResolvedRequest(sourceId, playbackRequest);
+                }
+                Song queuedSong = findQueuedSongBySourceIdLocked(sourceId);
+                if (queuedSong != null) {
+                    updateSearchSongFromRequestLocked(queuedSong, playbackRequest);
+                }
+                searchWarmupResolveInFlight = false;
+                activeSearchWarmupResolveKey = "";
+                Log.d(TAG, "search warmup resolved sourceId=" + sourceId
+                        + " url=" + playbackRequest.getOriginalUrl());
+                scheduleWarmupLocked();
+            }
+        } catch (IOException ioException) {
+            synchronized (this) {
+                if (isSearchQueueSessionActiveLocked(sessionGeneration)
+                        && sourceId.equals(activeSearchWarmupResolveKey)) {
+                    searchWarmupResolveInFlight = false;
+                    activeSearchWarmupResolveKey = "";
+                }
+            }
+            Log.e(TAG, "search warmup resolve failed sourceId=" + sourceId, ioException);
+        }
     }
 
     private void expandSearchQueue(long sessionGeneration, int targetQueueSize) {
@@ -926,6 +1004,18 @@ public final class PlaybackController {
         searchQueueSession = null;
         searchQueueSessionGeneration++;
         searchQueueExpansionInFlight = false;
+        searchWarmupResolveInFlight = false;
+        activeSearchWarmupResolveKey = "";
+    }
+
+    @Nullable
+    private Song findQueuedSongBySourceIdLocked(@NonNull String sourceId) {
+        for (Song queuedSong : queue) {
+            if (sourceId.equals(resolveSourceId(queuedSong))) {
+                return queuedSong;
+            }
+        }
+        return null;
     }
 
     private static final class SearchQueueExpansionPlan {
