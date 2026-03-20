@@ -3,25 +3,27 @@ package com.example.feature_search;
 import androidx.annotation.NonNull;
 
 import com.example.core_domain.player.PlaybackRequest;
+import com.example.core_domain.search.SearchResultPage;
 import com.example.core_domain.search.SearchTrack;
-
-import java.util.List;
 
 /**
  * @brief Host callback contract exposed by the search feature module.
  *
  * The host activity implements this interface to receive a resolved playback
- * request together with the selected track metadata, then forwards the request
- * into the app-level playback controller.
+ * request together with the current search-result context, then forwards the
+ * request into the app-level playback controller.
  */
 public interface ISearchHost {
 
     /**
-     * @brief Notify the host that a search track is ready to enter the playback pipeline.
-     * @param track Selected search track metadata for queue and UI display.
-     * @param playbackRequest Normalized playback request ready for source resolution.
+     * @brief Notify the host that a search result should start playback from the active result set.
+     * @param resultPage Current search result page snapshot used to seed the playback queue.
+     * @param startIndex Queue index that should start playing immediately.
+     * @param playbackRequest Resolved playback request for the selected start item.
      */
-    void onSearchPlaybackRequested(@NonNull SearchTrack track, @NonNull PlaybackRequest playbackRequest);
+    void onSearchPlaybackRequested(@NonNull SearchResultPage resultPage,
+                                   int startIndex,
+                                   @NonNull PlaybackRequest playbackRequest);
 
     /**
      * @brief Notify the host that a search track should be inserted as the next queue item.
@@ -38,12 +40,12 @@ public interface ISearchHost {
     void onSearchAddToQueueRequested(@NonNull SearchTrack track, @NonNull PlaybackRequest playbackRequest);
 
     /**
-     * @brief Notify the host that a fully resolved search queue should replace the current queue.
-     * @param tracks Ordered resolved track metadata.
-     * @param playbackRequests Ordered playback requests matching the track list.
+     * @brief Notify the host that the active search-result queue should replace the current queue.
+     * @param resultPage Current search result page snapshot used to seed the playback queue.
      * @param startIndex Queue index that should start playing immediately.
+     * @param playbackRequest Resolved playback request for the selected start item.
      */
-    void onSearchQueuePlaybackRequested(@NonNull List<SearchTrack> tracks,
-                                        @NonNull List<PlaybackRequest> playbackRequests,
-                                        int startIndex);
+    void onSearchQueuePlaybackRequested(@NonNull SearchResultPage resultPage,
+                                        int startIndex,
+                                        @NonNull PlaybackRequest playbackRequest);
 }

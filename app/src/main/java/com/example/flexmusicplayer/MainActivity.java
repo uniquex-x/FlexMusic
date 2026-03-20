@@ -28,9 +28,8 @@ import com.example.feature_search.ui.SearchFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import com.example.core_domain.player.PlaybackRequest;
+import com.example.core_domain.search.SearchResultPage;
 import com.example.core_domain.search.SearchTrack;
-
-import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements MyFragment.NavigationCallback, ISearchHost {
 
@@ -228,9 +227,10 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     }
 
     @Override
-    public void onSearchPlaybackRequested(@NonNull SearchTrack track,
+    public void onSearchPlaybackRequested(@NonNull SearchResultPage resultPage,
+                                          int startIndex,
                                           @NonNull PlaybackRequest playbackRequest) {
-        playbackController.playSearchTrack(track, playbackRequest);
+        playbackController.playSearchResultPage(resultPage, startIndex, playbackRequest);
     }
 
     @Override
@@ -246,10 +246,10 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     }
 
     @Override
-    public void onSearchQueuePlaybackRequested(@NonNull List<SearchTrack> tracks,
-                                               @NonNull List<PlaybackRequest> playbackRequests,
-                                               int startIndex) {
-        playbackController.playSearchQueue(tracks, playbackRequests, startIndex);
+    public void onSearchQueuePlaybackRequested(@NonNull SearchResultPage resultPage,
+                                               int startIndex,
+                                               @NonNull PlaybackRequest playbackRequest) {
+        playbackController.playSearchResultPage(resultPage, startIndex, playbackRequest);
     }
 
     @Override

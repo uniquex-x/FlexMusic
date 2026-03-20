@@ -14,7 +14,7 @@ import java.util.List;
 
 public final class SearchViewModel {
 
-    private static final int DEFAULT_PAGE_SIZE = 12;
+    private static final int DEFAULT_PAGE_SIZE = 20;
 
     private final SearchUseCase searchUseCase;
     private final GetSearchSuggestionsUseCase getSearchSuggestionsUseCase;

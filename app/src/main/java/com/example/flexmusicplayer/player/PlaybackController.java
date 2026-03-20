@@ -8,8 +8,11 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.example.core_data.player.PlaybackWarmupCoordinator;
+import com.example.core_data.search.OnlineSearchRepository;
+import com.example.core_data.search.TrackPlaybackRepository;
 import com.example.core_domain.player.IPlaybackWarmupEngine;
 import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.player.PlaybackSourceResolver;
@@ -19,7 +22,13 @@ import com.example.core_domain.player.PlayerKernel;
 import com.example.core_domain.player.PlayerKernelSnapshot;
 import com.example.core_domain.player.PlayerKernelState;
 import com.example.core_domain.player.ResolvedPlayableSource;
+import com.example.core_domain.search.PlayTrackFromSearchUseCase;
+import com.example.core_domain.search.SearchFilter;
+import com.example.core_domain.search.SearchQuery;
+import com.example.core_domain.search.SearchResultPage;
+import com.example.core_domain.search.SearchScope;
 import com.example.core_domain.search.SearchTrack;
+import com.example.core_domain.search.SearchUseCase;
 import com.example.core_network.stream.NetworkPlaybackSourceResolver;
 import com.example.feature_player.player.FeaturePlayerFactory;
 import com.example.flexmusicplayer.model.PlayerState;
@@ -38,6 +47,10 @@ import java.util.concurrent.Executors;
 public final class PlaybackController {
 
     private static final String TAG = "PlaybackController";
+    private static final int SEARCH_QUEUE_INITIAL_SIZE = 20;
+    private static final int SEARCH_QUEUE_EXPAND_THRESHOLD = 5;
+    private static final int SEARCH_QUEUE_MAX_SIZE = 1000;
+    private static final String SEARCH_TRACK_SOURCE_PREFIX = "search_track:";
 
     public interface Listener {
         void onPlaybackStateChanged(@NonNull PlayerState state);
@@ -60,9 +73,13 @@ public final class PlaybackController {
     private final RecentPlaybackStore recentPlaybackStore = RecentPlaybackStore.getInstance();
     private final ExecutorService sourceResolveExecutor = Executors.newSingleThreadExecutor();
     private final ExecutorService warmupExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService searchQueueExecutor = Executors.newSingleThreadExecutor();
     private final PlayerKernel playerKernel;
     private final PlaybackSourceResolver playbackSourceResolver;
     private final IPlaybackWarmupEngine playbackWarmupEngine;
+    private final SearchUseCase searchUseCase = new SearchUseCase(new OnlineSearchRepository());
+    private final PlayTrackFromSearchUseCase playTrackFromSearchUseCase =
+            new PlayTrackFromSearchUseCase(new TrackPlaybackRepository());
     private final PlaybackWarmupCoordinator playbackWarmupCoordinator = new PlaybackWarmupCoordinator();
     private final Runnable progressTicker = new Runnable() {
         @Override
@@ -89,6 +106,10 @@ public final class PlaybackController {
     private String pendingRecentKey = "";
     private String activeWarmupSourceId = "";
     private String lastWarmupPlanKey = "";
+    @Nullable
+    private SearchQueueSession searchQueueSession;
+    private long searchQueueSessionGeneration = 0L;
+    private boolean searchQueueExpansionInFlight = false;
 
     private PlaybackController(@NonNull Context context) {
         appContext = context.getApplicationContext();
@@ -132,18 +153,41 @@ public final class PlaybackController {
                 + " providerId=" + track.getProviderId()
                 + " sourceId=" + request.getSourceId()
                 + " url=" + request.getOriginalUrl());
+        clearSearchQueueSessionLocked();
         playSong(buildSearchSong(track, request));
     }
 
-    public synchronized void playSearchQueue(@NonNull List<SearchTrack> tracks,
-                                             @NonNull List<PlaybackRequest> requests,
-                                             int startIndex) {
-        List<Song> songs = buildSearchSongs(tracks, requests);
+    public synchronized void playSearchResultPage(@NonNull SearchResultPage resultPage,
+                                                  int startIndex,
+                                                  @NonNull PlaybackRequest initialRequest) {
+        List<SearchTrack> tracks = resultPage.getTracks();
+        if (tracks.isEmpty()) {
+            return;
+        }
+        int safeStartIndex = Math.max(0, Math.min(startIndex, tracks.size() - 1));
+        SearchQueueSession session = new SearchQueueSession(resultPage);
+        int initialQueueSize = Math.min(
+                session.getMaxQueueSize(),
+                Math.max(SEARCH_QUEUE_INITIAL_SIZE, safeStartIndex + 1));
+        List<Song> songs = buildSearchSongs(tracks.subList(0, Math.min(initialQueueSize, tracks.size())));
         if (songs.isEmpty()) {
             return;
         }
-        Log.d(TAG, "playSearchQueue size=" + songs.size() + " startIndex=" + startIndex);
-        playQueue(songs, startIndex);
+        Song startSong = songs.get(safeStartIndex);
+        cacheResolvedSearchRequestLocked(session, startSong, initialRequest);
+        queue.clear();
+        queue.addAll(songs);
+        currentIndex = safeStartIndex;
+        searchQueueSession = session;
+        searchQueueSession.setEnqueuedTrackCount(songs.size());
+        searchQueueSessionGeneration++;
+        searchQueueExpansionInFlight = false;
+        Log.d(TAG, "playSearchResultPage keyword=" + resultPage.getKeyword()
+                + " initialQueueSize=" + songs.size()
+                + " startIndex=" + safeStartIndex
+                + " totalCount=" + resultPage.getTotalCount());
+        prepareCurrentSong();
+        ensureSearchQueueCapacityLocked(initialQueueSize);
     }
 
     public synchronized void addSearchTrackNext(@NonNull SearchTrack track,
@@ -180,6 +224,7 @@ public final class PlaybackController {
         if (songs.isEmpty()) {
             return;
         }
+        clearSearchQueueSessionLocked();
         queue.clear();
         queue.addAll(songs);
         currentIndex = Math.max(0, Math.min(index, queue.size() - 1));
@@ -273,7 +318,7 @@ public final class PlaybackController {
             currentIndex = (currentIndex - 1 + queue.size()) % queue.size();
         } else if (currentIndex > 0) {
             currentIndex--;
-        } else if (playerState.getRepeatMode() == PlayerState.RepeatMode.ALL) {
+        } else {
             currentIndex = queue.size() - 1;
         }
         prepareCurrentSong();
@@ -337,6 +382,7 @@ public final class PlaybackController {
         long generation = ++prepareGeneration;
         dispatchState();
 
+        scheduleSearchQueueExpansionIfNeededLocked();
         sourceResolveExecutor.execute(() -> resolveAndPrepare(song, generation));
     }
 
@@ -372,9 +418,8 @@ public final class PlaybackController {
     private void resolveAndPrepare(@NonNull Song song, long generation) {
         long startedAtMs = System.currentTimeMillis();
         try {
-            String source = resolvePlayableSource(song);
-            Log.d(TAG, "resolveAndPrepare sourceId=" + resolveSourceId(song) + " source=" + source);
-            PlaybackRequest request = new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
+            PlaybackRequest request = resolvePlaybackRequest(song);
+            Log.d(TAG, "resolveAndPrepare sourceId=" + resolveSourceId(song) + " source=" + request.getOriginalUrl());
             ResolvedPlayableSource resolvedSource = playbackSourceResolver.resolve(request);
             Log.d(TAG, "resolveAndPrepare resolved sourceId=" + resolvedSource.getSourceId()
                     + " elapsedMs=" + Math.max(System.currentTimeMillis() - startedAtMs, 0L)
@@ -384,6 +429,44 @@ public final class PlaybackController {
             Log.e(TAG, "resolveAndPrepare failed sourceId=" + resolveSourceId(song), e);
             onSourceResolveFailed(generation);
         }
+    }
+
+    @NonNull
+    private PlaybackRequest resolvePlaybackRequest(@NonNull Song song) throws IOException {
+        String searchKey = resolveSourceId(song);
+        if (isSearchQueueSong(song)) {
+            PlaybackRequest cachedRequest;
+            SearchTrack searchTrack;
+            synchronized (this) {
+                cachedRequest = resolveCachedSearchRequestLocked(searchKey);
+                searchTrack = findSearchTrackLocked(searchKey);
+            }
+            if (cachedRequest != null) {
+                synchronized (this) {
+                    updateSearchSongFromRequestLocked(song, cachedRequest);
+                }
+                return new PlaybackRequest(searchKey, cachedRequest.getOriginalUrl(), cachedRequest.isLiveStream());
+            }
+            if (searchTrack != null) {
+                PlaybackRequest resolvedRequest = playTrackFromSearchUseCase.execute(searchTrack);
+                synchronized (this) {
+                    PlaybackRequest sessionRequest = resolveCachedSearchRequestLocked(searchKey);
+                    if (sessionRequest != null) {
+                        updateSearchSongFromRequestLocked(song, sessionRequest);
+                        return new PlaybackRequest(searchKey, sessionRequest.getOriginalUrl(), sessionRequest.isLiveStream());
+                    }
+                    if (searchQueueSession != null) {
+                        searchQueueSession.putResolvedRequest(searchKey, resolvedRequest);
+                    }
+                    updateSearchSongFromRequestLocked(song, resolvedRequest);
+                }
+                Log.d(TAG, "resolved search queue track sourceId=" + searchKey
+                        + " url=" + resolvedRequest.getOriginalUrl());
+                return new PlaybackRequest(searchKey, resolvedRequest.getOriginalUrl(), resolvedRequest.isLiveStream());
+            }
+        }
+        String source = resolvePlayableSource(song);
+        return new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
     }
 
     private synchronized void onSourceResolved(long generation, @NonNull ResolvedPlayableSource resolvedSource) {
@@ -455,6 +538,7 @@ public final class PlaybackController {
                     recentPlaybackStore.recordPlayback(currentSong);
                     pendingRecentKey = "";
                 }
+                scheduleSearchQueueExpansionIfNeededLocked();
                 scheduleWarmupLocked();
                 break;
             case PAUSED:
@@ -526,7 +610,7 @@ public final class PlaybackController {
     }
 
     private boolean hasPreviousInternal() {
-        return queue.size() > 1 && (currentIndex > 0 || playerState.getRepeatMode() == PlayerState.RepeatMode.ALL);
+        return queue.size() > 1;
     }
 
     private void startProgressTicker() {
@@ -643,7 +727,10 @@ public final class PlaybackController {
     private List<PlaybackRequest> buildQueueRequestsLocked() {
         List<PlaybackRequest> requests = new ArrayList<>(queue.size());
         for (Song queuedSong : queue) {
-            String source = resolvePlayableSource(queuedSong);
+            String source = resolveWarmupPlayableSourceLocked(queuedSong);
+            if (TextUtils.isEmpty(source)) {
+                continue;
+            }
             requests.add(new PlaybackRequest(
                     resolveSourceId(queuedSong),
                     source,
@@ -664,18 +751,314 @@ public final class PlaybackController {
     }
 
     @NonNull
+    private List<Song> buildSearchSongs(@NonNull List<SearchTrack> tracks) {
+        List<Song> songs = new ArrayList<>(tracks.size());
+        for (SearchTrack track : tracks) {
+            songs.add(buildSearchSong(track));
+        }
+        return songs;
+    }
+
+    @NonNull
     private Song buildSearchSong(@NonNull SearchTrack track, @NonNull PlaybackRequest request) {
+        Song song = buildSearchSong(track);
+        updateSearchSongFromRequestLocked(song, request);
+        return song;
+    }
+
+    @NonNull
+    private Song buildSearchSong(@NonNull SearchTrack track) {
+        String searchTrackKey = buildSearchTrackKey(track);
         Song song = new Song(
-                Math.abs((long) request.getSourceId().hashCode()),
+                Math.abs((long) searchTrackKey.hashCode()),
                 track.getTitle(),
                 TextUtils.join(" / ", track.getArtistNames()),
                 track.getAlbumName(),
                 (int) track.getDurationMs(),
-                request.getOriginalUrl());
+                "");
         song.setAlbumArtUrl(track.getCoverUrl());
         song.setLocal(false);
-        song.setRadioStream(request.isLiveStream());
-        song.setSourceId(request.getSourceId());
+        song.setRadioStream(false);
+        song.setSourceId(searchTrackKey);
         return song;
+    }
+
+    private void updateSearchSongFromRequestLocked(@NonNull Song song, @NonNull PlaybackRequest request) {
+        song.setAudioUrl(request.getOriginalUrl());
+        song.setRadioStream(request.isLiveStream());
+    }
+
+    @Nullable
+    private PlaybackRequest resolveCachedSearchRequestLocked(@NonNull String searchKey) {
+        if (searchQueueSession == null) {
+            return null;
+        }
+        return searchQueueSession.getResolvedRequest(searchKey);
+    }
+
+    @Nullable
+    private SearchTrack findSearchTrackLocked(@NonNull String searchKey) {
+        if (searchQueueSession == null) {
+            return null;
+        }
+        return searchQueueSession.findTrack(searchKey);
+    }
+
+    private void cacheResolvedSearchRequestLocked(@NonNull SearchQueueSession session,
+                                                  @NonNull Song song,
+                                                  @NonNull PlaybackRequest request) {
+        session.putResolvedRequest(resolveSourceId(song), request);
+        updateSearchSongFromRequestLocked(song, request);
+    }
+
+    @NonNull
+    private String buildSearchTrackKey(@NonNull SearchTrack track) {
+        return SEARCH_TRACK_SOURCE_PREFIX + track.getProviderId() + "|" + track.getTrackId();
+    }
+
+    private boolean isSearchQueueSong(@NonNull Song song) {
+        return resolveSourceId(song).startsWith(SEARCH_TRACK_SOURCE_PREFIX);
+    }
+
+    @Nullable
+    private String resolveWarmupPlayableSourceLocked(@NonNull Song song) {
+        if (!isSearchQueueSong(song)) {
+            return resolvePlayableSource(song);
+        }
+        if (!TextUtils.isEmpty(song.getAudioUrl())) {
+            return song.getAudioUrl();
+        }
+        PlaybackRequest cachedRequest = resolveCachedSearchRequestLocked(resolveSourceId(song));
+        if (cachedRequest == null) {
+            return null;
+        }
+        return cachedRequest.getOriginalUrl();
+    }
+
+    private void scheduleSearchQueueExpansionIfNeededLocked() {
+        if (searchQueueSession == null) {
+            return;
+        }
+        int remaining = queue.size() - currentIndex - 1;
+        if (remaining > SEARCH_QUEUE_EXPAND_THRESHOLD && queue.size() >= SEARCH_QUEUE_INITIAL_SIZE) {
+            return;
+        }
+        int targetSize = Math.min(
+                searchQueueSession.getMaxQueueSize(),
+                Math.max(SEARCH_QUEUE_INITIAL_SIZE, currentIndex + 1 + SEARCH_QUEUE_INITIAL_SIZE));
+        ensureSearchQueueCapacityLocked(targetSize);
+    }
+
+    private void ensureSearchQueueCapacityLocked(int targetQueueSize) {
+        if (searchQueueSession == null) {
+            return;
+        }
+        if (queue.size() >= targetQueueSize || queue.size() >= searchQueueSession.getMaxQueueSize()) {
+            return;
+        }
+        if (searchQueueExpansionInFlight) {
+            return;
+        }
+        long sessionGeneration = searchQueueSessionGeneration;
+        searchQueueExpansionInFlight = true;
+        searchQueueExecutor.execute(() -> expandSearchQueue(sessionGeneration, targetQueueSize));
+    }
+
+    private void expandSearchQueue(long sessionGeneration, int targetQueueSize) {
+        boolean queueChanged = false;
+        try {
+            while (true) {
+                SearchQueueExpansionPlan expansionPlan;
+                synchronized (this) {
+                    if (!isSearchQueueSessionActiveLocked(sessionGeneration) || searchQueueSession == null) {
+                        return;
+                    }
+                    expansionPlan = searchQueueSession.createExpansionPlan(queue.size(), targetQueueSize);
+                    if (expansionPlan.tracksToAppend.isEmpty()
+                            && !expansionPlan.shouldFetchMore
+                            && !expansionPlan.needsMoreCapacity) {
+                        return;
+                    }
+                    if (!expansionPlan.tracksToAppend.isEmpty()) {
+                        queue.addAll(buildSearchSongs(expansionPlan.tracksToAppend));
+                        queueChanged = true;
+                        Log.d(TAG, "expandSearchQueue appendLoaded count=" + expansionPlan.tracksToAppend.size()
+                                + " queueSize=" + queue.size());
+                        onQueueTopologyChangedLocked();
+                        dispatchState();
+                        continue;
+                    }
+                }
+
+                SearchResultPage nextPage = searchUseCase.execute(new SearchQuery(
+                        expansionPlan.keyword,
+                        new SearchFilter(expansionPlan.scope, expansionPlan.page, expansionPlan.pageSize)));
+
+                synchronized (this) {
+                    if (!isSearchQueueSessionActiveLocked(sessionGeneration) || searchQueueSession == null) {
+                        return;
+                    }
+                    searchQueueSession.absorbPage(nextPage);
+                    Log.d(TAG, "expandSearchQueue pageLoaded page=" + nextPage.getFilter().getPage()
+                            + " addedTracks=" + nextPage.getTracks().size()
+                            + " hasMore=" + nextPage.isHasMore());
+                }
+            }
+        } catch (IOException ioException) {
+            Log.e(TAG, "expandSearchQueue failed", ioException);
+        } finally {
+            synchronized (this) {
+                if (isSearchQueueSessionActiveLocked(sessionGeneration)) {
+                    searchQueueExpansionInFlight = false;
+                    if (queueChanged) {
+                        dispatchState();
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isSearchQueueSessionActiveLocked(long sessionGeneration) {
+        return searchQueueSession != null && searchQueueSessionGeneration == sessionGeneration;
+    }
+
+    private void clearSearchQueueSessionLocked() {
+        searchQueueSession = null;
+        searchQueueSessionGeneration++;
+        searchQueueExpansionInFlight = false;
+    }
+
+    private static final class SearchQueueExpansionPlan {
+        private final List<SearchTrack> tracksToAppend;
+        private final boolean shouldFetchMore;
+        private final boolean needsMoreCapacity;
+        private final String keyword;
+        private final SearchScope scope;
+        private final int page;
+        private final int pageSize;
+
+        private SearchQueueExpansionPlan(@NonNull List<SearchTrack> tracksToAppend,
+                                         boolean shouldFetchMore,
+                                         boolean needsMoreCapacity,
+                                         @NonNull String keyword,
+                                         @NonNull SearchScope scope,
+                                         int page,
+                                         int pageSize) {
+            this.tracksToAppend = tracksToAppend;
+            this.shouldFetchMore = shouldFetchMore;
+            this.needsMoreCapacity = needsMoreCapacity;
+            this.keyword = keyword;
+            this.scope = scope;
+            this.page = page;
+            this.pageSize = pageSize;
+        }
+    }
+
+    private static final class SearchQueueSession {
+        private final String keyword;
+        private final SearchScope scope;
+        private final int pageSize;
+        private final int maxQueueSize;
+        private final List<SearchTrack> loadedTracks = new ArrayList<>();
+        private final Set<String> loadedTrackKeys = new LinkedHashSet<>();
+        private final java.util.Map<String, SearchTrack> trackMap = new java.util.LinkedHashMap<>();
+        private final java.util.Map<String, PlaybackRequest> resolvedRequestMap = new java.util.LinkedHashMap<>();
+        private boolean hasMore;
+        private int nextPage;
+        private int enqueuedTrackCount;
+
+        private SearchQueueSession(@NonNull SearchResultPage resultPage) {
+            keyword = resultPage.getKeyword();
+            scope = resultPage.getFilter().getScope();
+            pageSize = Math.max(1, resultPage.getFilter().getPageSize());
+            maxQueueSize = Math.min(
+                    SEARCH_QUEUE_MAX_SIZE,
+                    resultPage.getTotalCount() > 0 ? resultPage.getTotalCount() : SEARCH_QUEUE_MAX_SIZE);
+            absorbPage(resultPage);
+        }
+
+        private int getMaxQueueSize() {
+            return maxQueueSize;
+        }
+
+        private void setEnqueuedTrackCount(int enqueuedTrackCount) {
+            this.enqueuedTrackCount = Math.max(0, Math.min(enqueuedTrackCount, loadedTracks.size()));
+        }
+
+        @Nullable
+        private SearchTrack findTrack(@NonNull String searchKey) {
+            return trackMap.get(searchKey);
+        }
+
+        @Nullable
+        private PlaybackRequest getResolvedRequest(@NonNull String searchKey) {
+            return resolvedRequestMap.get(searchKey);
+        }
+
+        private void putResolvedRequest(@NonNull String searchKey, @NonNull PlaybackRequest playbackRequest) {
+            resolvedRequestMap.put(searchKey, playbackRequest);
+        }
+
+        private void absorbPage(@NonNull SearchResultPage page) {
+            for (SearchTrack track : page.getTracks()) {
+                String searchKey = SEARCH_TRACK_SOURCE_PREFIX + track.getProviderId() + "|" + track.getTrackId();
+                if (!loadedTrackKeys.add(searchKey)) {
+                    continue;
+                }
+                loadedTracks.add(track);
+                trackMap.put(searchKey, track);
+            }
+            hasMore = page.isHasMore();
+            nextPage = page.getFilter().getPage() + 1;
+        }
+
+        @NonNull
+        private SearchQueueExpansionPlan createExpansionPlan(int currentQueueSize, int targetQueueSize) {
+            int boundedTarget = Math.min(maxQueueSize, Math.max(currentQueueSize, targetQueueSize));
+            if (currentQueueSize >= boundedTarget) {
+                return new SearchQueueExpansionPlan(
+                        java.util.Collections.emptyList(),
+                        false,
+                        false,
+                        keyword,
+                        scope,
+                        nextPage,
+                        pageSize);
+            }
+            int appendUntil = Math.min(Math.min(loadedTracks.size(), boundedTarget), maxQueueSize);
+            if (enqueuedTrackCount < appendUntil) {
+                List<SearchTrack> tracksToAppend = new ArrayList<>();
+                for (int index = enqueuedTrackCount; index < appendUntil; index++) {
+                    tracksToAppend.add(loadedTracks.get(index));
+                }
+                enqueuedTrackCount = appendUntil;
+                return new SearchQueueExpansionPlan(
+                        tracksToAppend,
+                        false,
+                        true,
+                        keyword,
+                        scope,
+                        nextPage,
+                        pageSize);
+            }
+            if (!hasMore || loadedTracks.size() >= maxQueueSize) {
+                return new SearchQueueExpansionPlan(
+                        java.util.Collections.emptyList(),
+                        false,
+                        false,
+                        keyword,
+                        scope,
+                        nextPage,
+                        pageSize);
+            }
+            return new SearchQueueExpansionPlan(
+                    java.util.Collections.emptyList(),
+                    true,
+                    true,
+                    keyword,
+                    scope,
+                    nextPage,
+                    pageSize);
+        }
     }
 }

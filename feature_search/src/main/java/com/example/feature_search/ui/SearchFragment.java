@@ -671,6 +671,8 @@ public class SearchFragment extends Fragment {
     }
 
     private void playTrack(@NonNull SearchTrack track) {
+        SearchResultPage playbackPage = buildPlaybackPage(track);
+        int startIndex = findTrackIndex(playbackPage.getTracks(), track);
         showStatus(getString(R.string.feature_search_status_resolving));
         searchPlaybackCoordinator.play(track, new SearchPlaybackCoordinator.IListener() {
             @Override
@@ -680,7 +682,7 @@ public class SearchFragment extends Fragment {
                     return;
                 }
                 showStatus(getString(R.string.feature_search_status_playing));
-                searchHost.onSearchPlaybackRequested(resolvedTrack, playbackRequest);
+                searchHost.onSearchPlaybackRequested(playbackPage, startIndex, playbackRequest);
             }
 
             @Override
@@ -698,25 +700,23 @@ public class SearchFragment extends Fragment {
         if (currentResultPage == null || currentResultPage.getTracks().isEmpty()) {
             return;
         }
+        SearchResultPage playbackPage = currentResultPage;
+        SearchTrack firstTrack = playbackPage.getTracks().get(0);
         showStatus(getString(R.string.feature_search_status_resolving_queue));
-        searchPlaybackCoordinator.resolveQueue(currentResultPage.getTracks(), new SearchPlaybackCoordinator.IQueueListener() {
+        searchPlaybackCoordinator.play(firstTrack, new SearchPlaybackCoordinator.IListener() {
             @Override
-            public void onQueueResolved(@NonNull List<SearchTrack> tracks,
-                                        @NonNull List<PlaybackRequest> playbackRequests,
-                                        int skippedCount) {
+            public void onPlaybackResolved(@NonNull SearchTrack resolvedTrack,
+                                           @NonNull PlaybackRequest playbackRequest) {
                 if (!isAdded()) {
                     return;
                 }
-                if (skippedCount > 0) {
-                    showStatus(getString(R.string.feature_search_status_queue_partial, skippedCount));
-                } else {
-                    showStatus(getString(R.string.feature_search_status_queue_playing));
-                }
-                searchHost.onSearchQueuePlaybackRequested(tracks, playbackRequests, 0);
+                showStatus(getString(R.string.feature_search_status_queue_playing));
+                searchHost.onSearchQueuePlaybackRequested(playbackPage, 0, playbackRequest);
             }
 
             @Override
-            public void onQueueResolveFailed(@NonNull IOException exception) {
+            public void onPlaybackResolveFailed(@NonNull SearchTrack failedTrack,
+                                                @NonNull IOException exception) {
                 if (!isAdded()) {
                     return;
                 }
@@ -796,6 +796,36 @@ public class SearchFragment extends Fragment {
         }
         updateFeaturedCard(null);
         showStatus(getString(R.string.feature_search_status_empty_query));
+    }
+
+    @NonNull
+    private SearchResultPage buildPlaybackPage(@NonNull SearchTrack track) {
+        if (currentResultPage != null && !currentResultPage.getTracks().isEmpty()) {
+            return currentResultPage;
+        }
+        return new SearchResultPage(
+                TextUtils.isEmpty(currentKeyword) ? track.getTitle() : currentKeyword,
+                new SearchFilter(SearchScope.TRACKS, SearchFilter.DEFAULT_PAGE, SearchFilter.DEFAULT_PAGE_SIZE),
+                false,
+                1,
+                Collections.singletonList(track),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList());
+    }
+
+    private int findTrackIndex(@NonNull List<SearchTrack> tracks, @NonNull SearchTrack targetTrack) {
+        for (int index = 0; index < tracks.size(); index++) {
+            SearchTrack track = tracks.get(index);
+            if (track == targetTrack) {
+                return index;
+            }
+            if (track.getTrackId().equals(targetTrack.getTrackId())
+                    && track.getProviderId().equals(targetTrack.getProviderId())) {
+                return index;
+            }
+        }
+        return 0;
     }
 
     private void cancelPendingSuggestionWork() {
