@@ -38,6 +38,8 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     private ActivityMainBinding binding;
     private PlaybackController playbackController;
     private final PlaybackController.Listener playbackListener = this::renderMiniPlayer;
+    private final androidx.fragment.app.FragmentManager.OnBackStackChangedListener backStackChangedListener = () ->
+            updateChromeForFragment(getSupportFragmentManager().findFragmentById(R.id.fragment_container));
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,6 +49,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         playbackController = PlaybackController.getInstance(this);
+        getSupportFragmentManager().addOnBackStackChangedListener(backStackChangedListener);
 
         setupBottomNavigation();
         setupMiniPlayer();
@@ -251,6 +254,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
 
     @Override
     protected void onDestroy() {
+        getSupportFragmentManager().removeOnBackStackChangedListener(backStackChangedListener);
         super.onDestroy();
         binding = null;
     }

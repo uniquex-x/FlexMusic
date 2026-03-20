@@ -518,13 +518,11 @@ public final class PlaybackController {
         if (currentIndex < queue.size() - 1) {
             return currentIndex + 1;
         }
-        return playerState.getRepeatMode() == PlayerState.RepeatMode.ALL ? 0 : currentIndex;
+        return queue.size() > 1 ? 0 : currentIndex;
     }
 
     private boolean hasNextInternal() {
-        return queue.size() > 1 && (playerState.isShuffleEnabled()
-                || currentIndex < queue.size() - 1
-                || playerState.getRepeatMode() == PlayerState.RepeatMode.ALL);
+        return queue.size() > 1;
     }
 
     private boolean hasPreviousInternal() {

@@ -302,9 +302,6 @@
     <string name="home_category_rock">Rock</string>
     <string name="home_category_electronic">Electronic</string>
     <string name="home_category_hits">Global Hits</string>
-    <string name="home_search_results">Search Results</string>
-    <string name="home_search_results_count">12 songs found</string>
-
     <string name="my_title">My Music</string>
     <string name="my_profile_name">MusicLover99</string>
     <string name="my_premium">PREMIUM</string>
