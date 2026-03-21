@@ -210,12 +210,17 @@
     <string name="my_signed_in_badge">已登录</string>
     <string name="my_guest_badge">游客</string>
     <string name="my_guest_status">当前未连接云端账号</string>
+    <string name="my_auth_disabled_name">账号系统未启用</string>
+    <string name="my_auth_disabled_badge">未启用</string>
+    <string name="my_auth_disabled_status">登录、注册和云端资料功能当前已关闭</string>
     <string name="my_account_format">账号：%1$s</string>
     <string name="account_title">账号</string>
     <string name="account_sign_in">登录</string>
     <string name="account_sign_up">注册</string>
     <string name="account_sign_out">退出登录</string>
     <string name="account_edit_profile">编辑</string>
+    <string name="account_auth_disabled_action">未启用</string>
+    <string name="account_auth_disabled_message">账号功能当前未启用。</string>
     <string name="account_auth_title">欢迎使用 FlexMusic</string>
     <string name="account_auth_subtitle">请先登录或注册，再访问应用全部功能</string>
     <string name="account_email">邮箱</string>

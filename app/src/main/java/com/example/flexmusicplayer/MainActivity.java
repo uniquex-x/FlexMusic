@@ -36,6 +36,7 @@ import com.example.core_domain.auth.IUserAccountRepository;
 import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.search.SearchResultPage;
 import com.example.core_domain.search.SearchTrack;
+import com.example.flexmusicplayer.config.AppConfig;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
@@ -68,6 +69,11 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         binding.getRoot().setVisibility(View.INVISIBLE);
+        if (!AppConfig.Features.isAuthEnabled()) {
+            Log.d(TAG, "onCreate auth disabled, skip startup authentication");
+            initializeUi(savedInstanceState);
+            return;
+        }
         userAccountRepository = new SupabaseUserAccountRepository(this);
         ensureAuthenticatedThenInit(savedInstanceState);
     }
@@ -111,6 +117,11 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     }
 
     private void openAuthGate() {
+        if (!AppConfig.Features.isAuthEnabled()) {
+            Log.d(TAG, "openAuthGate skipped because auth is disabled");
+            initializeUi(null);
+            return;
+        }
         if (isFinishing() || isDestroyed()) {
             return;
         }

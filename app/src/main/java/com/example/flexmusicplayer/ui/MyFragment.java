@@ -38,6 +38,7 @@ import com.example.core_domain.auth.UserSignUpResult;
 import com.example.flexmusicplayer.AuthActivity;
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
+import com.example.flexmusicplayer.config.AppConfig;
 import com.example.flexmusicplayer.model.Playlist;
 import com.example.flexmusicplayer.storage.PlaylistStore;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -134,7 +135,9 @@ public class MyFragment extends Fragment {
         profileActionButton = view.findViewById(R.id.btn_profile_action);
 
         playlistStore = new PlaylistStore(requireContext());
-        userAccountRepository = new SupabaseUserAccountRepository(requireContext());
+        if (AppConfig.Features.isAuthEnabled()) {
+            userAccountRepository = new SupabaseUserAccountRepository(requireContext());
+        }
 
         settingsButton.setOnClickListener(v -> openSettings());
         searchButton.setOnClickListener(v -> openSearch());
@@ -155,7 +158,7 @@ public class MyFragment extends Fragment {
         playlistAdapter = new PlaylistAdapter();
         playlistsRecycler.setAdapter(playlistAdapter);
 
-        renderGuestProfile();
+        renderInitialProfileState();
         loadPlaylists();
         refreshUserProfile(false);
         return view;
@@ -233,6 +236,10 @@ public class MyFragment extends Fragment {
     }
 
     private void refreshUserProfile(boolean showErrorToast) {
+        if (!AppConfig.Features.isAuthEnabled()) {
+            renderAuthDisabledProfile();
+            return;
+        }
         if (userAccountRepository == null) {
             return;
         }
@@ -273,6 +280,7 @@ public class MyFragment extends Fragment {
         profileStatusBadge.setText(R.string.my_signed_in_badge);
         profileAccountText.setText(getString(R.string.my_account_format, profile.getEmail()));
         profileActionButton.setText(R.string.account_edit_profile);
+        profileActionButton.setEnabled(true);
         profileOnlineDot.setVisibility(View.VISIBLE);
         loadAvatarInto(profileAvatarImage, profile.getAvatarUrl());
     }
@@ -292,11 +300,44 @@ public class MyFragment extends Fragment {
         profileStatusBadge.setText(R.string.my_guest_badge);
         profileAccountText.setText(R.string.my_guest_status);
         profileActionButton.setText(R.string.account_sign_in);
+        profileActionButton.setEnabled(true);
+        profileOnlineDot.setVisibility(View.GONE);
+        showPlaceholderAvatar(profileAvatarImage);
+    }
+
+    private void renderInitialProfileState() {
+        if (AppConfig.Features.isAuthEnabled()) {
+            renderGuestProfile();
+            return;
+        }
+        renderAuthDisabledProfile();
+    }
+
+    private void renderAuthDisabledProfile() {
+        currentUserProfile = null;
+        if (!isAdded()
+                || profileNameText == null
+                || profileStatusBadge == null
+                || profileAccountText == null
+                || profileActionButton == null
+                || profileAvatarImage == null
+                || profileOnlineDot == null) {
+            return;
+        }
+        profileNameText.setText(R.string.my_auth_disabled_name);
+        profileStatusBadge.setText(R.string.my_auth_disabled_badge);
+        profileAccountText.setText(R.string.my_auth_disabled_status);
+        profileActionButton.setText(R.string.account_auth_disabled_action);
+        profileActionButton.setEnabled(false);
         profileOnlineDot.setVisibility(View.GONE);
         showPlaceholderAvatar(profileAvatarImage);
     }
 
     private void onProfileActionClicked() {
+        if (!AppConfig.Features.isAuthEnabled()) {
+            showToast(R.string.account_auth_disabled_message);
+            return;
+        }
         if (currentUserProfile == null) {
             openAuthScreen();
         } else {
@@ -305,6 +346,10 @@ public class MyFragment extends Fragment {
     }
 
     private void openAuthScreen() {
+        if (!AppConfig.Features.isAuthEnabled()) {
+            showToast(R.string.account_auth_disabled_message);
+            return;
+        }
         startActivity(AuthActivity.createIntent(requireContext()));
         requireActivity().finish();
     }

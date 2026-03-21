@@ -320,6 +320,9 @@
     <string name="my_signed_in_badge">SIGNED IN</string>
     <string name="my_guest_badge">GUEST</string>
     <string name="my_guest_status">Cloud sync is unavailable</string>
+    <string name="my_auth_disabled_name">Account system is disabled</string>
+    <string name="my_auth_disabled_badge">DISABLED</string>
+    <string name="my_auth_disabled_status">Sign in and cloud profile features are turned off</string>
     <string name="my_account_format">Account: %1$s</string>
     <string name="my_favorites_meta">128 liked tracks</string>
     <string name="my_recent_meta">45 plays this week</string>
@@ -333,6 +336,8 @@
     <string name="account_sign_up">Sign Up</string>
     <string name="account_sign_out">Sign Out</string>
     <string name="account_edit_profile">Edit</string>
+    <string name="account_auth_disabled_action">Disabled</string>
+    <string name="account_auth_disabled_message">Account features are currently disabled.</string>
     <string name="account_auth_title">Welcome Back</string>
     <string name="account_auth_subtitle">Sign in or register before accessing FlexMusic</string>
     <string name="account_email">Email</string>

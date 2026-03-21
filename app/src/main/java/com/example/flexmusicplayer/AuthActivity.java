@@ -19,6 +19,7 @@ import com.example.core_data.auth.SupabaseUserAccountRepository;
 import com.example.core_domain.auth.IUserAccountRepository;
 import com.example.core_domain.auth.UserRegistrationRequest;
 import com.example.core_domain.auth.UserSignUpResult;
+import com.example.flexmusicplayer.config.AppConfig;
 import com.example.flexmusicplayer.databinding.ActivityAuthBinding;
 
 import java.io.IOException;
@@ -46,6 +47,11 @@ public class AuthActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AppConfig.Features.isAuthEnabled()) {
+            Log.d(TAG, "onCreate auth disabled, returning to main");
+            openMain();
+            return;
+        }
         binding = ActivityAuthBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         userAccountRepository = new SupabaseUserAccountRepository(this);
@@ -219,7 +225,7 @@ public class AuthActivity extends AppCompatActivity {
     }
 
     private void openMain() {
-        if (!isUiActive()) {
+        if ((binding == null && AppConfig.Features.isAuthEnabled()) || isFinishing() || isDestroyed()) {
             return;
         }
         Intent intent = new Intent(this, MainActivity.class);
