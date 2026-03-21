@@ -346,6 +346,13 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         if (mainUiInitialized) {
             getSupportFragmentManager().removeOnBackStackChangedListener(backStackChangedListener);
         }
+        if (mainUiInitialized
+                && playbackController != null
+                && isFinishing()
+                && !isChangingConfigurations()) {
+            playbackController.clearPlaybackSessionCache();
+            Log.d(TAG, "onDestroy clear playback session cache");
+        }
         super.onDestroy();
         binding = null;
     }

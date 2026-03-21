@@ -21,6 +21,13 @@ public interface IPlaybackWarmupEngine {
     PlaybackWarmupSnapshot warmup(@NonNull PlaybackWarmupRequest request);
 
     /**
+     * @brief Retains resolved playback artifacts for a source during the current app session.
+     * @param sourceId Stable source identifier for the source that has already started playback.
+     *                 Must not be null.
+     */
+    void retainWarmup(@NonNull String sourceId);
+
+    /**
      * @brief Cancels and releases any prepared warmup resources for one candidate.
      * @param sourceId Stable source identifier for the warmed candidate. Must not be null.
      */

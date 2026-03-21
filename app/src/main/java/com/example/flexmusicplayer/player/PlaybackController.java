@@ -537,6 +537,7 @@ public final class PlaybackController {
                 } else {
                     startProgressTicker();
                 }
+                retainCurrentSourceCacheLocked(currentSong);
                 if (pendingRecentKey.equals(buildPlaybackKey(currentSong))) {
                     recentPlaybackStore.recordPlayback(currentSong);
                     pendingRecentKey = "";
@@ -661,6 +662,13 @@ public final class PlaybackController {
         if (playerState.getState() == PlayerState.State.PLAYING) {
             scheduleWarmupLocked();
         }
+    }
+
+    private void retainCurrentSourceCacheLocked(@NonNull Song currentSong) {
+        String sourceId = resolveSourceId(currentSong);
+        playbackWarmupEngine.retainWarmup(sourceId);
+        Log.d(TAG, "retain current source cache sourceId=" + sourceId
+                + " title=" + currentSong.getTitle());
     }
 
     private void resetWarmupStateForCurrentSongLocked(@NonNull String currentSourceId) {
@@ -998,6 +1006,14 @@ public final class PlaybackController {
 
     private boolean isSearchQueueSessionActiveLocked(long sessionGeneration) {
         return searchQueueSession != null && searchQueueSessionGeneration == sessionGeneration;
+    }
+
+    public synchronized void clearPlaybackSessionCache() {
+        playbackWarmupEngine.cancelAllWarmups();
+        activeWarmupSourceId = "";
+        lastWarmupPlanKey = "";
+        warmupGeneration++;
+        Log.d(TAG, "clearPlaybackSessionCache");
     }
 
     private void clearSearchQueueSessionLocked() {

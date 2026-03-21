@@ -14,7 +14,9 @@ import com.example.core_domain.player.ResolvedPlayableSource;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IPlaybackWarmupEngine {
 
@@ -23,6 +25,7 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IP
 
     private final NetworkWarmupEngine networkWarmupEngine;
     private final Map<String, CachedResolvedSource> resolvedSourceCache = new LinkedHashMap<>();
+    private final Set<String> retainedSourceIds = new LinkedHashSet<>();
 
     public NetworkPlaybackSourceResolver() {
         this(new AudioStreamProbeApi(), new HostWarmupClient());
@@ -141,10 +144,40 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IP
     }
 
     @Override
+    public synchronized void retainWarmup(@NonNull String sourceId) {
+        retainedSourceIds.add(sourceId);
+        CachedResolvedSource cachedResolvedSource = resolvedSourceCache.get(sourceId);
+        if (cachedResolvedSource == null) {
+            Log.d(TAG, "retain warmup pending sourceId=" + sourceId);
+            return;
+        }
+        if (cachedResolvedSource.retainedForSession) {
+            return;
+        }
+        resolvedSourceCache.put(sourceId, new CachedResolvedSource(
+                cachedResolvedSource.resolvedSource,
+                cachedResolvedSource.originalUrl,
+                cachedResolvedSource.warmupSnapshot,
+                Long.MAX_VALUE,
+                true));
+        Log.d(TAG, "retain warmup sourceId=" + sourceId
+                + " resolvedUrl=" + cachedResolvedSource.resolvedSource.getResolvedUrl());
+    }
+
+    @Override
     public void cancelWarmup(@NonNull String sourceId) {
         CachedResolvedSource cachedResolvedSource;
         synchronized (this) {
-            cachedResolvedSource = resolvedSourceCache.remove(sourceId);
+            cachedResolvedSource = resolvedSourceCache.get(sourceId);
+            if (cachedResolvedSource == null) {
+                return;
+            }
+            if (cachedResolvedSource.retainedForSession) {
+                Log.d(TAG, "retain cache keep sourceId=" + sourceId
+                        + " resolvedUrl=" + cachedResolvedSource.resolvedSource.getResolvedUrl());
+                return;
+            }
+            resolvedSourceCache.remove(sourceId);
         }
         if (cachedResolvedSource != null && cachedResolvedSource.warmupSnapshot != null) {
             SeekablePlaybackProxyServer.ProxySessionHandle handle = cachedResolvedSource.warmupSnapshot.proxySessionHandle;
@@ -160,6 +193,7 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IP
 
     @Override
     public synchronized void cancelAllWarmups() {
+        retainedSourceIds.clear();
         for (String sourceId : new LinkedHashMap<>(resolvedSourceCache).keySet()) {
             cancelWarmup(sourceId);
         }
@@ -169,11 +203,13 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IP
                                                   @NonNull String originalUrl,
                                                   @NonNull ResolvedPlayableSource resolvedSource,
                                                   @Nullable CachedWarmupSnapshot warmupSnapshot) {
+        boolean retainedForSession = retainedSourceIds.contains(sourceId);
         resolvedSourceCache.put(sourceId, new CachedResolvedSource(
                 resolvedSource,
                 originalUrl,
                 warmupSnapshot,
-                System.currentTimeMillis() + CACHE_TTL_MS));
+                retainedForSession ? Long.MAX_VALUE : System.currentTimeMillis() + CACHE_TTL_MS,
+                retainedForSession));
     }
 
     @Nullable
@@ -186,9 +222,10 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IP
         if (!cached.originalUrl.equals(originalUrl)) {
             releasePreparedHandleLocked(sourceId, cached);
             resolvedSourceCache.remove(sourceId);
+            retainedSourceIds.remove(sourceId);
             return null;
         }
-        if (cached.expiresAtMs < System.currentTimeMillis()) {
+        if (!cached.retainedForSession && cached.expiresAtMs < System.currentTimeMillis()) {
             releasePreparedHandleLocked(sourceId, cached);
             resolvedSourceCache.remove(sourceId);
             return null;
@@ -210,15 +247,18 @@ public class NetworkPlaybackSourceResolver implements PlaybackSourceResolver, IP
         private final String originalUrl;
         private final CachedWarmupSnapshot warmupSnapshot;
         private final long expiresAtMs;
+        private final boolean retainedForSession;
 
         private CachedResolvedSource(@NonNull ResolvedPlayableSource resolvedSource,
                                      @NonNull String originalUrl,
                                      @Nullable CachedWarmupSnapshot warmupSnapshot,
-                                     long expiresAtMs) {
+                                     long expiresAtMs,
+                                     boolean retainedForSession) {
             this.resolvedSource = resolvedSource;
             this.originalUrl = originalUrl;
             this.warmupSnapshot = warmupSnapshot;
             this.expiresAtMs = expiresAtMs;
+            this.retainedForSession = retainedForSession;
         }
     }
 
