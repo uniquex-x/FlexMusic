@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/action_mode_shuffle"
+            android:title="@string/player_mode_shuffle" />
+        <item
+            android:id="@+id/action_mode_order"
+            android:title="@string/player_mode_order" />
+        <item
+            android:id="@+id/action_mode_single_loop"
+            android:title="@string/player_mode_single_loop" />
+        <item
+            android:id="@+id/action_mode_single_loop_count"
+            android:title="@string/player_mode_single_loop_count_fallback" />
+    </group>
+</menu>

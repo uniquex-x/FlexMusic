@@ -380,8 +380,8 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/player_shuffle"
-                android:src="@drawable/ic_shuffle"
+                android:contentDescription="@string/player_play_mode"
+                android:src="@drawable/ic_play_order"
                 app:tint="#AAB5C7" />
 
             <ImageButton

@@ -157,6 +157,7 @@
     <string name="player_title">正在播放</string>
     <string name="player_play">播放</string>
     <string name="player_pause">暂停</string>
+    <string name="player_play_mode">播放模式</string>
     <string name="player_next">下一首</string>
     <string name="player_previous">上一首</string>
     <string name="player_shuffle">随机播放</string>
@@ -175,6 +176,15 @@
     <string name="player_menu_share">分享</string>
     <string name="player_menu_speed">倍速：%1$sx</string>
     <string name="player_speed_title">播放倍速</string>
+    <string name="player_mode_shuffle">随机播放</string>
+    <string name="player_mode_order">顺序播放</string>
+    <string name="player_mode_single_loop">单曲循环</string>
+    <string name="player_mode_single_loop_count">单曲循环（%1$d次）</string>
+    <string name="player_mode_single_loop_count_fallback">单曲循环（设置次数）</string>
+    <string name="player_mode_single_loop_count_title">设置循环次数</string>
+    <string name="player_mode_single_loop_count_message">请输入当前歌曲在切到下一首前需要循环的次数。</string>
+    <string name="player_mode_single_loop_count_error">请输入大于等于 2 的整数。</string>
+    <string name="player_mode_changed">播放模式：%1$s</string>
     <string name="player_share_text">%1$s - %2$s</string>
     <string name="player_share_chooser">分享歌曲</string>
     <string name="player_speed_pending_kernel">已选择 %1$sx，当前版本先记录倍速状态，原生内核真实变速链路还未接入。</string>

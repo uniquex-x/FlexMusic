@@ -54,7 +54,8 @@ public final class SleepPlaybackController implements PlaybackController.Listene
     private SleepPlaybackState lastDispatchedState;
     private long ambiencePrepareGeneration = 0L;
     @NonNull
-    private PlayerState.RepeatMode repeatModeBeforeSleep = PlayerState.RepeatMode.OFF;
+    private PlayerState.PlaybackMode playbackModeBeforeSleep = PlayerState.PlaybackMode.ORDER;
+    private int singleLoopCountBeforeSleep = 2;
     private boolean sleepManagedRepeatMode;
     private final Runnable timerTicker = new Runnable() {
         @Override
@@ -366,10 +367,11 @@ public final class SleepPlaybackController implements PlaybackController.Listene
 
     private void rememberAndForceRepeatOneLocked() {
         if (!sleepManagedRepeatMode) {
-            repeatModeBeforeSleep = playbackController.getPlayerState().getRepeatMode();
+            playbackModeBeforeSleep = playbackController.getPlayerState().getPlaybackMode();
+            singleLoopCountBeforeSleep = playbackController.getPlayerState().getSingleLoopCount();
             sleepManagedRepeatMode = true;
         }
-        playbackController.setRepeatMode(PlayerState.RepeatMode.ONE);
+        playbackController.setPlaybackMode(PlayerState.PlaybackMode.SINGLE_LOOP);
     }
 
     private void restoreRepeatModeIfNeededLocked() {
@@ -377,8 +379,9 @@ public final class SleepPlaybackController implements PlaybackController.Listene
             return;
         }
         sleepManagedRepeatMode = false;
-        if (playbackController.getPlayerState().getRepeatMode() == PlayerState.RepeatMode.ONE) {
-            playbackController.setRepeatMode(repeatModeBeforeSleep);
+        if (playbackController.getPlayerState().getPlaybackMode() == PlayerState.PlaybackMode.SINGLE_LOOP) {
+            playbackController.setSingleLoopCount(singleLoopCountBeforeSleep);
+            playbackController.setPlaybackMode(playbackModeBeforeSleep);
         }
     }
 

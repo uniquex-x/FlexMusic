@@ -18,12 +18,22 @@ public class PlayerState implements Serializable {
         ONE
     }
 
+    public enum PlaybackMode {
+        SHUFFLE,
+        ORDER,
+        SINGLE_LOOP,
+        SINGLE_LOOP_COUNT
+    }
+
     private State state;
     private Song currentSong;
     private int currentPosition; // in milliseconds
     private int duration; // in milliseconds
     private boolean isShuffleEnabled;
     private RepeatMode repeatMode;
+    private PlaybackMode playbackMode;
+    private int singleLoopCount;
+    private int remainingSingleLoopCount;
     private float volume;
     private float playbackSpeed;
 
@@ -33,6 +43,9 @@ public class PlayerState implements Serializable {
         this.duration = 0;
         this.isShuffleEnabled = false;
         this.repeatMode = RepeatMode.OFF;
+        this.playbackMode = PlaybackMode.ORDER;
+        this.singleLoopCount = 2;
+        this.remainingSingleLoopCount = 2;
         this.volume = 1.0f;
         this.playbackSpeed = 1.0f;
     }
@@ -76,6 +89,13 @@ public class PlayerState implements Serializable {
 
     public void setShuffleEnabled(boolean shuffleEnabled) {
         isShuffleEnabled = shuffleEnabled;
+        if (shuffleEnabled) {
+            playbackMode = PlaybackMode.SHUFFLE;
+            repeatMode = RepeatMode.OFF;
+        } else if (playbackMode == PlaybackMode.SHUFFLE) {
+            playbackMode = PlaybackMode.ORDER;
+            repeatMode = RepeatMode.OFF;
+        }
     }
 
     public RepeatMode getRepeatMode() {
@@ -84,6 +104,55 @@ public class PlayerState implements Serializable {
 
     public void setRepeatMode(RepeatMode repeatMode) {
         this.repeatMode = repeatMode;
+        if (repeatMode == RepeatMode.ONE) {
+            if (playbackMode != PlaybackMode.SINGLE_LOOP_COUNT) {
+                playbackMode = PlaybackMode.SINGLE_LOOP;
+            }
+            isShuffleEnabled = false;
+        } else if (playbackMode != PlaybackMode.SHUFFLE) {
+            playbackMode = PlaybackMode.ORDER;
+            isShuffleEnabled = false;
+        }
+    }
+
+    public PlaybackMode getPlaybackMode() {
+        return playbackMode;
+    }
+
+    public void setPlaybackMode(PlaybackMode playbackMode) {
+        this.playbackMode = playbackMode;
+        switch (playbackMode) {
+            case SHUFFLE:
+                isShuffleEnabled = true;
+                repeatMode = RepeatMode.OFF;
+                break;
+            case SINGLE_LOOP:
+            case SINGLE_LOOP_COUNT:
+                isShuffleEnabled = false;
+                repeatMode = RepeatMode.ONE;
+                break;
+            case ORDER:
+            default:
+                isShuffleEnabled = false;
+                repeatMode = RepeatMode.OFF;
+                break;
+        }
+    }
+
+    public int getSingleLoopCount() {
+        return singleLoopCount;
+    }
+
+    public void setSingleLoopCount(int singleLoopCount) {
+        this.singleLoopCount = Math.max(2, singleLoopCount);
+    }
+
+    public int getRemainingSingleLoopCount() {
+        return remainingSingleLoopCount;
+    }
+
+    public void setRemainingSingleLoopCount(int remainingSingleLoopCount) {
+        this.remainingSingleLoopCount = Math.max(1, remainingSingleLoopCount);
     }
 
     public float getVolume() {
@@ -119,21 +188,15 @@ public class PlayerState implements Serializable {
     }
 
     public void toggleShuffle() {
-        this.isShuffleEnabled = !this.isShuffleEnabled;
+        setPlaybackMode(playbackMode == PlaybackMode.SHUFFLE
+                ? PlaybackMode.ORDER
+                : PlaybackMode.SHUFFLE);
     }
 
     public void toggleRepeat() {
-        switch (repeatMode) {
-            case OFF:
-                repeatMode = RepeatMode.ALL;
-                break;
-            case ALL:
-                repeatMode = RepeatMode.ONE;
-                break;
-            case ONE:
-                repeatMode = RepeatMode.OFF;
-                break;
-        }
+        setPlaybackMode(playbackMode == PlaybackMode.SINGLE_LOOP
+                ? PlaybackMode.ORDER
+                : PlaybackMode.SINGLE_LOOP);
     }
 
     public String getFormattedCurrentPosition() {

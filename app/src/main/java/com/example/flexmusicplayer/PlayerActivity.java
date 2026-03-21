@@ -4,12 +4,15 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -110,7 +113,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         binding.lyricsSongTitle.setOnClickListener(v -> showNowPlayingScreen());
         binding.lyricsSongSubtitle.setOnClickListener(v -> showNowPlayingScreen());
 
-        binding.btnShuffle.setOnClickListener(v -> playbackController.toggleShuffle());
+        binding.btnShuffle.setOnClickListener(this::showPlaybackModeMenu);
         binding.btnPreviousLarge.setOnClickListener(v -> playbackController.skipPrevious());
         binding.btnPlayPauseLarge.setOnClickListener(v -> {
             PlayerState state = playbackController.getPlayerState();
@@ -122,13 +125,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
             updateBufferStatus(state);
         });
         binding.btnNextLarge.setOnClickListener(v -> playbackController.skipNext());
-        binding.btnSecondaryAction.setOnClickListener(v -> {
-            if (showingLyrics) {
-                playbackController.toggleRepeat();
-            } else {
-                showPlaybackQueueDialog();
-            }
-        });
+        binding.btnSecondaryAction.setOnClickListener(v -> showPlaybackQueueDialog());
         binding.playerSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -266,17 +263,144 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     }
 
     private void updateControlChrome(@NonNull PlayerState state) {
+        binding.btnShuffle.setImageResource(resolvePlaybackModeIcon(state));
         binding.btnShuffle.setImageTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(
                 this,
-                state.isShuffleEnabled() ? R.color.player_bar_background : R.color.gray_400)));
+                R.color.player_bar_background)));
+        binding.btnShuffle.setContentDescription(resolvePlaybackModeLabel(state));
+        binding.btnSecondaryAction.setImageResource(R.drawable.ic_playlist);
+        binding.btnSecondaryAction.setImageTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this, R.color.gray_400)));
+        binding.btnSecondaryAction.setContentDescription(getString(R.string.player_queue));
+    }
 
-        if (showingLyrics) {
-            binding.btnSecondaryAction.setImageResource(R.drawable.ic_repeat);
-            int tintRes = state.getRepeatMode() == PlayerState.RepeatMode.OFF ? R.color.gray_400 : R.color.player_bar_background;
-            binding.btnSecondaryAction.setImageTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this, tintRes)));
-        } else {
-            binding.btnSecondaryAction.setImageResource(R.drawable.ic_playlist);
-            binding.btnSecondaryAction.setImageTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this, R.color.gray_400)));
+    private void showPlaybackModeMenu(@NonNull View anchorView) {
+        PopupMenu popupMenu = new PopupMenu(this, anchorView);
+        popupMenu.inflate(R.menu.menu_playback_mode);
+        PlayerState state = playbackController.getPlayerState();
+        popupMenu.getMenu().findItem(R.id.action_mode_single_loop_count)
+                .setTitle(getString(R.string.player_mode_single_loop_count, state.getSingleLoopCount()));
+        updatePlaybackModeMenuCheckState(popupMenu.getMenu(), state);
+        popupMenu.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.action_mode_shuffle) {
+                applyPlaybackMode(PlayerState.PlaybackMode.SHUFFLE);
+                return true;
+            }
+            if (itemId == R.id.action_mode_order) {
+                applyPlaybackMode(PlayerState.PlaybackMode.ORDER);
+                return true;
+            }
+            if (itemId == R.id.action_mode_single_loop) {
+                applyPlaybackMode(PlayerState.PlaybackMode.SINGLE_LOOP);
+                return true;
+            }
+            if (itemId == R.id.action_mode_single_loop_count) {
+                showSingleLoopCountDialog();
+                return true;
+            }
+            return false;
+        });
+        popupMenu.show();
+    }
+
+    private void updatePlaybackModeMenuCheckState(@NonNull Menu menu, @NonNull PlayerState state) {
+        int checkedItemId;
+        switch (state.getPlaybackMode()) {
+            case SHUFFLE:
+                checkedItemId = R.id.action_mode_shuffle;
+                break;
+            case SINGLE_LOOP:
+                checkedItemId = R.id.action_mode_single_loop;
+                break;
+            case SINGLE_LOOP_COUNT:
+                checkedItemId = R.id.action_mode_single_loop_count;
+                break;
+            case ORDER:
+            default:
+                checkedItemId = R.id.action_mode_order;
+                break;
+        }
+        menu.findItem(checkedItemId).setChecked(true);
+    }
+
+    private void applyPlaybackMode(@NonNull PlayerState.PlaybackMode playbackMode) {
+        playbackController.setPlaybackMode(playbackMode);
+        showToast(getString(R.string.player_mode_changed, resolvePlaybackModeLabel(playbackController.getPlayerState())));
+    }
+
+    private void showSingleLoopCountDialog() {
+        PlayerState state = playbackController.getPlayerState();
+        EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setText(String.valueOf(state.getSingleLoopCount()));
+        input.setSelection(input.getText().length());
+        FrameLayout container = new FrameLayout(this);
+        int horizontalMargin = dpToPx(24);
+        FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT);
+        layoutParams.setMarginStart(horizontalMargin);
+        layoutParams.setMarginEnd(horizontalMargin);
+        input.setLayoutParams(layoutParams);
+        container.addView(input);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.player_mode_single_loop_count_title)
+                .setMessage(R.string.player_mode_single_loop_count_message)
+                .setView(container)
+                .setPositiveButton(R.string.confirm, null)
+                .setNegativeButton(R.string.cancel, null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String rawValue = input.getText().toString().trim();
+            if (TextUtils.isEmpty(rawValue)) {
+                input.setError(getString(R.string.player_mode_single_loop_count_error));
+                return;
+            }
+            int count;
+            try {
+                count = Integer.parseInt(rawValue);
+            } catch (NumberFormatException numberFormatException) {
+                input.setError(getString(R.string.player_mode_single_loop_count_error));
+                return;
+            }
+            if (count < 2) {
+                input.setError(getString(R.string.player_mode_single_loop_count_error));
+                return;
+            }
+            playbackController.setSingleLoopCount(count);
+            playbackController.setPlaybackMode(PlayerState.PlaybackMode.SINGLE_LOOP_COUNT);
+            showToast(getString(R.string.player_mode_changed, resolvePlaybackModeLabel(playbackController.getPlayerState())));
+            dialog.dismiss();
+        }));
+        dialog.show();
+    }
+
+    private int resolvePlaybackModeIcon(@NonNull PlayerState state) {
+        switch (state.getPlaybackMode()) {
+            case SHUFFLE:
+                return R.drawable.ic_shuffle;
+            case SINGLE_LOOP:
+            case SINGLE_LOOP_COUNT:
+                return R.drawable.ic_repeat_one;
+            case ORDER:
+            default:
+                return R.drawable.ic_play_order;
+        }
+    }
+
+    @NonNull
+    private String resolvePlaybackModeLabel(@NonNull PlayerState state) {
+        switch (state.getPlaybackMode()) {
+            case SHUFFLE:
+                return getString(R.string.player_mode_shuffle);
+            case SINGLE_LOOP:
+                return getString(R.string.player_mode_single_loop);
+            case SINGLE_LOOP_COUNT:
+                return getString(R.string.player_mode_single_loop_count, state.getSingleLoopCount());
+            case ORDER:
+            default:
+                return getString(R.string.player_mode_order);
         }
     }
 

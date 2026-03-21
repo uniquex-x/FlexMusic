@@ -162,6 +162,7 @@
     <string name="player_title">Now Playing</string>
     <string name="player_play">Play</string>
     <string name="player_pause">Pause</string>
+    <string name="player_play_mode">Playback Mode</string>
     <string name="player_next">Next</string>
     <string name="player_previous">Previous</string>
     <string name="player_shuffle">Shuffle</string>
@@ -169,7 +170,7 @@
     <string name="player_repeat">Repeat</string>
     <string name="player_repeat_off">Repeat Off</string>
     <string name="player_repeat_all">Repeat All</string>
-    <string name="player_repeat_one">Repeat One</string>
+    <string name="player_repeat_one">Single Loop</string>
     <string name="player_queue">Queue</string>
     <string name="player_add_to_queue">Add to Queue</string>
     <string name="player_lyrics">Lyrics</string>
@@ -190,6 +191,15 @@
     <string name="player_menu_share">Share</string>
     <string name="player_menu_speed">Speed: %1$sx</string>
     <string name="player_speed_title">Playback Speed</string>
+    <string name="player_mode_shuffle">Shuffle Play</string>
+    <string name="player_mode_order">Sequential Play</string>
+    <string name="player_mode_single_loop">Single Loop</string>
+    <string name="player_mode_single_loop_count">Single Loop (%1$d times)</string>
+    <string name="player_mode_single_loop_count_fallback">Single Loop With Count</string>
+    <string name="player_mode_single_loop_count_title">Repeat Count</string>
+    <string name="player_mode_single_loop_count_message">Enter how many times the current song should repeat before moving on.</string>
+    <string name="player_mode_single_loop_count_error">Enter an integer greater than or equal to 2.</string>
+    <string name="player_mode_changed">Playback mode: %1$s</string>
     <string name="player_share_text">%1$s - %2$s</string>
     <string name="player_share_chooser">Share track</string>
     <string name="player_speed_pending_kernel">Selected %1$sx. Native time-stretch is not connected yet.</string>

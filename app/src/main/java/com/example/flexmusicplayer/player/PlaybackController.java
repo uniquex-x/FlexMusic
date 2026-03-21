@@ -50,6 +50,7 @@ public final class PlaybackController {
     private static final int SEARCH_QUEUE_INITIAL_SIZE = 20;
     private static final int SEARCH_QUEUE_EXPAND_THRESHOLD = 5;
     private static final int SEARCH_QUEUE_MAX_SIZE = 1000;
+    private static final long TERMINAL_ERROR_AS_COMPLETION_THRESHOLD_MS = 5_000L;
     private static final String SEARCH_TRACK_SOURCE_PREFIX = "search_track:";
 
     public interface Listener {
@@ -317,33 +318,70 @@ public final class PlaybackController {
             seekTo(0);
             return;
         }
-        if (playerState.isShuffleEnabled() && queue.size() > 1) {
-            currentIndex = (currentIndex - 1 + queue.size()) % queue.size();
-        } else if (currentIndex > 0) {
-            currentIndex--;
+        int effectiveCurrentIndex = resolveEffectiveCurrentIndexLocked();
+        if (effectiveCurrentIndex < 0) {
+            seekTo(0);
+            return;
+        }
+        if (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SHUFFLE && queue.size() > 1) {
+            currentIndex = (effectiveCurrentIndex - 1 + queue.size()) % queue.size();
+        } else if (effectiveCurrentIndex > 0) {
+            currentIndex = effectiveCurrentIndex - 1;
         } else {
-            currentIndex = queue.size() - 1;
+            seekTo(0);
+            return;
         }
         prepareCurrentSong();
     }
 
     public synchronized void toggleShuffle() {
-        playerState.toggleShuffle();
-        onQueueTopologyChangedLocked();
-        dispatchState();
+        setPlaybackMode(playerState.getPlaybackMode() == PlayerState.PlaybackMode.SHUFFLE
+                ? PlayerState.PlaybackMode.ORDER
+                : PlayerState.PlaybackMode.SHUFFLE);
     }
 
     public synchronized void toggleRepeat() {
-        playerState.toggleRepeat();
+        setPlaybackMode(playerState.getPlaybackMode() == PlayerState.PlaybackMode.SINGLE_LOOP
+                ? PlayerState.PlaybackMode.ORDER
+                : PlayerState.PlaybackMode.SINGLE_LOOP);
+    }
+
+    public synchronized void setRepeatMode(@NonNull PlayerState.RepeatMode repeatMode) {
+        PlayerState.PlaybackMode targetMode = repeatMode == PlayerState.RepeatMode.ONE
+                ? PlayerState.PlaybackMode.SINGLE_LOOP
+                : (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SHUFFLE
+                ? PlayerState.PlaybackMode.SHUFFLE
+                : PlayerState.PlaybackMode.ORDER);
+        if (playerState.getPlaybackMode() == targetMode) {
+            return;
+        }
+        playerState.setPlaybackMode(targetMode);
+        resetCurrentTrackLoopBudgetLocked();
+        Log.d(TAG, "setRepeatMode repeatMode=" + repeatMode
+                + " playbackMode=" + targetMode);
         onQueueTopologyChangedLocked();
         dispatchState();
     }
 
-    public synchronized void setRepeatMode(@NonNull PlayerState.RepeatMode repeatMode) {
-        if (playerState.getRepeatMode() == repeatMode) {
+    public synchronized void setPlaybackMode(@NonNull PlayerState.PlaybackMode playbackMode) {
+        if (playerState.getPlaybackMode() == playbackMode) {
             return;
         }
-        playerState.setRepeatMode(repeatMode);
+        playerState.setPlaybackMode(playbackMode);
+        resetCurrentTrackLoopBudgetLocked();
+        Log.d(TAG, "setPlaybackMode mode=" + playbackMode);
+        onQueueTopologyChangedLocked();
+        dispatchState();
+    }
+
+    public synchronized void setSingleLoopCount(int singleLoopCount) {
+        int safeCount = Math.max(2, singleLoopCount);
+        if (playerState.getSingleLoopCount() == safeCount) {
+            return;
+        }
+        playerState.setSingleLoopCount(safeCount);
+        resetCurrentTrackLoopBudgetLocked();
+        Log.d(TAG, "setSingleLoopCount count=" + safeCount);
         onQueueTopologyChangedLocked();
         dispatchState();
     }
@@ -369,6 +407,7 @@ public final class PlaybackController {
         if (currentIndex < 0 || currentIndex >= queue.size()) {
             return;
         }
+        resetCurrentTrackLoopBudgetLocked();
         Song song = queue.get(currentIndex);
         resetWarmupStateForCurrentSongLocked(resolveSourceId(song));
         Log.d(TAG, "prepareCurrentSong id=" + song.getId()
@@ -550,9 +589,17 @@ public final class PlaybackController {
                 stopProgressTicker();
                 break;
             case COMPLETED:
-                handleCompletionLocked();
+                handleCompletionLocked(snapshot);
                 return;
             case ERROR:
+                if (shouldTreatTerminalErrorAsCompletionLocked(snapshot, currentSong)) {
+                    Log.w(TAG, "treat terminal error as completion sourceId=" + resolveSourceId(currentSong)
+                            + " positionMs=" + snapshot.getCurrentPositionMs()
+                            + " durationMs=" + snapshot.getDurationMs()
+                            + " error=" + snapshot.getErrorMessage());
+                    handleCompletionLocked(snapshot);
+                    return;
+                }
                 playerState.setState(PlayerState.State.ERROR);
                 stopProgressTicker();
                 break;
@@ -565,13 +612,33 @@ public final class PlaybackController {
         dispatchState();
     }
 
-    private void handleCompletionLocked() {
-        if (playerState.getRepeatMode() == PlayerState.RepeatMode.ONE) {
-            playerKernel.seekTo(0L);
-            playerKernel.play();
+    private void handleCompletionLocked(@NonNull PlayerKernelSnapshot terminalSnapshot) {
+        int effectiveCurrentIndex = resolveEffectiveCurrentIndexLocked();
+        Log.d(TAG, "handleCompletion mode=" + playerState.getPlaybackMode()
+                + " terminalState=" + terminalSnapshot.getState()
+                + " queueSize=" + queue.size()
+                + " currentIndex=" + currentIndex
+                + " effectiveIndex=" + effectiveCurrentIndex
+                + " sourceId=" + resolveCurrentSourceIdLocked());
+        if (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SINGLE_LOOP) {
+            restartCurrentTrackLocked("single loop replay", terminalSnapshot.getState() == PlayerKernelState.COMPLETED);
             return;
         }
-        if (hasNextInternal()) {
+        if (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SINGLE_LOOP_COUNT) {
+            int remainingLoopCount = playerState.getRemainingSingleLoopCount();
+            if (remainingLoopCount > 1) {
+                playerState.setRemainingSingleLoopCount(remainingLoopCount - 1);
+                Log.d(TAG, "single loop count replay sourceId=" + resolveSourceId(playerState.getCurrentSong())
+                        + " remaining=" + playerState.getRemainingSingleLoopCount());
+                restartCurrentTrackLocked(
+                        "single loop count replay",
+                        terminalSnapshot.getState() == PlayerKernelState.COMPLETED);
+                dispatchState();
+                return;
+            }
+            resetCurrentTrackLoopBudgetLocked();
+        }
+        if (hasAutoAdvanceTargetLocked()) {
             currentIndex = resolveNextIndex();
             prepareCurrentSong();
             return;
@@ -580,6 +647,49 @@ public final class PlaybackController {
         playerState.setState(PlayerState.State.PAUSED);
         stopProgressTicker();
         dispatchState();
+    }
+
+    private boolean shouldTreatTerminalErrorAsCompletionLocked(@NonNull PlayerKernelSnapshot snapshot,
+                                                               @NonNull Song currentSong) {
+        if (currentSong.isRadioStream()) {
+            return false;
+        }
+        long durationMs = Math.max(snapshot.getDurationMs(), playerState.getDuration());
+        long positionMs = Math.max(snapshot.getCurrentPositionMs(), playerState.getCurrentPosition());
+        if (durationMs <= 0L || positionMs <= 0L) {
+            return false;
+        }
+        long remainingMs = durationMs - positionMs;
+        if (remainingMs < 0L) {
+            remainingMs = 0L;
+        }
+        boolean nearTrackEnd = remainingMs <= TERMINAL_ERROR_AS_COMPLETION_THRESHOLD_MS;
+        if (!nearTrackEnd) {
+            Log.w(TAG, "terminal error not treated as completion sourceId=" + resolveSourceId(currentSong)
+                    + " positionMs=" + positionMs
+                    + " durationMs=" + durationMs
+                    + " remainingMs=" + remainingMs
+                    + " error=" + snapshot.getErrorMessage());
+        }
+        return nearTrackEnd;
+    }
+
+    private void restartCurrentTrackLocked(@NonNull String reason, boolean allowFastRestart) {
+        Song currentSong = playerState.getCurrentSong();
+        if (currentSong == null) {
+            return;
+        }
+        Log.d(TAG, reason + " sourceId=" + resolveSourceId(currentSong)
+                + " title=" + currentSong.getTitle()
+                + " fastRestart=" + allowFastRestart);
+        if (allowFastRestart) {
+            playerState.setCurrentPosition(0);
+            playerState.setState(PlayerState.State.LOADING);
+            stopProgressTicker();
+            playerKernel.play();
+            return;
+        }
+        prepareCurrentSong();
     }
 
     @NonNull
@@ -597,24 +707,90 @@ public final class PlaybackController {
     }
 
     private int resolveNextIndex() {
-        if (queue.isEmpty()) {
+        int effectiveCurrentIndex = resolveEffectiveCurrentIndexLocked();
+        if (queue.isEmpty() || effectiveCurrentIndex < 0) {
             return -1;
         }
-        if (playerState.isShuffleEnabled() && queue.size() > 1) {
-            return (currentIndex + 1 + ((currentIndex + 1) % (queue.size() - 1))) % queue.size();
+        if (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SHUFFLE && queue.size() > 1) {
+            return (effectiveCurrentIndex + 1 + ((effectiveCurrentIndex + 1) % (queue.size() - 1))) % queue.size();
         }
-        if (currentIndex < queue.size() - 1) {
-            return currentIndex + 1;
+        if (effectiveCurrentIndex < queue.size() - 1) {
+            return effectiveCurrentIndex + 1;
         }
-        return queue.size() > 1 ? 0 : currentIndex;
+        return -1;
     }
 
     private boolean hasNextInternal() {
-        return queue.size() > 1;
+        if (queue.size() <= 1) {
+            return false;
+        }
+        if (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SHUFFLE) {
+            return true;
+        }
+        int effectiveCurrentIndex = resolveEffectiveCurrentIndexLocked();
+        return effectiveCurrentIndex >= 0 && effectiveCurrentIndex < queue.size() - 1;
     }
 
     private boolean hasPreviousInternal() {
-        return queue.size() > 1;
+        if (queue.size() <= 1) {
+            return false;
+        }
+        if (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SHUFFLE) {
+            return true;
+        }
+        return resolveEffectiveCurrentIndexLocked() > 0;
+    }
+
+    private boolean hasAutoAdvanceTargetLocked() {
+        if (queue.size() <= 1) {
+            return false;
+        }
+        if (playerState.getPlaybackMode() == PlayerState.PlaybackMode.SHUFFLE) {
+            return true;
+        }
+        int effectiveCurrentIndex = resolveEffectiveCurrentIndexLocked();
+        return effectiveCurrentIndex >= 0 && effectiveCurrentIndex < queue.size() - 1;
+    }
+
+    private void resetCurrentTrackLoopBudgetLocked() {
+        playerState.setRemainingSingleLoopCount(playerState.getSingleLoopCount());
+    }
+
+    private int resolveEffectiveCurrentIndexLocked() {
+        Song currentSong = playerState.getCurrentSong();
+        if (currentSong == null || queue.isEmpty()) {
+            return currentIndex >= 0 && currentIndex < queue.size() ? currentIndex : -1;
+        }
+        if (currentIndex >= 0
+                && currentIndex < queue.size()
+                && sameQueueSongLocked(queue.get(currentIndex), currentSong)) {
+            return currentIndex;
+        }
+        for (int index = 0; index < queue.size(); index++) {
+            if (sameQueueSongLocked(queue.get(index), currentSong)) {
+                currentIndex = index;
+                return index;
+            }
+        }
+        return currentIndex >= 0 && currentIndex < queue.size() ? currentIndex : -1;
+    }
+
+    private boolean sameQueueSongLocked(@NonNull Song left, @NonNull Song right) {
+        String leftSourceId = resolveSourceId(left);
+        String rightSourceId = resolveSourceId(right);
+        if (leftSourceId.equals(rightSourceId)) {
+            return true;
+        }
+        return buildPlaybackKey(left).equals(buildPlaybackKey(right));
+    }
+
+    @NonNull
+    private String resolveCurrentSourceIdLocked() {
+        Song currentSong = playerState.getCurrentSong();
+        if (currentSong == null) {
+            return "";
+        }
+        return resolveSourceId(currentSong);
     }
 
     private void startProgressTicker() {
@@ -632,8 +808,9 @@ public final class PlaybackController {
         snapshot.setCurrentSong(playerState.getCurrentSong());
         snapshot.setCurrentPosition(playerState.getCurrentPosition());
         snapshot.setDuration(playerState.getDuration());
-        snapshot.setShuffleEnabled(playerState.isShuffleEnabled());
-        snapshot.setRepeatMode(playerState.getRepeatMode());
+        snapshot.setPlaybackMode(playerState.getPlaybackMode());
+        snapshot.setSingleLoopCount(playerState.getSingleLoopCount());
+        snapshot.setRemainingSingleLoopCount(playerState.getRemainingSingleLoopCount());
         snapshot.setVolume(playerState.getVolume());
         snapshot.setPlaybackSpeed(playerState.getPlaybackSpeed());
         return snapshot;
@@ -692,7 +869,10 @@ public final class PlaybackController {
             return;
         }
 
-        int nextIndex = resolveNextIndex();
+        int nextIndex = playerState.getPlaybackMode() == PlayerState.PlaybackMode.SINGLE_LOOP
+                || playerState.getPlaybackMode() == PlayerState.PlaybackMode.SINGLE_LOOP_COUNT
+                ? -1
+                : resolveNextIndex();
         PlaybackRequest nextRequest = null;
         if (nextIndex >= 0 && nextIndex < queue.size() && nextIndex != currentIndex) {
             Song nextSong = queue.get(nextIndex);
