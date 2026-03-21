@@ -235,11 +235,11 @@
                         app:rippleColor="@color/transparent" />
 
                     <com.google.android.material.chip.Chip
-                        android:id="@+id/chip_format_aac"
+                        android:id="@+id/chip_format_ogg"
                         style="@style/Widget.MaterialComponents.Chip.Choice"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/transcode_format_aac"
+                        android:text="@string/transcode_format_ogg"
                         android:textColor="@color/transcode_chip_text"
                         app:checkedIconVisible="false"
                         app:chipBackgroundColor="@color/transcode_chip_bg"
@@ -388,6 +388,7 @@
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/transcode_result_active_badge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_transcode_badge"
@@ -395,7 +396,7 @@
                         android:paddingTop="6dp"
                         android:paddingEnd="10dp"
                         android:paddingBottom="6dp"
-                        android:text="@string/transcode_active_badge"
+                        android:text="@string/transcode_section_in_progress"
                         android:textColor="@color/player_bar_background"
                         android:textSize="12sp"
                         android:textStyle="bold" />
@@ -472,233 +473,15 @@
                         </LinearLayout>
 
                         <ProgressBar
+                            android:id="@+id/transcode_result_active_bar"
                             style="?android:attr/progressBarStyleHorizontal"
                             android:layout_width="match_parent"
                             android:layout_height="8dp"
                             android:layout_marginTop="14dp"
                             android:max="100"
-                            android:progress="74"
+                            android:indeterminate="true"
                             android:progressBackgroundTint="#EEEAF6"
                             android:progressTint="@color/player_bar_background" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="26dp"
-                    android:text="@string/transcode_section_completed"
-                    android:textColor="?attr/colorOnBackground"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    app:cardBackgroundColor="@color/white"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="#EEF1F8"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:padding="14dp">
-
-                        <FrameLayout
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
-                            android:background="@drawable/bg_transcode_icon_success">
-
-                            <ImageView
-                                android:layout_width="18dp"
-                                android:layout_height="18dp"
-                                android:layout_gravity="center"
-                                android:contentDescription="@string/done"
-                                android:src="@drawable/ic_check_small"
-                                app:tint="#18B86F" />
-                        </FrameLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="summer_vibes_2024.mp3"
-                                android:textColor="?attr/colorOnBackground"
-                                android:textSize="16sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="Target: AAC • 4.2MB"
-                                android:textColor="#7F8AA4"
-                                android:textSize="14sp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/transcode_status_done"
-                            android:textColor="#18B86F"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    app:cardBackgroundColor="@color/white"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="#EEF1F8"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:padding="14dp">
-
-                        <FrameLayout
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
-                            android:background="@drawable/bg_transcode_icon_success">
-
-                            <ImageView
-                                android:layout_width="18dp"
-                                android:layout_height="18dp"
-                                android:layout_gravity="center"
-                                android:contentDescription="@string/done"
-                                android:src="@drawable/ic_check_small"
-                                app:tint="#18B86F" />
-                        </FrameLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="meeting_notes_05.m4a"
-                                android:textColor="?attr/colorOnBackground"
-                                android:textSize="16sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="Target: MP3 • 12.8MB"
-                                android:textColor="#7F8AA4"
-                                android:textSize="14sp" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/transcode_status_done"
-                            android:textColor="#18B86F"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="26dp"
-                    android:text="@string/transcode_section_failed"
-                    android:textColor="?attr/colorOnBackground"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    app:cardBackgroundColor="@color/white"
-                    app:cardCornerRadius="20dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="#F5D8D8"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:padding="14dp">
-
-                        <FrameLayout
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
-                            android:background="@drawable/bg_transcode_icon_error">
-
-                            <ImageView
-                                android:layout_width="18dp"
-                                android:layout_height="18dp"
-                                android:layout_gravity="center"
-                                android:contentDescription="@string/error"
-                                android:src="@drawable/ic_warning"
-                                app:tint="#FF5B5B" />
-                        </FrameLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="corrupted_track_fix.wav"
-                                android:textColor="?attr/colorOnBackground"
-                                android:textSize="16sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:text="@string/transcode_error_unreadable"
-                                android:textColor="#FF5B5B"
-                                android:textSize="14sp" />
-                        </LinearLayout>
-
-                        <FrameLayout
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_transcode_icon_progress">
-
-                            <ImageView
-                                android:layout_width="18dp"
-                                android:layout_height="18dp"
-                                android:layout_gravity="center"
-                                android:contentDescription="@string/try_again"
-                                android:src="@drawable/ic_refresh"
-                                app:tint="@color/player_bar_background" />
-                        </FrameLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 

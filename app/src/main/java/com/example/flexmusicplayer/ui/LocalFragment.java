@@ -3,15 +3,20 @@ package com.example.flexmusicplayer.ui;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -22,11 +27,14 @@ import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Album;
 import com.example.flexmusicplayer.model.Artist;
+import com.example.flexmusicplayer.model.Playlist;
 import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 import com.example.flexmusicplayer.storage.LocalMusicStore;
+import com.example.flexmusicplayer.storage.PlaylistStore;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayout;
 
@@ -65,6 +73,7 @@ public class LocalFragment extends Fragment {
     private ActivityResultLauncher<String[]> filePickerLauncher;
     private LocalMusicStore localMusicStore;
     private FavoriteSongsStore favoriteSongsStore;
+    private PlaylistStore playlistStore;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -105,6 +114,7 @@ public class LocalFragment extends Fragment {
         backButton.setOnClickListener(v -> navigateBack());
         localMusicStore = new LocalMusicStore(requireContext());
         favoriteSongsStore = new FavoriteSongsStore(requireContext());
+        playlistStore = new PlaylistStore(requireContext());
 
         songsRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
         albumsRecycler.setLayoutManager(new GridLayoutManager(requireContext(), 2));
@@ -174,8 +184,7 @@ public class LocalFragment extends Fragment {
     }
 
     private void loadLocalMusic() {
-        List<Song> storedSongs = localMusicStore.loadSongs();
-        List<Song> songs = storedSongs.isEmpty() ? createMockSongs() : storedSongs;
+        List<Song> songs = new ArrayList<>(localMusicStore.loadSongs());
         favoriteSongsStore.applyFavoriteFlags(songs);
         List<Album> albums = createMockAlbums();
         List<Artist> artists = createMockArtists();
@@ -217,30 +226,6 @@ public class LocalFragment extends Fragment {
         switchTab(currentTab);
     }
 
-    private List<Song> createMockSongs() {
-        List<Song> songs = new ArrayList<>();
-        songs.add(createLocalSong(1, "Starlight", "Muse", "Will of the People", 242000, false, true));
-        songs.add(createLocalSong(2, "Midnight City", "M83", "Hurry Up, We're Dreaming", 243000, true, true));
-        songs.add(createLocalSong(3, "Blinding Lights", "The Weeknd", "After Hours", 200000, false, true));
-        songs.add(createLocalSong(4, "Do I Wanna Know?", "Arctic Monkeys", "AM", 272000, false, false));
-        songs.add(createLocalSong(5, "Lateralus", "Tool", "Lateralus", 564000, false, true));
-        return songs;
-    }
-
-    private Song createLocalSong(long id,
-                                 String title,
-                                 String artist,
-                                 String album,
-                                 int duration,
-                                 boolean favorite,
-                                 boolean downloaded) {
-        Song song = new Song(id, title, artist, album, duration, "file:///sdcard/Music/" + title + ".mp3");
-        song.setLocal(true);
-        song.setFavorite(favorite);
-        song.setDownloaded(downloaded);
-        return song;
-    }
-
     private List<Album> createMockAlbums() {
         List<Album> albums = new ArrayList<>();
         albums.add(new Album(1, "After Hours", "The Weeknd"));
@@ -259,7 +244,99 @@ public class LocalFragment extends Fragment {
         return artists;
     }
 
-    private static class SongVerticalAdapter extends RecyclerView.Adapter<SongVerticalAdapter.ViewHolder> {
+    private void showSongOptions(@NonNull View anchorView, @NonNull Song song) {
+        PopupMenu popupMenu = new PopupMenu(requireContext(), anchorView);
+        popupMenu.inflate(R.menu.menu_local_song_more);
+        popupMenu.setOnMenuItemClickListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.action_add_to_playlist) {
+                showAddToPlaylistDialog(song);
+                return true;
+            }
+            if (itemId == R.id.action_delete_song) {
+                showDeleteSongDialog(song);
+                return true;
+            }
+            return false;
+        });
+        popupMenu.show();
+    }
+
+    private void showAddToPlaylistDialog(@NonNull Song song) {
+        List<Playlist> playlists = playlistStore.loadPlaylists();
+        if (playlists.isEmpty()) {
+            showCreatePlaylistDialog(song);
+            return;
+        }
+        CharSequence[] items = new CharSequence[playlists.size() + 1];
+        items[0] = getString(R.string.playlist_create_and_add);
+        for (int index = 0; index < playlists.size(); index++) {
+            Playlist playlist = playlists.get(index);
+            items[index + 1] = playlist.getName() + "  (" + getString(R.string.songs_count, playlist.getSongCount()) + ")";
+        }
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.playlist_choose_target)
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        showCreatePlaylistDialog(song);
+                        return;
+                    }
+                    Playlist targetPlaylist = playlists.get(which - 1);
+                    PlaylistStore.AddSongResult result =
+                            playlistStore.addSongToPlaylist(targetPlaylist.getId(), song);
+                    if (result == PlaylistStore.AddSongResult.ADDED) {
+                        Toast.makeText(requireContext(), R.string.playlist_song_added, Toast.LENGTH_SHORT).show();
+                    } else if (result == PlaylistStore.AddSongResult.ALREADY_EXISTS) {
+                        Toast.makeText(requireContext(), R.string.playlist_song_exists, Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void showCreatePlaylistDialog(@NonNull Song song) {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_create_playlist, null);
+        EditText nameInput = dialogView.findViewById(R.id.playlist_name_input);
+        EditText descriptionInput = dialogView.findViewById(R.id.playlist_description_input);
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.create_playlist)
+                .setView(dialogView)
+                .setPositiveButton(R.string.save, null)
+                .setNegativeButton(R.string.cancel, null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String name = nameInput.getText().toString().trim();
+            String description = descriptionInput.getText().toString().trim();
+            if (TextUtils.isEmpty(name)) {
+                nameInput.setError(getString(R.string.playlist_name_required));
+                return;
+            }
+            playlistStore.createPlaylistWithSong(name, description, song);
+            Toast.makeText(requireContext(), R.string.playlist_song_added, Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+        }));
+        dialog.show();
+    }
+
+    private void showDeleteSongDialog(@NonNull Song song) {
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.dialog_delete_song_title)
+                .setMessage(R.string.dialog_delete_song_message)
+                .setPositiveButton(R.string.delete, (dialog, which) -> removeSong(song))
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void removeSong(@NonNull Song song) {
+        if (!localMusicStore.deleteSong(song)) {
+            Toast.makeText(requireContext(), R.string.local_song_remove_failed, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Snackbar.make(requireView(), R.string.local_song_removed, Snackbar.LENGTH_SHORT).show();
+        loadLocalMusic();
+    }
+
+    private class SongVerticalAdapter extends RecyclerView.Adapter<SongVerticalAdapter.ViewHolder> {
         private List<Song> songs;
 
         SongVerticalAdapter(List<Song> songs) {
@@ -289,12 +366,13 @@ public class LocalFragment extends Fragment {
             return songs.size();
         }
 
-        static class ViewHolder extends RecyclerView.ViewHolder {
+        class ViewHolder extends RecyclerView.ViewHolder {
             private final MaterialCardView albumArtCard;
             private final android.widget.TextView songTitle;
             private final android.widget.TextView songMeta;
             private final android.widget.ImageButton favoriteButton;
             private final android.widget.ImageButton downloadButton;
+            private final android.widget.ImageButton moreButton;
 
             ViewHolder(@NonNull View itemView) {
                 super(itemView);
@@ -303,6 +381,7 @@ public class LocalFragment extends Fragment {
                 songMeta = itemView.findViewById(R.id.song_meta);
                 favoriteButton = itemView.findViewById(R.id.favorite_button);
                 downloadButton = itemView.findViewById(R.id.download_button);
+                moreButton = itemView.findViewById(R.id.more_button);
             }
 
             void bind(Song song, List<Song> queue, int position) {
@@ -319,7 +398,7 @@ public class LocalFragment extends Fragment {
                 });
 
                 favoriteButton.setOnClickListener(v -> {
-                    song.setFavorite(new FavoriteSongsStore(itemView.getContext()).toggleFavorite(song));
+                    song.setFavorite(favoriteSongsStore.toggleFavorite(song));
                     updateFavorite(song);
                 });
 
@@ -327,6 +406,8 @@ public class LocalFragment extends Fragment {
                     song.setDownloaded(!song.isDownloaded());
                     updateDownload(song);
                 });
+
+                moreButton.setOnClickListener(v -> showSongOptions(v, song));
             }
 
             private void updateFavorite(Song song) {

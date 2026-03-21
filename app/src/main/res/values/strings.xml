@@ -247,14 +247,21 @@
     <string name="transcode_status_done">DONE</string>
     <string name="transcode_error_unreadable">Error: Source file unreadable</string>
     <string name="transcode_format_aac">AAC</string>
+    <string name="transcode_format_ogg">OGG</string>
     <string name="transcode_format_wav">WAV</string>
     <string name="transcode_remove_selected_file">Remove selected file</string>
+    <string name="transcode_progress_processing">Transcoding…</string>
+    <string name="transcode_progress_done">100%%</string>
+    <string name="transcode_saved_to">Saved to: %1$s</string>
+    <string name="transcode_failed_message">Transcode failed: %1$s</string>
     <string name="main_page_playlists_title">My Playlists</string>
 
     <!-- Local Upload -->
     <string name="local_upload">Upload Offline Songs</string>
     <string name="local_upload_success">Upload successful</string>
     <string name="local_upload_hint">Select audio files to upload</string>
+    <string name="local_song_removed">Song deleted</string>
+    <string name="local_song_remove_failed">Failed to delete the audio file</string>
 
     <!-- Settings - Language -->
     <string name="settings_language_english">English</string>
@@ -285,7 +292,7 @@
     <string name="dialog_delete_playlist_title">Delete Playlist?</string>
     <string name="dialog_delete_playlist_message">This action cannot be undone.</string>
     <string name="dialog_delete_song_title">Delete Song?</string>
-    <string name="dialog_delete_song_message">This song will be removed from your device.</string>
+    <string name="dialog_delete_song_message">This will delete the actual audio file and remove it from your local library.</string>
     <string name="dialog_clear_cache_title">Clear Cache?</string>
     <string name="dialog_clear_cache_message">This will free up storage but you may need to download songs again.</string>
 

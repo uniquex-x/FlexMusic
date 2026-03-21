@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 #include "bridge/PlayerBridge.h"
+#include "bridge/TranscodeBridge.h"
 
 namespace {
 
@@ -38,6 +39,9 @@ void configureOpenSslArmCapabilities() {
 
 bool registerAllJni(JNIEnv* env) {
     if (!flexmusic::jni::register_PlayerBridgeJNI(env)) {
+        return false;
+    }
+    if (!flexmusic::jni::register_TranscodeBridgeJNI(env)) {
         return false;
     }
     return true;

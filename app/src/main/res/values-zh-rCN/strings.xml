@@ -74,6 +74,8 @@
     <string name="local_upload">上传离线歌曲</string>
     <string name="local_upload_success">上传成功</string>
     <string name="local_upload_hint">选择要上传的音频文件</string>
+    <string name="local_song_removed">歌曲已删除</string>
+    <string name="local_song_remove_failed">删除音频文件失败</string>
 
     <!-- Playlists -->
     <string name="playlists_title">我的歌单</string>
@@ -104,6 +106,10 @@
     <string name="playlist_detail_removed">已从歌单中移除</string>
     <string name="playlist_detail_no_other_playlists">请先创建其它歌单</string>
     <string name="playlist_detail_empty_songs">这个歌单里还没有歌曲</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_delete_song_title">删除歌曲？</string>
+    <string name="dialog_delete_song_message">这会删除实际音频文件，并把它从本地曲库中移除。</string>
 
     <!-- Settings -->
     <string name="settings_title">设置</string>
@@ -188,6 +194,11 @@
     <string name="player_share_text">%1$s - %2$s</string>
     <string name="player_share_chooser">分享歌曲</string>
     <string name="player_speed_applied">播放倍速已设置为 %1$sx。</string>
+    <string name="transcode_format_ogg">OGG</string>
+    <string name="transcode_progress_processing">转码中…</string>
+    <string name="transcode_progress_done">100%%</string>
+    <string name="transcode_saved_to">已保存到：%1$s</string>
+    <string name="transcode_failed_message">转码失败：%1$s</string>
 
     <!-- Common -->
     <string name="search">搜索</string>

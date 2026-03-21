@@ -20,7 +20,12 @@ public final class SoLibraryLoader {
             "swresample",
             "swscale",
             "avcodec",
-            "avformat"
+            "avformat",
+            "ogg",
+            "vorbis",
+            "vorbisenc",
+            "FLAC",
+            "mp3lame"
     };
     private static final String[] JNI_LIBS = {
             "flexmusic_player"

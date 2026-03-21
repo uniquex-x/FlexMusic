@@ -4,7 +4,9 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -15,6 +17,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +26,7 @@ import java.util.Map;
 
 public class LocalMusicStore {
 
+    private static final String TAG = "LocalMusicStore";
     private static final String PREFS_NAME = "flexmusic_local_library";
     private static final String KEY_SONGS = "songs";
 
@@ -57,6 +62,118 @@ public class LocalMusicStore {
             bySource.put(song.getAudioUrl(), song);
         }
         saveSongs(new ArrayList<>(bySource.values()));
+    }
+
+    public boolean deleteSong(@NonNull Song targetSong) {
+        Uri songUri = parseSongUri(targetSong);
+        if (songUri == null) {
+            Log.w(TAG, "deleteSong missing uri title=" + targetSong.getTitle());
+            return false;
+        }
+        if (!deleteSongFile(songUri)) {
+            Log.w(TAG, "deleteSong file delete failed uri=" + songUri);
+            return false;
+        }
+        boolean removed = removeSongRecord(targetSong);
+        Log.d(TAG, "deleteSong success uri=" + songUri + " recordRemoved=" + removed);
+        return true;
+    }
+
+    private boolean removeSongRecord(@NonNull Song targetSong) {
+        List<Song> songs = loadSongs();
+        String targetKey = buildSongKey(targetSong);
+        boolean removed = false;
+        for (int index = songs.size() - 1; index >= 0; index--) {
+            Song song = songs.get(index);
+            if (!targetKey.equals(buildSongKey(song))) {
+                continue;
+            }
+            songs.remove(index);
+            removed = true;
+        }
+        if (removed) {
+            saveSongs(songs);
+        }
+        return removed;
+    }
+
+    private boolean deleteSongFile(@NonNull Uri songUri) {
+        String scheme = songUri.getScheme();
+        if ("file".equalsIgnoreCase(scheme)) {
+            return deleteFileSchemeUri(songUri);
+        }
+        if ("content".equalsIgnoreCase(scheme)) {
+            return deleteContentUri(songUri);
+        }
+        Log.w(TAG, "deleteSong unsupported scheme uri=" + songUri);
+        return false;
+    }
+
+    private boolean deleteFileSchemeUri(@NonNull Uri songUri) {
+        String path = songUri.getPath();
+        if (path == null || path.trim().isEmpty()) {
+            return false;
+        }
+        File targetFile = new File(path);
+        if (!targetFile.exists()) {
+            Log.d(TAG, "deleteSong file already missing path=" + path);
+            return true;
+        }
+        boolean deleted = targetFile.delete();
+        Log.d(TAG, "deleteSong file path=" + path + " deleted=" + deleted);
+        return deleted;
+    }
+
+    private boolean deleteContentUri(@NonNull Uri songUri) {
+        try {
+            boolean deleted = DocumentsContract.deleteDocument(appContext.getContentResolver(), songUri);
+            if (deleted) {
+                releasePersistableReadPermission(songUri);
+            }
+            Log.d(TAG, "deleteSong document uri=" + songUri + " deleted=" + deleted);
+            return deleted;
+        } catch (FileNotFoundException fileNotFoundException) {
+            Log.d(TAG, "deleteSong content already missing uri=" + songUri);
+            releasePersistableReadPermission(songUri);
+            return true;
+        } catch (RuntimeException runtimeException) {
+            Log.w(TAG, "deleteSong document delete failed uri=" + songUri, runtimeException);
+        }
+
+        try {
+            int deletedRows = appContext.getContentResolver().delete(songUri, null, null);
+            boolean deleted = deletedRows > 0;
+            if (deleted) {
+                releasePersistableReadPermission(songUri);
+            }
+            Log.d(TAG, "deleteSong content resolver uri=" + songUri + " deletedRows=" + deletedRows);
+            return deleted;
+        } catch (RuntimeException exception) {
+            Log.w(TAG, "deleteSong content resolver failed uri=" + songUri, exception);
+            return false;
+        }
+    }
+
+    private void releasePersistableReadPermission(@NonNull Uri songUri) {
+        try {
+            appContext.getContentResolver().releasePersistableUriPermission(
+                    songUri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    private Uri parseSongUri(@NonNull Song song) {
+        String audioUrl = song.getAudioUrl();
+        if (audioUrl == null || audioUrl.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return Uri.parse(audioUrl);
+        } catch (RuntimeException exception) {
+            Log.w(TAG, "parseSongUri failed audioUrl=" + audioUrl, exception);
+            return null;
+        }
     }
 
     private void saveSongs(@NonNull List<Song> songs) {
@@ -155,5 +272,18 @@ public class LocalMusicStore {
                 object.optString("audioUrl"));
         song.setLocal(object.optBoolean("isLocal", true));
         return song;
+    }
+
+    @NonNull
+    private String buildSongKey(@NonNull Song song) {
+        String audioUrl = song.getAudioUrl();
+        if (audioUrl != null && !audioUrl.trim().isEmpty()) {
+            return audioUrl;
+        }
+        String sourceId = song.getSourceId();
+        if (sourceId != null && !sourceId.trim().isEmpty()) {
+            return sourceId;
+        }
+        return song.getTitle() + "|" + song.getArtist() + "|" + song.getAlbum();
     }
 }
