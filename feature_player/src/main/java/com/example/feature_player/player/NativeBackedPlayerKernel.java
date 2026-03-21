@@ -54,6 +54,7 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
     private ResolvedPlayableSource requestedSource;
     private ResolvedPlayableSource currentSource;
     private float volume = 1f;
+    private float playbackSpeed = 1f;
     private boolean released;
     private boolean polling;
     private boolean currentHttpsUsingPipeFallback;
@@ -116,6 +117,7 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
                 nativeSourceDescriptor.startOffset,
                 nativeSourceDescriptor.length);
         playerJni.setVolume(volume);
+        playerJni.setPlaybackSpeed(playbackSpeed);
         updateSnapshotLocked(
                 PlayerKernelState.PREPARING,
                 0L,
@@ -186,6 +188,16 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
         this.volume = Math.max(0f, Math.min(1f, volume));
         if (!released) {
             playerJni.setVolume(this.volume);
+        }
+    }
+
+    @Override
+    public synchronized void setPlaybackSpeed(float playbackSpeed) {
+        this.playbackSpeed = Math.max(0.5f, Math.min(2.0f, playbackSpeed));
+        if (!released) {
+            playerJni.setPlaybackSpeed(this.playbackSpeed);
+            Log.d(TAG, "setPlaybackSpeed speed=" + this.playbackSpeed
+                    + " sourceId=" + (currentSource != null ? currentSource.getSourceId() : "null"));
         }
     }
 

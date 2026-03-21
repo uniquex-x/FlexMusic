@@ -101,6 +101,13 @@ void PlayerSession::setVolume(float volume) {
     enqueueCommand(std::move(command));
 }
 
+void PlayerSession::setPlaybackSpeed(float playbackSpeed) {
+    Command command;
+    command.type = CommandType::SET_PLAYBACK_SPEED;
+    command.playbackSpeed = playbackSpeed;
+    enqueueCommand(std::move(command));
+}
+
 PlayerRuntimeSnapshot PlayerSession::snapshot() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return snapshot_;
@@ -133,6 +140,9 @@ void PlayerSession::enqueueCommand(Command command) {
                 break;
             case CommandType::SET_VOLUME:
                 removePendingCommands(CommandType::SET_VOLUME);
+                break;
+            case CommandType::SET_PLAYBACK_SPEED:
+                removePendingCommands(CommandType::SET_PLAYBACK_SPEED);
                 break;
             case CommandType::STOP:
                 commandQueue_.clear();
@@ -183,6 +193,9 @@ void PlayerSession::controlLoop() {
             case CommandType::SET_VOLUME:
                 handleSetVolumeCommand(command.volume);
                 break;
+            case CommandType::SET_PLAYBACK_SPEED:
+                handleSetPlaybackSpeedCommand(command.playbackSpeed);
+                break;
             case CommandType::RELEASE:
                 handleStopCommand(true);
                 {
@@ -211,6 +224,7 @@ void PlayerSession::handleSetDataSourceCommand(const flexmusic::io::DataSourceSp
     joinThread(&demuxThread);
     joinThread(&decodeThread);
     joinThread(&renderThread);
+    clearTempoProcessor();
     {
         std::lock_guard<std::mutex> lock(mutex_);
         finalizeStopLocked(false);
@@ -372,12 +386,32 @@ void PlayerSession::handleSeekCommand(int64_t positionMs) {
     clearPacketQueue(packetQueue);
     clearPcmQueue(pcmQueue);
     renderer_.flush();
+    clearTempoProcessor();
 }
 
 void PlayerSession::handleSetVolumeCommand(float volume) {
     std::lock_guard<std::mutex> lock(mutex_);
     snapshot_.volume = std::max(0.0f, std::min(1.0f, volume));
     renderer_.setVolume(snapshot_.volume);
+}
+
+void PlayerSession::handleSetPlaybackSpeedCommand(float playbackSpeed) {
+    float safePlaybackSpeed = 1.0f;
+    std::string sourceId;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        snapshot_.playbackSpeed = std::max(0.5f, std::min(2.0f, playbackSpeed));
+        safePlaybackSpeed = snapshot_.playbackSpeed;
+        sourceId = dataSourceSpec_.sourceId;
+    }
+    {
+        std::lock_guard<std::mutex> tempoLock(tempoProcessorMutex_);
+        tempoProcessor_.setPlaybackSpeed(safePlaybackSpeed);
+    }
+    flexmusic::core::levelLog(kPlayerSessionTag).i(
+            "set playback speed sourceId=%s speed=%.2f",
+            sourceId.c_str(),
+            safePlaybackSpeed);
 }
 
 void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart) {
@@ -450,6 +484,7 @@ void PlayerSession::finalizeStopLocked(bool clearDataSource) {
     decoder_.close();
     demuxer_.close();
     avioDataSource_.close();
+    clearTempoProcessor();
     packetQueue_.reset();
     pcmQueue_.reset();
     firstFrameRendered_ = false;
@@ -554,6 +589,24 @@ bool PlayerSession::applyPendingSeekIfNeeded() {
             activeSerial,
             autoStartOnReady_ ? 1 : 0);
     return true;
+}
+
+void PlayerSession::clearTempoProcessor() {
+    std::lock_guard<std::mutex> lock(tempoProcessorMutex_);
+    tempoProcessor_.clear();
+}
+
+bool PlayerSession::processDecodedFrameWithTempo(const flexmusic::media::PcmFrame& frame,
+                                                 std::vector<flexmusic::media::PcmFrame>* outputFrames,
+                                                 std::string* errorMessage) {
+    std::lock_guard<std::mutex> lock(tempoProcessorMutex_);
+    return tempoProcessor_.processFrame(frame, outputFrames, errorMessage);
+}
+
+bool PlayerSession::flushTempoProcessor(std::vector<flexmusic::media::PcmFrame>* outputFrames,
+                                        std::string* errorMessage) {
+    std::lock_guard<std::mutex> lock(tempoProcessorMutex_);
+    return tempoProcessor_.flush(outputFrames, errorMessage);
 }
 
 void PlayerSession::prepareLoop(int64_t startPositionMs) {
@@ -748,8 +801,40 @@ void PlayerSession::decodeLoop() {
                 return;
             }
             for (flexmusic::media::PcmFrame& frame : decodedFrames) {
-                frame.serial = encodedPacket.serial;
-                if (pcmQueue_ == nullptr || !pcmQueue_->push(std::move(frame))) {
+                std::vector<flexmusic::media::PcmFrame> processedFrames;
+                if (!processDecodedFrameWithTempo(frame, &processedFrames, &errorMessage)) {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    if (stopRequested_) {
+                        return;
+                    }
+                    setErrorLocked(errorMessage.empty() ? "Process SoundTouch frame failed" : errorMessage);
+                    if (pcmQueue_ != nullptr) {
+                        pcmQueue_->close();
+                    }
+                    return;
+                }
+                for (flexmusic::media::PcmFrame& processedFrame : processedFrames) {
+                    processedFrame.serial = encodedPacket.serial;
+                    if (pcmQueue_ == nullptr || !pcmQueue_->push(std::move(processedFrame))) {
+                        return;
+                    }
+                }
+            }
+            std::vector<flexmusic::media::PcmFrame> trailingFrames;
+            if (!flushTempoProcessor(&trailingFrames, &errorMessage)) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    return;
+                }
+                setErrorLocked(errorMessage.empty() ? "Flush SoundTouch failed" : errorMessage);
+                if (pcmQueue_ != nullptr) {
+                    pcmQueue_->close();
+                }
+                return;
+            }
+            for (flexmusic::media::PcmFrame& trailingFrame : trailingFrames) {
+                trailingFrame.serial = encodedPacket.serial;
+                if (pcmQueue_ == nullptr || !pcmQueue_->push(std::move(trailingFrame))) {
                     return;
                 }
             }
@@ -821,8 +906,23 @@ void PlayerSession::decodeLoop() {
                     frame.positionMs = std::max<int64_t>(0, frame.positionMs + activePositionOffsetMs_);
                 }
             }
-            if (pcmQueue_ == nullptr || !pcmQueue_->push(std::move(frame))) {
+            std::vector<flexmusic::media::PcmFrame> processedFrames;
+            if (!processDecodedFrameWithTempo(frame, &processedFrames, &errorMessage)) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    return;
+                }
+                setErrorLocked(errorMessage.empty() ? "Process SoundTouch frame failed" : errorMessage);
+                if (pcmQueue_ != nullptr) {
+                    pcmQueue_->close();
+                }
                 return;
+            }
+            for (flexmusic::media::PcmFrame& processedFrame : processedFrames) {
+                processedFrame.serial = encodedPacket.serial;
+                if (pcmQueue_ == nullptr || !pcmQueue_->push(std::move(processedFrame))) {
+                    return;
+                }
             }
         }
     }

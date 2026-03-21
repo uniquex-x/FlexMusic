@@ -26,6 +26,7 @@ add_library(
         jni/JNILoader.cpp
         jni/bridge/PlayerBridge.cpp
         audio/OpenSlAudioRenderer.cpp
+        audio/SoundTouchTempoProcessor.cpp
         io/FdFileIo.cpp
         io/FileIoRegistry.cpp
         io/PassthroughFileIo.cpp
@@ -33,13 +34,32 @@ add_library(
         media/source/AvioDataSource.cpp
         media/demux/FfmpegDemuxer.cpp
         media/codec/FfmpegAudioDecoder.cpp
-        player/PlayerSession.cpp)
+        player/PlayerSession.cpp
+        third_party/soundtouch/source/SoundTouch/AAFilter.cpp
+        third_party/soundtouch/source/SoundTouch/FIFOSampleBuffer.cpp
+        third_party/soundtouch/source/SoundTouch/FIRFilter.cpp
+        third_party/soundtouch/source/SoundTouch/InterpolateLinear.cpp
+        third_party/soundtouch/source/SoundTouch/InterpolateCubic.cpp
+        third_party/soundtouch/source/SoundTouch/InterpolateShannon.cpp
+        third_party/soundtouch/source/SoundTouch/RateTransposer.cpp
+        third_party/soundtouch/source/SoundTouch/SoundTouch.cpp
+        third_party/soundtouch/source/SoundTouch/TDStretch.cpp
+        third_party/soundtouch/source/SoundTouch/cpu_detect_x86.cpp)
 
 target_include_directories(
         flexmusic_player
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/include)
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soundtouch/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soundtouch/source/SoundTouch)
+
+target_compile_definitions(
+        flexmusic_player
+        PRIVATE
+        ST_NO_EXCEPTION_HANDLING
+        SOUNDTOUCH_INTEGER_SAMPLES
+        SOUNDTOUCH_DISABLE_X86_OPTIMIZATIONS)
 
 find_library(log-lib log)
 find_library(openSLES-lib OpenSLES)

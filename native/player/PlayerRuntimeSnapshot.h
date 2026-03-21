@@ -17,6 +17,7 @@ struct PlayerRuntimeSnapshot {
     bool nativeReady = false;
     bool playing = false;
     float volume = 1.0f;
+    float playbackSpeed = 1.0f;
     std::string backendName;
     std::string errorMessage;
 };

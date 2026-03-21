@@ -202,7 +202,7 @@
     <string name="player_mode_changed">Playback mode: %1$s</string>
     <string name="player_share_text">%1$s - %2$s</string>
     <string name="player_share_chooser">Share track</string>
-    <string name="player_speed_pending_kernel">Selected %1$sx. Native time-stretch is not connected yet.</string>
+    <string name="player_speed_applied">Playback speed set to %1$sx.</string>
     <string name="player_unknown_artist">Unknown Artist</string>
     <string name="player_unknown_album">Unknown Album</string>
     <string name="player_demo_line_one">Waiting in a car</string>

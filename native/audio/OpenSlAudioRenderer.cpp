@@ -157,7 +157,6 @@ bool OpenSlAudioRenderer::open(int sampleRate, int channelCount, std::string* er
         log.e("get buffer queue interface failed result=%d", result);
         return false;
     }
-
     (*playerObject_)->GetInterface(playerObject_, SL_IID_VOLUME, &volumeInterface_);
     result = (*bufferQueueInterface_)->RegisterCallback(
             bufferQueueInterface_,

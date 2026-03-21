@@ -100,6 +100,12 @@ public final class PlayerJNI {
         }
     }
 
+    public void setPlaybackSpeed(float playbackSpeed) {
+        if (nativeHandle != 0L) {
+            nativeSetPlaybackSpeed(nativeHandle, playbackSpeed);
+        }
+    }
+
     public int getState() {
         return nativeHandle == 0L ? STATE_IDLE : nativeGetState(nativeHandle);
     }
@@ -153,6 +159,8 @@ public final class PlayerJNI {
     private static native void nativeStop(long nativeHandle);
 
     private static native void nativeSetVolume(long nativeHandle, float volume);
+
+    private static native void nativeSetPlaybackSpeed(long nativeHandle, float playbackSpeed);
 
     private static native void nativeRelease(long nativeHandle);
 

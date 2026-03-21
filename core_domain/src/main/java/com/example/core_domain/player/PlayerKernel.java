@@ -22,6 +22,8 @@ public interface PlayerKernel {
 
     void setVolume(float volume);
 
+    void setPlaybackSpeed(float playbackSpeed);
+
     long getCurrentPosition();
 
     long getDuration();

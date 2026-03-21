@@ -145,6 +145,14 @@ static void JNICALL NativeSetVolume(JNIEnv* env, jclass clazz, jlong nativeHandl
     }
 }
 
+static void JNICALL NativeSetPlaybackSpeed(JNIEnv* env, jclass clazz, jlong nativeHandle, jfloat playbackSpeed) {
+    (void) clazz;
+    NativePlayerContext* context = requireContext(env, nativeHandle);
+    if (context != nullptr) {
+        PlayerBridge::setPlaybackSpeed(context, static_cast<float>(playbackSpeed));
+    }
+}
+
 static void JNICALL NativeRelease(JNIEnv* env, jclass clazz, jlong nativeHandle) {
     (void) clazz;
     NativePlayerContext* context = requireContext(env, nativeHandle);
@@ -198,6 +206,9 @@ const JNINativeMethod kPlayerBridgeMethods[] = {
         {const_cast<char*>("nativeSeekTo"), const_cast<char*>("(JJ)V"), reinterpret_cast<void*>(NativeSeekTo)},
         {const_cast<char*>("nativeStop"), const_cast<char*>("(J)V"), reinterpret_cast<void*>(NativeStop)},
         {const_cast<char*>("nativeSetVolume"), const_cast<char*>("(JF)V"), reinterpret_cast<void*>(NativeSetVolume)},
+        {const_cast<char*>("nativeSetPlaybackSpeed"),
+         const_cast<char*>("(JF)V"),
+         reinterpret_cast<void*>(NativeSetPlaybackSpeed)},
         {const_cast<char*>("nativeRelease"), const_cast<char*>("(J)V"), reinterpret_cast<void*>(NativeRelease)},
         {const_cast<char*>("nativeIsReady"), const_cast<char*>("(J)Z"), reinterpret_cast<void*>(NativeIsReady)},
         {const_cast<char*>("nativeGetState"), const_cast<char*>("(J)I"), reinterpret_cast<void*>(NativeGetState)},
@@ -339,6 +350,17 @@ void PlayerBridge::stop(NativePlayerContext* context) {
 void PlayerBridge::setVolume(NativePlayerContext* context, float volume) {
     if (context != nullptr && context->playerSession != nullptr) {
         context->playerSession->setVolume(volume);
+    }
+}
+
+void PlayerBridge::setPlaybackSpeed(NativePlayerContext* context, float playbackSpeed) {
+    if (context != nullptr && context->playerSession != nullptr) {
+        __android_log_print(
+                ANDROID_LOG_DEBUG,
+                kPlayerBridgeTag,
+                "setPlaybackSpeed speed=%.2f",
+                playbackSpeed);
+        context->playerSession->setPlaybackSpeed(playbackSpeed);
     }
 }
 

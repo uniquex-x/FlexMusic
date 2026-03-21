@@ -44,6 +44,7 @@ public:
     static void seekTo(NativePlayerContext* context, int64_t positionMs);
     static void stop(NativePlayerContext* context);
     static void setVolume(NativePlayerContext* context, float volume);
+    static void setPlaybackSpeed(NativePlayerContext* context, float playbackSpeed);
     static bool isReady(NativePlayerContext* context);
     static int getState(NativePlayerContext* context);
     static int64_t getCurrentPosition(NativePlayerContext* context);

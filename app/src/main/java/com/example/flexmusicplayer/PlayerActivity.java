@@ -606,7 +606,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 .setSingleChoiceItems(speedLabels, checkedIndex, (dialog, which) -> {
                     float selectedSpeed = speedValues[which];
                     playbackController.setPlaybackSpeed(selectedSpeed);
-                    showToast(getString(R.string.player_speed_pending_kernel, formatSpeed(selectedSpeed)));
+                    showToast(getString(R.string.player_speed_applied, formatSpeed(selectedSpeed)));
                     dialog.dismiss();
                 })
                 .setNegativeButton(R.string.cancel, null)

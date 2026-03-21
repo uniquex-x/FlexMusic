@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "../audio/OpenSlAudioRenderer.h"
+#include "../audio/SoundTouchTempoProcessor.h"
 #include "../core/thread/BlockingQueue.h"
 #include "../io/DataSourceSpec.h"
 #include "../media/codec/FfmpegAudioDecoder.h"
@@ -37,6 +38,7 @@ public:
     void stop();
     void seekTo(int64_t positionMs);
     void setVolume(float volume);
+    void setPlaybackSpeed(float playbackSpeed);
     PlayerRuntimeSnapshot snapshot() const;
 
 private:
@@ -48,6 +50,7 @@ private:
         STOP,
         SEEK,
         SET_VOLUME,
+        SET_PLAYBACK_SPEED,
         RELEASE
     };
 
@@ -57,6 +60,7 @@ private:
         std::string backendName;
         int64_t positionMs = 0;
         float volume = 1.0f;
+        float playbackSpeed = 1.0f;
     };
 
     void enqueueCommand(Command command);
@@ -69,6 +73,7 @@ private:
     void handleStopCommand(bool clearDataSource);
     void handleSeekCommand(int64_t positionMs);
     void handleSetVolumeCommand(float volume);
+    void handleSetPlaybackSpeedCommand(float playbackSpeed);
     void startPipelineLocked(int64_t startPositionMs, bool autoStart);
     void beginStopLocked();
     void detachThreadsLocked(std::unique_ptr<std::thread>* prepareThread,
@@ -82,6 +87,12 @@ private:
     void decodeLoop();
     void renderLoop();
     bool applyPendingSeekIfNeeded();
+    void clearTempoProcessor();
+    bool processDecodedFrameWithTempo(const flexmusic::media::PcmFrame& frame,
+                                      std::vector<flexmusic::media::PcmFrame>* outputFrames,
+                                      std::string* errorMessage);
+    bool flushTempoProcessor(std::vector<flexmusic::media::PcmFrame>* outputFrames,
+                             std::string* errorMessage);
 
     int64_t elapsedSincePipelineStartMs() const;
     void setStateLocked(PlayerState state);
@@ -91,6 +102,7 @@ private:
 
     mutable std::mutex mutex_;
     mutable std::mutex decoderMutex_;
+    mutable std::mutex tempoProcessorMutex_;
     std::mutex commandMutex_;
     std::condition_variable commandCondition_;
     std::deque<Command> commandQueue_;
@@ -123,6 +135,7 @@ private:
     flexmusic::media::source::AvioDataSource avioDataSource_;
     flexmusic::media::demux::FfmpegDemuxer demuxer_;
     flexmusic::media::codec::FfmpegAudioDecoder decoder_;
+    flexmusic::audio::SoundTouchTempoProcessor tempoProcessor_;
     flexmusic::audio::OpenSlAudioRenderer renderer_;
 };
 
