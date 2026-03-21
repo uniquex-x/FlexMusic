@@ -1,5 +1,6 @@
 package com.example.core_data.radio;
 
+import android.util.Log;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -22,10 +23,14 @@ import java.util.regex.Pattern;
 
 public class RadioRepository {
 
+    private static final String TAG = "RadioRepository";
     private static final int SEARCH_LIMIT = 24;
     private static final Pattern FREQUENCY_PATTERN = Pattern.compile("(\\d{2,3}(?:\\.\\d)?)");
+    private static final Pattern RADIO_BROWSER_UUID_PATTERN =
+            Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
     private final RadioBrowserService radioBrowserService;
+    private final Object stationCacheLock = new Object();
     private final Map<String, RadioStation> stationCache = new LinkedHashMap<>();
 
     public RadioRepository() {
@@ -37,7 +42,7 @@ public class RadioRepository {
     }
 
     @NonNull
-    public synchronized List<RadioStation> search(@NonNull String query) throws IOException {
+    public List<RadioStation> search(@NonNull String query) throws IOException {
         String trimmedQuery = query.trim();
         if (trimmedQuery.isEmpty()) {
             List<RadioStation> stations = mapStations(radioBrowserService.searchStations(null, "China", SEARCH_LIMIT), "");
@@ -68,25 +73,38 @@ public class RadioRepository {
         return results;
     }
 
-    public synchronized void registerClick(@NonNull RadioStation station) {
+    public void registerClick(@NonNull RadioStation station) {
+        if (!looksLikeRadioBrowserStationId(station.getId())) {
+            Log.d(TAG, "skip registerClick non-radio-browser stationId=" + station.getId());
+            return;
+        }
         try {
             radioBrowserService.registerClick(station.getId());
         } catch (IOException ignored) {
+            Log.w(TAG, "registerClick failed stationId=" + station.getId(), ignored);
         }
     }
 
     @Nullable
-    public synchronized RadioStation findById(@Nullable String stationId) {
+    public RadioStation findById(@Nullable String stationId) {
         if (stationId == null) {
             return null;
         }
-        return stationCache.get(stationId);
+        synchronized (stationCacheLock) {
+            return stationCache.get(stationId);
+        }
     }
 
     private void rememberStations(@NonNull List<RadioStation> stations) {
-        for (RadioStation station : stations) {
-            stationCache.put(station.getId(), station);
+        synchronized (stationCacheLock) {
+            for (RadioStation station : stations) {
+                stationCache.put(station.getId(), station);
+            }
         }
+    }
+
+    private boolean looksLikeRadioBrowserStationId(@Nullable String stationId) {
+        return stationId != null && RADIO_BROWSER_UUID_PATTERN.matcher(stationId).matches();
     }
 
     private void appendMatches(@NonNull Map<String, RadioStation> merged,

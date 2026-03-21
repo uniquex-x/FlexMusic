@@ -180,7 +180,7 @@ public class PlayerState implements Serializable {
     }
 
     public boolean isStopped() {
-        return state == State.STOPPED || state == State.IDLE;
+        return state == State.STOPPED || (state == State.IDLE && currentSong == null);
     }
 
     public boolean isLoading() {

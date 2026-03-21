@@ -551,6 +551,13 @@ public final class PlaybackController {
                 + " nativeReady=" + snapshot.isNativeReady()
                 + " error=" + snapshot.getErrorMessage());
 
+        if (shouldIgnoreTransientIdleSnapshotLocked(snapshot, currentSong)) {
+            Log.d(TAG, "ignore transient idle snapshot sourceId=" + resolveSourceId(currentSong)
+                    + " uiState=" + playerState.getState()
+                    + " prepareGeneration=" + prepareGeneration);
+            return;
+        }
+
         playerState.setCurrentPosition((int) snapshot.getCurrentPositionMs());
         playerState.setDuration((int) Math.max(snapshot.getDurationMs(), playerState.getDuration()));
 
@@ -612,6 +619,25 @@ public final class PlaybackController {
                 break;
         }
         dispatchState();
+    }
+
+    private boolean shouldIgnoreTransientIdleSnapshotLocked(@NonNull PlayerKernelSnapshot snapshot,
+                                                            @NonNull Song currentSong) {
+        if (snapshot.getState() != PlayerKernelState.IDLE) {
+            return false;
+        }
+        if (playerState.getState() != PlayerState.State.LOADING) {
+            return false;
+        }
+        if (!snapshot.isNativeReady()) {
+            return false;
+        }
+        if (!TextUtils.isEmpty(snapshot.getErrorMessage())) {
+            return false;
+        }
+        Log.d(TAG, "transient idle detected sourceId=" + resolveSourceId(currentSong)
+                + " title=" + currentSong.getTitle());
+        return true;
     }
 
     private void handleCompletionLocked(@NonNull PlayerKernelSnapshot terminalSnapshot) {
