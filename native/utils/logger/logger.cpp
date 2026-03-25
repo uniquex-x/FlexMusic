@@ -3,7 +3,7 @@
 #include <android/log.h>
 
 namespace flexmusic {
-namespace core {
+namespace utils {
 
 namespace {
 

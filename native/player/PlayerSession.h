@@ -10,15 +10,15 @@
 #include <string>
 #include <thread>
 
-#include "../audio/OpenSlAudioRenderer.h"
-#include "../audio/SoundTouchTempoProcessor.h"
-#include "../core/thread/BlockingQueue.h"
-#include "../io/DataSourceSpec.h"
-#include "../media/codec/FfmpegAudioDecoder.h"
-#include "../media/demux/FfmpegDemuxer.h"
-#include "../media/packet/EncodedPacket.h"
-#include "../media/packet/PcmFrame.h"
-#include "../media/source/AvioDataSource.h"
+#include "OpenSlAudioRenderer.h"
+#include "SoundTouchTempoProcessor.h"
+#include "BlockingQueue.h"
+#include "DataSourceSpec.h"
+#include "FfmpegAudioDecoder.h"
+#include "FfmpegDemuxer.h"
+#include "EncodedPacket.h"
+#include "PcmFrame.h"
+#include "AvioDataSource.h"
 #include "PlayerRuntimeSnapshot.h"
 
 namespace flexmusic {
@@ -97,8 +97,8 @@ private:
     int64_t elapsedSincePipelineStartMs() const;
     void setStateLocked(PlayerState state);
     void setErrorLocked(const std::string& errorMessage);
-    static void clearPacketQueue(flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>* queue);
-    static void clearPcmQueue(flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>* queue);
+    static void clearPacketQueue(flexmusic::utils::BlockingQueue<flexmusic::media::EncodedPacket>* queue);
+    static void clearPcmQueue(flexmusic::utils::BlockingQueue<flexmusic::media::PcmFrame>* queue);
 
     mutable std::mutex mutex_;
     mutable std::mutex decoderMutex_;
@@ -125,8 +125,8 @@ private:
     int64_t activePositionOffsetMs_ = 0;
     int64_t pendingPositionRebaseTargetMs_ = 0;
     std::chrono::steady_clock::time_point pipelineStartedAt_{};
-    std::unique_ptr<flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>> packetQueue_;
-    std::unique_ptr<flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>> pcmQueue_;
+    std::unique_ptr<flexmusic::utils::BlockingQueue<flexmusic::media::EncodedPacket>> packetQueue_;
+    std::unique_ptr<flexmusic::utils::BlockingQueue<flexmusic::media::PcmFrame>> pcmQueue_;
     std::unique_ptr<std::thread> prepareThread_;
     std::unique_ptr<std::thread> demuxThread_;
     std::unique_ptr<std::thread> decodeThread_;

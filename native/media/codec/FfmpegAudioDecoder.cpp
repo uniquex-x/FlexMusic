@@ -1,6 +1,6 @@
 #include "FfmpegAudioDecoder.h"
 
-#include "../../core/logger/logger.h"
+#include "logger.h"
 
 #include <algorithm>
 #include <chrono>
@@ -46,7 +46,7 @@ FfmpegAudioDecoder::~FfmpegAudioDecoder() {
 
 bool FfmpegAudioDecoder::open(const demux::AudioStreamInfo& streamInfo, std::string* errorMessage) {
     close();
-    const auto log = flexmusic::core::levelLog(kDecoderTag);
+    const auto log = flexmusic::utils::levelLog(kDecoderTag);
     const auto startedAt = std::chrono::steady_clock::now();
     firstOutputFrameLogged_ = false;
     if (streamInfo.codecParameters == nullptr) {
@@ -162,7 +162,7 @@ bool FfmpegAudioDecoder::decodePacket(const EncodedPacket& encodedPacket,
         if (errorMessage != nullptr) {
             *errorMessage = avErrorToString(result);
         }
-        flexmusic::core::levelLog(kDecoderTag).e("send packet failed error=%s",
+        flexmusic::utils::levelLog(kDecoderTag).e("send packet failed error=%s",
                                                  errorMessage != nullptr ? errorMessage->c_str() : "");
         return false;
     }
@@ -181,7 +181,7 @@ bool FfmpegAudioDecoder::flush(std::vector<PcmFrame>* outputFrames, std::string*
         if (errorMessage != nullptr) {
             *errorMessage = avErrorToString(result);
         }
-        flexmusic::core::levelLog(kDecoderTag).e("flush failed error=%s",
+        flexmusic::utils::levelLog(kDecoderTag).e("flush failed error=%s",
                                                  errorMessage != nullptr ? errorMessage->c_str() : "");
         return false;
     }
@@ -204,7 +204,7 @@ bool FfmpegAudioDecoder::reset(std::string* errorMessage) {
             if (errorMessage != nullptr) {
                 *errorMessage = avErrorToString(result);
             }
-            flexmusic::core::levelLog(kDecoderTag).e("reset swr failed error=%s",
+            flexmusic::utils::levelLog(kDecoderTag).e("reset swr failed error=%s",
                                                      errorMessage != nullptr ? errorMessage->c_str() : "");
             return false;
         }
@@ -230,7 +230,7 @@ bool FfmpegAudioDecoder::drainFrames(std::vector<PcmFrame>* outputFrames, std::s
             if (errorMessage != nullptr) {
                 *errorMessage = avErrorToString(result);
             }
-            flexmusic::core::levelLog(kDecoderTag).e("receive frame failed error=%s",
+            flexmusic::utils::levelLog(kDecoderTag).e("receive frame failed error=%s",
                                                      errorMessage != nullptr ? errorMessage->c_str() : "");
             return false;
         }
@@ -260,7 +260,7 @@ bool FfmpegAudioDecoder::drainFrames(std::vector<PcmFrame>* outputFrames, std::s
             if (errorMessage != nullptr) {
                 *errorMessage = avErrorToString(convertedSamples);
             }
-            flexmusic::core::levelLog(kDecoderTag).e("convert samples failed error=%s",
+            flexmusic::utils::levelLog(kDecoderTag).e("convert samples failed error=%s",
                                                      errorMessage != nullptr ? errorMessage->c_str() : "");
             return false;
         }
@@ -268,7 +268,7 @@ bool FfmpegAudioDecoder::drainFrames(std::vector<PcmFrame>* outputFrames, std::s
         pcmFrame.data.resize(static_cast<std::size_t>(convertedSamples) * outputChannelCount_ * sizeof(int16_t));
         if (!firstOutputFrameLogged_) {
             firstOutputFrameLogged_ = true;
-            flexmusic::core::levelLog(kDecoderTag).i(
+            flexmusic::utils::levelLog(kDecoderTag).i(
                     "first decoded frame positionMs=%lld durationMs=%lld samples=%d bytes=%zu",
                     static_cast<long long>(pcmFrame.positionMs),
                     static_cast<long long>(pcmFrame.durationMs),

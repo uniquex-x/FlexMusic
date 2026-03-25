@@ -1,6 +1,6 @@
 #include "FfmpegStreamFileIo.h"
 
-#include "../core/logger/logger.h"
+#include "logger.h"
 
 #include <chrono>
 #include <mutex>
@@ -50,7 +50,7 @@ bool FfmpegStreamFileIo::open(const DataSourceSpec& spec, std::string* errorMess
     close();
     ensureFfmpegNetworkInitialized();
     const auto startedAt = std::chrono::steady_clock::now();
-    const auto log = flexmusic::core::levelLog("FfmpegStreamIo");
+    const auto log = flexmusic::utils::levelLog("FfmpegStreamIo");
     const int64_t timeoutUs = isLoopbackHttpUrl(spec.resolvedUrl) ? 20000000LL : 5000000LL;
     const std::string timeoutText = std::to_string(timeoutUs);
 

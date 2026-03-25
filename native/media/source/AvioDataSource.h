@@ -4,8 +4,8 @@
 #include <memory>
 #include <string>
 
-#include "../../io/DataSourceSpec.h"
-#include "../../io/IFileIo.h"
+#include "DataSourceSpec.h"
+#include "IFileIo.h"
 
 struct AVIOContext;
 

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "../media/packet/PcmFrame.h"
+#include "PcmFrame.h"
 
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>

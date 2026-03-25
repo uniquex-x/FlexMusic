@@ -9,7 +9,7 @@
 #include <utility>
 
 namespace flexmusic {
-namespace core {
+namespace utils {
 
 template <typename T>
 class BlockingQueue {

@@ -1,13 +1,13 @@
 #include "PlayerSession.h"
 
-#include "../core/logger/logger.h"
+#include "logger.h"
 
 #include <algorithm>
 #include <chrono>
 #include <utility>
 #include <vector>
 
-#include "../io/FileIoRegistry.h"
+#include "FileIoRegistry.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -345,8 +345,8 @@ void PlayerSession::handleStopCommand(bool clearDataSource) {
 }
 
 void PlayerSession::handleSeekCommand(int64_t positionMs) {
-    flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>* packetQueue = nullptr;
-    flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>* pcmQueue = nullptr;
+    flexmusic::utils::BlockingQueue<flexmusic::media::EncodedPacket>* packetQueue = nullptr;
+    flexmusic::utils::BlockingQueue<flexmusic::media::PcmFrame>* pcmQueue = nullptr;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!hasDataSource_ || !snapshot_.seekable) {
@@ -375,7 +375,7 @@ void PlayerSession::handleSeekCommand(int64_t positionMs) {
         setStateLocked(PlayerState::PREPARING);
         packetQueue = packetQueue_.get();
         pcmQueue = pcmQueue_.get();
-        flexmusic::core::levelLog(kPlayerSessionTag).i(
+        flexmusic::utils::levelLog(kPlayerSessionTag).i(
                 "seek request sourceId=%s positionMs=%lld resume=%d serial=%d state=%d",
                 dataSourceSpec_.sourceId.c_str(),
                 static_cast<long long>(safePositionMs),
@@ -408,15 +408,15 @@ void PlayerSession::handleSetPlaybackSpeedCommand(float playbackSpeed) {
         std::lock_guard<std::mutex> tempoLock(tempoProcessorMutex_);
         tempoProcessor_.setPlaybackSpeed(safePlaybackSpeed);
     }
-    flexmusic::core::levelLog(kPlayerSessionTag).i(
+    flexmusic::utils::levelLog(kPlayerSessionTag).i(
             "set playback speed sourceId=%s speed=%.2f",
             sourceId.c_str(),
             safePlaybackSpeed);
 }
 
 void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart) {
-    packetQueue_ = std::make_unique<flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>>(kPacketQueueSize);
-    pcmQueue_ = std::make_unique<flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>>(kPcmQueueSize);
+    packetQueue_ = std::make_unique<flexmusic::utils::BlockingQueue<flexmusic::media::EncodedPacket>>(kPacketQueueSize);
+    pcmQueue_ = std::make_unique<flexmusic::utils::BlockingQueue<flexmusic::media::PcmFrame>>(kPcmQueueSize);
     stopRequested_ = false;
     seekRequested_ = false;
     firstFrameRendered_ = false;
@@ -438,7 +438,7 @@ void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart)
     snapshot_.playing = autoStart;
     snapshot_.nativeReady = true;
     setStateLocked(PlayerState::PREPARING);
-    flexmusic::core::levelLog(kPlayerSessionTag).i(
+    flexmusic::utils::levelLog(kPlayerSessionTag).i(
             "pipeline start sourceId=%s backend=%s startPositionMs=%lld autoStart=%d",
             dataSourceSpec_.sourceId.c_str(),
             snapshot_.backendName.c_str(),
@@ -512,7 +512,7 @@ void PlayerSession::joinThread(std::unique_ptr<std::thread>* thread) {
     }
 }
 
-void PlayerSession::clearPacketQueue(flexmusic::core::BlockingQueue<flexmusic::media::EncodedPacket>* queue) {
+void PlayerSession::clearPacketQueue(flexmusic::utils::BlockingQueue<flexmusic::media::EncodedPacket>* queue) {
     if (queue == nullptr) {
         return;
     }
@@ -521,7 +521,7 @@ void PlayerSession::clearPacketQueue(flexmusic::core::BlockingQueue<flexmusic::m
     });
 }
 
-void PlayerSession::clearPcmQueue(flexmusic::core::BlockingQueue<flexmusic::media::PcmFrame>* queue) {
+void PlayerSession::clearPcmQueue(flexmusic::utils::BlockingQueue<flexmusic::media::PcmFrame>* queue) {
     if (queue == nullptr) {
         return;
     }
@@ -568,7 +568,7 @@ bool PlayerSession::applyPendingSeekIfNeeded() {
             return false;
         }
         if (queueSerial_ != activeSerial || pendingSeekPositionMs_ != targetPositionMs) {
-            flexmusic::core::levelLog(kPlayerSessionTag).i(
+            flexmusic::utils::levelLog(kPlayerSessionTag).i(
                     "seek superseded sourceId=%s positionMs=%lld serial=%d latestSerial=%d latestPositionMs=%lld",
                     dataSourceSpec_.sourceId.c_str(),
                     static_cast<long long>(targetPositionMs),
@@ -582,7 +582,7 @@ bool PlayerSession::applyPendingSeekIfNeeded() {
         snapshot_.playing = autoStartOnReady_;
     }
 
-    flexmusic::core::levelLog(kPlayerSessionTag).i(
+    flexmusic::utils::levelLog(kPlayerSessionTag).i(
             "seek applied sourceId=%s positionMs=%lld serial=%d autoStart=%d",
             dataSourceSpec_.sourceId.c_str(),
             static_cast<long long>(targetPositionMs),
@@ -610,7 +610,7 @@ bool PlayerSession::flushTempoProcessor(std::vector<flexmusic::media::PcmFrame>*
 }
 
 void PlayerSession::prepareLoop(int64_t startPositionMs) {
-    const auto log = flexmusic::core::levelLog(kPlayerSessionTag);
+    const auto log = flexmusic::utils::levelLog(kPlayerSessionTag);
     flexmusic::io::DataSourceSpec dataSourceSpec;
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -703,7 +703,7 @@ void PlayerSession::prepareLoop(int64_t startPositionMs) {
 }
 
 void PlayerSession::demuxLoop() {
-    const auto log = flexmusic::core::levelLog(kPlayerSessionTag);
+    const auto log = flexmusic::utils::levelLog(kPlayerSessionTag);
     while (true) {
         if (!applyPendingSeekIfNeeded()) {
             return;
@@ -760,7 +760,7 @@ void PlayerSession::demuxLoop() {
 }
 
 void PlayerSession::decodeLoop() {
-    const auto log = flexmusic::core::levelLog(kPlayerSessionTag);
+    const auto log = flexmusic::utils::levelLog(kPlayerSessionTag);
     while (true) {
         flexmusic::media::EncodedPacket encodedPacket;
         if (packetQueue_ == nullptr || !packetQueue_->pop(&encodedPacket)) {
@@ -929,7 +929,7 @@ void PlayerSession::decodeLoop() {
 }
 
 void PlayerSession::renderLoop() {
-    const auto log = flexmusic::core::levelLog(kPlayerSessionTag);
+    const auto log = flexmusic::utils::levelLog(kPlayerSessionTag);
     bool bufferingAnnounced = false;
     while (true) {
         flexmusic::media::PcmFrame pcmFrame;
@@ -1062,7 +1062,7 @@ int64_t PlayerSession::elapsedSincePipelineStartMs() const {
 
 void PlayerSession::setStateLocked(PlayerState state) {
     if (snapshot_.state != state) {
-        flexmusic::core::levelLog(kPlayerSessionTag).i(
+        flexmusic::utils::levelLog(kPlayerSessionTag).i(
                 "state change %d -> %d sourceId=%s elapsedMs=%lld",
                 static_cast<int>(snapshot_.state),
                 static_cast<int>(state),
@@ -1073,7 +1073,7 @@ void PlayerSession::setStateLocked(PlayerState state) {
 }
 
 void PlayerSession::setErrorLocked(const std::string& errorMessage) {
-    flexmusic::core::levelLog(kPlayerSessionTag).e(
+    flexmusic::utils::levelLog(kPlayerSessionTag).e(
             "error sourceId=%s elapsedMs=%lld message=%s",
             dataSourceSpec_.sourceId.c_str(),
             static_cast<long long>(elapsedSincePipelineStartMs()),

@@ -26,14 +26,14 @@ public class TranscodeSettings implements Serializable {
         public String getMimeType() {
             switch (this) {
                 case FLAC:
-                    return "audio/flac";
+                    return "audioProcess/flac";
                 case OGG:
-                    return "audio/ogg";
+                    return "audioProcess/ogg";
                 case WAV:
-                    return "audio/wav";
+                    return "audioProcess/wav";
                 case MP3:
                 default:
-                    return "audio/mpeg";
+                    return "audioProcess/mpeg";
             }
         }
     }

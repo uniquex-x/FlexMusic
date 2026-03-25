@@ -2,7 +2,7 @@
 #define FLEXMUSIC_ERROR_CODE_H
 
 namespace flexmusic {
-namespace core {
+namespace utils {
 
 // 错误码定义
 enum class ErrorCode {

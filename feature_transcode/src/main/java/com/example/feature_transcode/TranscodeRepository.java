@@ -130,7 +130,7 @@ public final class TranscodeRepository {
                 .replace('/', '_')
                 .replace('\\', '_');
         if (sanitized.isEmpty()) {
-            return "audio";
+            return "audioProcess";
         }
         int dotIndex = sanitized.lastIndexOf('.');
         return dotIndex > 0 ? sanitized.substring(0, dotIndex) : sanitized;

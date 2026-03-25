@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <memory>
-#include "../packet/audio_packet.h"
+#include "audio_packet.h"
 
 namespace flexmusic {
 namespace media {

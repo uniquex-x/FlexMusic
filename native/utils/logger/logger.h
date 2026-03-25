@@ -5,7 +5,7 @@
 #include <string>
 
 namespace flexmusic {
-namespace core {
+namespace utils {
 
 // 日志级别
 enum class LogLevel {
@@ -61,11 +61,11 @@ inline LevelLog levelLog(const char* tag) {
 }
 
 // 宏定义
-#define LOGV(tag, ...) flexmusic::core::Logger::getInstance().v(tag, __VA_ARGS__)
-#define LOGD(tag, ...) flexmusic::core::Logger::getInstance().d(tag, __VA_ARGS__)
-#define LOGI(tag, ...) flexmusic::core::Logger::getInstance().i(tag, __VA_ARGS__)
-#define LOGW(tag, ...) flexmusic::core::Logger::getInstance().w(tag, __VA_ARGS__)
-#define LOGE(tag, ...) flexmusic::core::Logger::getInstance().e(tag, __VA_ARGS__)
+#define LOGV(tag, ...) flexmusic::utils::Logger::getInstance().v(tag, __VA_ARGS__)
+#define LOGD(tag, ...) flexmusic::utils::Logger::getInstance().d(tag, __VA_ARGS__)
+#define LOGI(tag, ...) flexmusic::utils::Logger::getInstance().i(tag, __VA_ARGS__)
+#define LOGW(tag, ...) flexmusic::utils::Logger::getInstance().w(tag, __VA_ARGS__)
+#define LOGE(tag, ...) flexmusic::utils::Logger::getInstance().e(tag, __VA_ARGS__)
 
 } // namespace core
 } // namespace flexmusic

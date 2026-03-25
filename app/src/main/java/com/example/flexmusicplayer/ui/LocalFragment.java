@@ -132,7 +132,7 @@ public class LocalFragment extends Fragment {
     private void setupClickListeners() {
         scanButton.setOnClickListener(v -> scanForMusic());
 
-        uploadButton.setOnClickListener(v -> filePickerLauncher.launch(new String[]{"audio/*"}));
+        uploadButton.setOnClickListener(v -> filePickerLauncher.launch(new String[]{"audioProcess/*"}));
     }
 
     private void handleUploadedFiles(java.util.List<android.net.Uri> uris) {

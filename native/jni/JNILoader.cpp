@@ -3,8 +3,8 @@
 #include <android/log.h>
 #include <cstdlib>
 
-#include "bridge/PlayerBridge.h"
-#include "bridge/TranscodeBridge.h"
+#include "PlayerBridge.h"
+#include "TranscodeBridge.h"
 
 namespace {
 

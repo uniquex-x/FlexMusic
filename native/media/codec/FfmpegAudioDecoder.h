@@ -4,9 +4,9 @@
 #include <string>
 #include <vector>
 
-#include "../demux/FfmpegDemuxer.h"
-#include "../packet/EncodedPacket.h"
-#include "../packet/PcmFrame.h"
+#include "FfmpegDemuxer.h"
+#include "EncodedPacket.h"
+#include "PcmFrame.h"
 
 struct AVChannelLayout;
 struct AVCodecContext;

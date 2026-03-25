@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string>
 
-#include "../packet/EncodedPacket.h"
+#include "EncodedPacket.h"
 
 struct AVCodecParameters;
 struct AVFormatContext;

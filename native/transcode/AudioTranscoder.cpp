@@ -19,14 +19,14 @@ extern "C" {
 #include <libavcodec/packet.h>
 }
 
-#include "core/logger/logger.h"
-#include "io/DataSourceSpec.h"
-#include "io/PassthroughFileIo.h"
-#include "media/codec/FfmpegAudioDecoder.h"
-#include "media/demux/FfmpegDemuxer.h"
-#include "media/packet/EncodedPacket.h"
-#include "media/packet/PcmFrame.h"
-#include "media/source/AvioDataSource.h"
+#include "logger.h"
+#include "DataSourceSpec.h"
+#include "PassthroughFileIo.h"
+#include "FfmpegAudioDecoder.h"
+#include "FfmpegDemuxer.h"
+#include "EncodedPacket.h"
+#include "PcmFrame.h"
+#include "AvioDataSource.h"
 
 namespace flexmusic {
 namespace transcode {
@@ -612,7 +612,7 @@ bool processDecodedFrames(const std::vector<flexmusic::media::PcmFrame>& decoded
 } // namespace
 
 bool AudioTranscoder::transcode(const TranscodeRequest& request, std::string* errorMessage) {
-    const auto log = flexmusic::core::levelLog(kTranscodeTag);
+    const auto log = flexmusic::utils::levelLog(kTranscodeTag);
     if (request.sourcePath.empty() || request.targetPath.empty()) {
         if (errorMessage != nullptr) {
             *errorMessage = "Transcode source or target path is empty";

@@ -3,7 +3,7 @@
 #include <android/log.h>
 #include <unistd.h>
 
-#include "../../io/FileIoRegistry.h"
+#include "FileIoRegistry.h"
 
 namespace flexmusic {
 namespace jni {

@@ -1,9 +1,9 @@
-#include "audio/SoundTouchTempoProcessor.h"
+#include "SoundTouchTempoProcessor.h"
 
 #include <algorithm>
 #include <cmath>
 
-#include "core/logger/logger.h"
+#include "logger.h"
 
 namespace flexmusic {
 namespace audio {
@@ -34,7 +34,7 @@ void SoundTouchTempoProcessor::setPlaybackSpeed(float playbackSpeed) {
         nextSourcePositionMs_ = 0;
     }
     soundTouch_.setTempo(playbackSpeed_);
-    flexmusic::core::levelLog(kSoundTouchProcessorTag).i("set tempo speed=%.2f", playbackSpeed_);
+    flexmusic::utils::levelLog(kSoundTouchProcessorTag).i("set tempo speed=%.2f", playbackSpeed_);
 }
 
 void SoundTouchTempoProcessor::clear() {
@@ -149,7 +149,7 @@ void SoundTouchTempoProcessor::configureIfNeeded(int sampleRate, int channelCoun
     soundTouch_.setRate(1.0f);
     soundTouch_.setPitch(1.0f);
     soundTouch_.setTempo(playbackSpeed_);
-    flexmusic::core::levelLog(kSoundTouchProcessorTag).i(
+    flexmusic::utils::levelLog(kSoundTouchProcessorTag).i(
             "configure sampleRate=%d channels=%d speed=%.2f startPositionMs=%lld",
             sampleRate_,
             channelCount_,

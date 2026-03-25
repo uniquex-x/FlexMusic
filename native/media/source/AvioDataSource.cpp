@@ -1,6 +1,6 @@
 #include "AvioDataSource.h"
 
-#include "../../core/logger/logger.h"
+#include "logger.h"
 
 #include <cerrno>
 #include <chrono>
@@ -42,7 +42,7 @@ bool AvioDataSource::open(std::unique_ptr<flexmusic::io::IFileIo> fileIo,
                           std::string* errorMessage) {
     close();
     const auto startedAt = std::chrono::steady_clock::now();
-    const auto log = flexmusic::core::levelLog(kAvioTag);
+    const auto log = flexmusic::utils::levelLog(kAvioTag);
     if (fileIo == nullptr) {
         if (errorMessage != nullptr) {
             *errorMessage = "File IO implementation is null";

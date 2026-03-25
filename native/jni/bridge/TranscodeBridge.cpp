@@ -2,7 +2,7 @@
 
 #include <android/log.h>
 
-#include "transcode/AudioTranscoder.h"
+#include "AudioTranscoder.h"
 
 namespace flexmusic {
 namespace jni {

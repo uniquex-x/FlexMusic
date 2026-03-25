@@ -10,7 +10,7 @@
 #include <condition_variable>
 
 namespace flexmusic {
-namespace core {
+namespace utils {
 
 class ThreadPool {
 public:

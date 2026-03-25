@@ -6,7 +6,7 @@
 #include <memory>
 #include <string>
 
-#include "../../player/PlayerSession.h"
+#include "PlayerSession.h"
 
 namespace flexmusic {
 namespace jni {

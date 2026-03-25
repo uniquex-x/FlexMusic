@@ -1,6 +1,6 @@
 #include "OpenSlAudioRenderer.h"
 
-#include "../core/logger/logger.h"
+#include "logger.h"
 
 #include <algorithm>
 #include <chrono>
@@ -35,7 +35,7 @@ OpenSlAudioRenderer::~OpenSlAudioRenderer() {
 
 bool OpenSlAudioRenderer::open(int sampleRate, int channelCount, std::string* errorMessage) {
     stop();
-    const auto log = flexmusic::core::levelLog(kOpenSlTag);
+    const auto log = flexmusic::utils::levelLog(kOpenSlTag);
     openStartedAt_ = std::chrono::steady_clock::now();
     firstBufferEnqueuedLogged_ = false;
     firstBufferConsumedLogged_ = false;
@@ -229,7 +229,7 @@ bool OpenSlAudioRenderer::enqueueFrame(flexmusic::media::PcmFrame frame, std::st
         if (errorMessage != nullptr) {
             *errorMessage = "Enqueue PCM buffer failed";
         }
-        flexmusic::core::levelLog(kOpenSlTag).e("enqueue buffer failed result=%d size=%u",
+        flexmusic::utils::levelLog(kOpenSlTag).e("enqueue buffer failed result=%d size=%u",
                                                 result,
                                                 static_cast<unsigned int>(buffer.size()));
         return false;
@@ -239,7 +239,7 @@ bool OpenSlAudioRenderer::enqueueFrame(flexmusic::media::PcmFrame frame, std::st
         firstBufferEnqueuedLogged_ = true;
         const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - openStartedAt_).count();
-        flexmusic::core::levelLog(kOpenSlTag).i("first buffer enqueued bytes=%zu elapsedMs=%lld",
+        flexmusic::utils::levelLog(kOpenSlTag).i("first buffer enqueued bytes=%zu elapsedMs=%lld",
                                                 buffer.size(),
                                                 static_cast<long long>(elapsedMs));
     }
@@ -317,7 +317,7 @@ void OpenSlAudioRenderer::handleBufferConsumed() {
         firstBufferConsumedLogged_ = true;
         const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - openStartedAt_).count();
-        flexmusic::core::levelLog(kOpenSlTag).i("first buffer consumed elapsedMs=%lld",
+        flexmusic::utils::levelLog(kOpenSlTag).i("first buffer consumed elapsedMs=%lld",
                                                 static_cast<long long>(elapsedMs));
     }
     if (!inFlightBuffers_.empty()) {

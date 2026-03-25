@@ -1,6 +1,6 @@
 #include "FfmpegDemuxer.h"
 
-#include "../../core/logger/logger.h"
+#include "logger.h"
 
 #include <algorithm>
 #include <cctype>
@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "../source/AvioDataSource.h"
+#include "AvioDataSource.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -118,7 +118,7 @@ FfmpegDemuxer::~FfmpegDemuxer() {
 
 bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorMessage) {
     close();
-    const auto log = flexmusic::core::levelLog(kDemuxerTag);
+    const auto log = flexmusic::utils::levelLog(kDemuxerTag);
     const auto startedAt = std::chrono::steady_clock::now();
     if (dataSource == nullptr || dataSource->context() == nullptr) {
         if (errorMessage != nullptr) {
@@ -264,7 +264,7 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
 }
 
 bool FfmpegDemuxer::readPacket(flexmusic::media::EncodedPacket* outputPacket, std::string* errorMessage) {
-    const auto log = flexmusic::core::levelLog(kDemuxerTag);
+    const auto log = flexmusic::utils::levelLog(kDemuxerTag);
     if (outputPacket == nullptr || formatContext_ == nullptr || streamInfo_.streamIndex < 0) {
         if (errorMessage != nullptr) {
             *errorMessage = "Demuxer is not opened";
@@ -317,7 +317,7 @@ bool FfmpegDemuxer::readPacket(flexmusic::media::EncodedPacket* outputPacket, st
 }
 
 bool FfmpegDemuxer::seekTo(int64_t positionMs, std::string* errorMessage) {
-    const auto log = flexmusic::core::levelLog(kDemuxerTag);
+    const auto log = flexmusic::utils::levelLog(kDemuxerTag);
     if (!seekable_ || formatContext_ == nullptr || streamInfo_.streamIndex < 0) {
         if (errorMessage != nullptr) {
             *errorMessage = "Current data source is not seekable";

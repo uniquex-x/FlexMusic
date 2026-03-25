@@ -123,7 +123,7 @@ public class TranscodeFragment extends Fragment {
     }
 
     private void setupClickListeners() {
-        selectFileButton.setOnClickListener(v -> filePickerLauncher.launch(new String[]{"audio/*"}));
+        selectFileButton.setOnClickListener(v -> filePickerLauncher.launch(new String[]{"audioProcess/*"}));
         startTranscodeButton.setOnClickListener(v -> onStartTranscodeClicked());
         transcodeAgainButton.setOnClickListener(v -> showStartState());
     }
