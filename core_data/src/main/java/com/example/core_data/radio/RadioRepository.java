@@ -65,7 +65,12 @@ public class RadioRepository {
         }
 
         List<RadioStation> results = new ArrayList<>(merged.values());
-        Collections.sort(results, Comparator.comparingInt(station -> -scoreStation(station, trimmedQuery)));
+        Collections.sort(results, new Comparator<RadioStation>() {
+            @Override
+            public int compare(RadioStation a, RadioStation b) {
+                return Integer.compare(scoreStation(b, trimmedQuery), scoreStation(a, trimmedQuery));
+            }
+        });
         if (results.size() > SEARCH_LIMIT) {
             results = new ArrayList<>(results.subList(0, SEARCH_LIMIT));
         }
