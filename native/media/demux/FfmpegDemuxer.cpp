@@ -153,17 +153,19 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
     }
     av_dict_set(&options, "fflags", "nobuffer", 0);
     av_dict_set(&options, "flush_packets", "1", 0);
-    log.i("open tuning sourceId=%s url=%s lowLatency=%d formatHint=%s",
+    log.i("open tuning sourceId=%s customIo=1 hintUrl=%s lowLatency=%d formatHint=%s",
           dataSource->spec().sourceId.c_str(),
           dataSource->spec().resolvedUrl.c_str(),
           lowLatencyOpen ? 1 : 0,
           inputFormatHintName.empty() ? "none" : inputFormatHintName.c_str());
 
     const auto openInputStartedAt = std::chrono::steady_clock::now();
-    const char* formatOpenUrl = dataSource->spec().resolvedUrl.empty()
+    // The actual bytes come from the custom AVIO context above. Keep the URL only as a
+    // demux hint so FFmpeg can still use extension/content heuristics for format selection.
+    const char* formatHintUrl = dataSource->spec().resolvedUrl.empty()
             ? nullptr
             : dataSource->spec().resolvedUrl.c_str();
-    int result = avformat_open_input(&formatContext_, formatOpenUrl, inputFormatHint, &options);
+    int result = avformat_open_input(&formatContext_, formatHintUrl, inputFormatHint, &options);
     av_dict_free(&options);
     if (result < 0 || formatContext_ == nullptr) {
         if (errorMessage != nullptr) {
@@ -171,7 +173,7 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
         }
         const auto openInputElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - openInputStartedAt).count();
-        log.e("open input failed sourceId=%s url=%s elapsedMs=%lld error=%s",
+        log.e("open input failed sourceId=%s customIo=1 hintUrl=%s elapsedMs=%lld error=%s",
               dataSource->spec().sourceId.c_str(),
               dataSource->spec().resolvedUrl.c_str(),
               static_cast<long long>(openInputElapsedMs),
@@ -245,7 +247,7 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
     seekable_ = (formatContext_->pb != nullptr && (formatContext_->pb->seekable & AVIO_SEEKABLE_NORMAL) != 0);
     const auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startedAt).count();
-    log.i("opened sourceId=%s url=%s streamIndex=%d sampleRate=%d channels=%d durationMs=%lld seekable=%d openInputMs=%lld streamInfoMs=%lld totalMs=%lld",
+    log.i("opened sourceId=%s customIo=1 hintUrl=%s streamIndex=%d sampleRate=%d channels=%d durationMs=%lld seekable=%d openInputMs=%lld streamInfoMs=%lld totalMs=%lld",
           dataSource->spec().sourceId.c_str(),
           dataSource->spec().resolvedUrl.c_str(),
           streamInfo_.streamIndex,
