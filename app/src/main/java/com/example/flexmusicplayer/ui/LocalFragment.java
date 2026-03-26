@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.flexmusicplayer.download.SongDownloadManager;
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.model.Album;
@@ -74,6 +75,7 @@ public class LocalFragment extends Fragment {
     private LocalMusicStore localMusicStore;
     private FavoriteSongsStore favoriteSongsStore;
     private PlaylistStore playlistStore;
+    private SongDownloadManager downloadManager;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -115,6 +117,7 @@ public class LocalFragment extends Fragment {
         localMusicStore = new LocalMusicStore(requireContext());
         favoriteSongsStore = new FavoriteSongsStore(requireContext());
         playlistStore = new PlaylistStore(requireContext());
+        downloadManager = SongDownloadManager.getInstance(requireContext());
 
         songsRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
         albumsRecycler.setLayoutManager(new GridLayoutManager(requireContext(), 2));
@@ -186,6 +189,7 @@ public class LocalFragment extends Fragment {
     private void loadLocalMusic() {
         List<Song> songs = new ArrayList<>(localMusicStore.loadSongs());
         favoriteSongsStore.applyFavoriteFlags(songs);
+        downloadManager.refreshDownloadStates(songs);
         List<Album> albums = createMockAlbums();
         List<Artist> artists = createMockArtists();
 
@@ -260,6 +264,41 @@ public class LocalFragment extends Fragment {
             return false;
         });
         popupMenu.show();
+    }
+
+    private void requestSongDownload(@NonNull Song song, @NonNull Runnable onUiUpdated) {
+        downloadManager.requestDownload(song, new SongDownloadManager.DownloadCallbacks() {
+            @Override
+            public void onDownloadStateChanged(@NonNull Song targetSong) {
+                onUiUpdated.run();
+            }
+
+            @Override
+            public void onDownloadSucceeded(@NonNull Song targetSong, boolean alreadyDownloaded) {
+                onUiUpdated.run();
+                if (!isAdded()) {
+                    return;
+                }
+                Toast.makeText(
+                                requireContext(),
+                                alreadyDownloaded ? R.string.download_already_exists_message : R.string.download_success_message,
+                                Toast.LENGTH_SHORT)
+                        .show();
+            }
+
+            @Override
+            public void onDownloadFailed(@NonNull Song targetSong, @NonNull String message) {
+                onUiUpdated.run();
+                if (!isAdded()) {
+                    return;
+                }
+                Toast.makeText(
+                                requireContext(),
+                                message,
+                                Toast.LENGTH_SHORT)
+                        .show();
+            }
+        });
     }
 
     private void showAddToPlaylistDialog(@NonNull Song song) {
@@ -403,8 +442,7 @@ public class LocalFragment extends Fragment {
                 });
 
                 downloadButton.setOnClickListener(v -> {
-                    song.setDownloaded(!song.isDownloaded());
-                    updateDownload(song);
+                    requestSongDownload(song, () -> updateDownload(song));
                 });
 
                 moreButton.setOnClickListener(v -> showSongOptions(v, song));
@@ -417,10 +455,12 @@ public class LocalFragment extends Fragment {
             }
 
             private void updateDownload(Song song) {
+                boolean inFlight = downloadManager.isDownloadInFlight(song);
                 int tint = ContextCompat.getColor(itemView.getContext(),
-                        song.isDownloaded() ? R.color.gray_500 : R.color.gray_300);
+                        song.isDownloaded() || inFlight ? R.color.gray_500 : R.color.gray_300);
                 downloadButton.setImageResource(song.isDownloaded() ? R.drawable.ic_check_small : R.drawable.ic_download);
                 downloadButton.setImageTintList(android.content.res.ColorStateList.valueOf(tint));
+                downloadButton.setEnabled(!inFlight);
             }
         }
     }

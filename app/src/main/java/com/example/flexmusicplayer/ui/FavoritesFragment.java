@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
+import com.example.flexmusicplayer.download.SongDownloadManager;
 import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
@@ -50,6 +51,7 @@ public class FavoritesFragment extends Fragment {
     private SongVerticalAdapter favoritesAdapter;
     private FavoriteSongsStore favoriteSongsStore;
     private FavoriteRadioStore favoriteRadioStore;
+    private SongDownloadManager downloadManager;
     private TextView emptyTitle;
     private TextView emptyDescription;
     private View songsTab;
@@ -89,6 +91,7 @@ public class FavoritesFragment extends Fragment {
         backButton.setOnClickListener(v -> navigateBack());
         favoriteSongsStore = new FavoriteSongsStore(requireContext());
         favoriteRadioStore = new FavoriteRadioStore(requireContext());
+        downloadManager = SongDownloadManager.getInstance(requireContext());
 
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         favoritesRecycler.setLayoutManager(layoutManager);
@@ -118,6 +121,9 @@ public class FavoritesFragment extends Fragment {
         List<Song> favorites = selectedTab == FavoriteTab.SONGS
                 ? favoriteSongsStore.loadFavorites()
                 : favoriteRadioStore.loadFavorites();
+        if (selectedTab == FavoriteTab.SONGS) {
+            downloadManager.refreshDownloadStates(favorites);
+        }
 
         if (favorites.isEmpty()) {
             favoritesRecycler.setVisibility(View.GONE);
@@ -200,6 +206,7 @@ public class FavoritesFragment extends Fragment {
             private final MaterialCardView albumArtCard;
             private final TextView songTitle;
             private final TextView artistName;
+            private final ImageButton downloadButton;
             private final ImageButton favoriteButton;
 
             ViewHolder(@NonNull View itemView) {
@@ -207,6 +214,7 @@ public class FavoritesFragment extends Fragment {
                 albumArtCard = itemView.findViewById(R.id.album_art_card);
                 songTitle = itemView.findViewById(R.id.song_title);
                 artistName = itemView.findViewById(R.id.artist_name);
+                downloadButton = itemView.findViewById(R.id.download_button);
                 favoriteButton = itemView.findViewById(R.id.favorite_button);
             }
 
@@ -214,6 +222,7 @@ public class FavoritesFragment extends Fragment {
                 songTitle.setText(song.getTitle());
                 artistName.setText(song.getArtist());
                 albumArtCard.setCardBackgroundColor(ART_COLORS[position % ART_COLORS.length]);
+                updateDownload(song, tab);
                 favoriteButton.setImageTintList(ContextCompat.getColorStateList(
                         itemView.getContext(),
                         song.isFavorite() ? R.color.player_bar_background : R.color.gray_400));
@@ -224,6 +233,7 @@ public class FavoritesFragment extends Fragment {
                     }
                 });
 
+                downloadButton.setOnClickListener(v -> requestSongDownload(song));
                 favoriteButton.setOnClickListener(v -> {
                     boolean isFavorite = tab == FavoriteTab.SONGS
                             ? favoriteSongsStore.toggleFavorite(song)
@@ -241,6 +251,49 @@ public class FavoritesFragment extends Fragment {
                             }
                         }
                         Toast.makeText(itemView.getContext(), R.string.removed_from_favorites, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+
+            private void updateDownload(@NonNull Song song, @NonNull FavoriteTab tab) {
+                if (tab != FavoriteTab.SONGS) {
+                    downloadButton.setVisibility(View.GONE);
+                    return;
+                }
+                downloadButton.setVisibility(View.VISIBLE);
+                boolean inFlight = downloadManager.isDownloadInFlight(song);
+                downloadButton.setImageResource(song.isDownloaded() ? R.drawable.ic_check_small : R.drawable.ic_download);
+                downloadButton.setImageTintList(ContextCompat.getColorStateList(
+                        itemView.getContext(),
+                        song.isDownloaded() || inFlight ? R.color.gray_500 : R.color.gray_300));
+                downloadButton.setEnabled(!inFlight);
+            }
+
+            private void requestSongDownload(@NonNull Song song) {
+                downloadManager.requestDownload(song, new SongDownloadManager.DownloadCallbacks() {
+                    @Override
+                    public void onDownloadStateChanged(@NonNull Song targetSong) {
+                        updateDownload(targetSong, tab);
+                    }
+
+                    @Override
+                    public void onDownloadSucceeded(@NonNull Song targetSong, boolean alreadyDownloaded) {
+                        updateDownload(targetSong, tab);
+                        Toast.makeText(
+                                        itemView.getContext(),
+                                        alreadyDownloaded ? R.string.download_already_exists_message : R.string.download_success_message,
+                                        Toast.LENGTH_SHORT)
+                                .show();
+                    }
+
+                    @Override
+                    public void onDownloadFailed(@NonNull Song targetSong, @NonNull String message) {
+                        updateDownload(targetSong, tab);
+                        Toast.makeText(
+                                        itemView.getContext(),
+                                        message,
+                                        Toast.LENGTH_SHORT)
+                                .show();
                     }
                 });
             }

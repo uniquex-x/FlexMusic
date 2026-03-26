@@ -279,6 +279,13 @@
     <string name="download">Download</string>
     <string name="downloaded">Downloaded</string>
     <string name="downloading">Downloading…</string>
+    <string name="download_missing_source">This track has no downloadable source yet.</string>
+    <string name="download_live_stream_not_supported">Live radio does not support download yet.</string>
+    <string name="download_in_progress_message">This track is already downloading.</string>
+    <string name="download_success_message">Saved for offline playback.</string>
+    <string name="download_already_exists_message">This track is already downloaded.</string>
+    <string name="download_failed_generic">Download failed.</string>
+    <string name="download_failed_message">Download failed: %1$s</string>
     <string name="delete">Delete</string>
     <string name="edit">Edit</string>
     <string name="save">Save</string>

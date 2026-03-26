@@ -18,6 +18,8 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.Fragment;
 
+import com.example.feature_download.DownloadQuality;
+import com.example.feature_download.DownloadRepository;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.settings.AppLocaleManager;
 import com.google.android.material.button.MaterialButton;
@@ -39,10 +41,13 @@ public class SettingsFragment extends Fragment {
     private SwitchCompat darkModeSwitch;
     private TextView languageValue;
     private TextView cacheSizeValue;
+    private TextView downloadQualityValue;
+    private TextView storagePathValue;
     private MaterialButtonToggleGroup streamingQualityGroup;
     private MaterialButtonToggleGroup playbackModeGroup;
     private SharedPreferences prefs;
     private Context appContext;
+    private DownloadRepository downloadRepository;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor();
     private boolean cacheOperationInFlight;
@@ -54,6 +59,7 @@ public class SettingsFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_settings, container, false);
         appContext = requireContext().getApplicationContext();
         prefs = appContext.getSharedPreferences(PREFS_NAME, 0);
+        downloadRepository = new DownloadRepository(appContext);
 
         initViews(view);
         loadSettings();
@@ -66,6 +72,8 @@ public class SettingsFragment extends Fragment {
         darkModeSwitch = view.findViewById(R.id.dark_mode_switch);
         languageValue = view.findViewById(R.id.language_value);
         cacheSizeValue = view.findViewById(R.id.cache_size_value);
+        downloadQualityValue = view.findViewById(R.id.download_quality_value);
+        storagePathValue = view.findViewById(R.id.storage_path_value);
         streamingQualityGroup = view.findViewById(R.id.streaming_quality_group);
         playbackModeGroup = view.findViewById(R.id.playback_mode_group);
     }
@@ -76,6 +84,8 @@ public class SettingsFragment extends Fragment {
         languageValue.setText(AppLocaleManager.getLanguageSummaryResId(
                 AppLocaleManager.getLanguageSetting(appContext)));
         cacheSizeValue.setText(R.string.loading);
+        downloadQualityValue.setText(resolveDownloadQualityLabel(downloadRepository.getPreferredQuality()));
+        storagePathValue.setText(resolveStoragePathSummary());
         refreshCacheSizeAsync();
         streamingQualityGroup.check(R.id.quality_high_btn);
         playbackModeGroup.check(R.id.playback_sequential_btn);
@@ -86,8 +96,8 @@ public class SettingsFragment extends Fragment {
         root.findViewById(R.id.language_item).setOnClickListener(v -> showLanguageDialog());
         root.findViewById(R.id.clear_cache_item).setOnClickListener(v -> showClearCacheDialog());
         root.findViewById(R.id.equalizer_item).setOnClickListener(v -> showPlaceholder(root));
-        root.findViewById(R.id.download_quality_item).setOnClickListener(v -> showPlaceholder(root));
-        root.findViewById(R.id.storage_path_item).setOnClickListener(v -> showPlaceholder(root));
+        root.findViewById(R.id.download_quality_item).setOnClickListener(v -> showDownloadQualityDialog());
+        root.findViewById(R.id.storage_path_item).setOnClickListener(v -> showStoragePathDialog());
         root.findViewById(R.id.privacy_policy_item).setOnClickListener(v -> showPlaceholder(root));
         root.findViewById(R.id.user_agreement_item).setOnClickListener(v -> showPlaceholder(root));
 
@@ -99,12 +109,14 @@ public class SettingsFragment extends Fragment {
     }
 
     private void applyTheme(String theme) {
-        prefs.edit().putString(KEY_THEME, theme).apply();
-        if (THEME_DARK.equals(theme)) {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-        } else {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        int targetNightMode = THEME_DARK.equals(theme)
+                ? AppCompatDelegate.MODE_NIGHT_YES
+                : AppCompatDelegate.MODE_NIGHT_NO;
+        if (AppCompatDelegate.getDefaultNightMode() == targetNightMode) {
+            return;
         }
+        prefs.edit().putString(KEY_THEME, theme).apply();
+        AppCompatDelegate.setDefaultNightMode(targetNightMode);
     }
 
     private void showLanguageDialog() {
@@ -119,10 +131,46 @@ public class SettingsFragment extends Fragment {
                 .setTitle(R.string.settings_language)
                 .setSingleChoiceItems(languages, checked, (dialog, which) -> {
                     String selectedLanguage = resolveLanguageSetting(which);
+                    if (selectedLanguage.equals(currentLanguage)) {
+                        dialog.dismiss();
+                        return;
+                    }
+                    dialog.dismiss();
                     AppLocaleManager.updateLanguageSetting(appContext, selectedLanguage);
                     languageValue.setText(languages[which]);
+                })
+                .show();
+    }
+
+    private void showDownloadQualityDialog() {
+        DownloadQuality[] qualities = DownloadQuality.values();
+        String[] labels = new String[qualities.length];
+        int checkedIndex = 0;
+        DownloadQuality currentQuality = downloadRepository.getPreferredQuality();
+        for (int index = 0; index < qualities.length; index++) {
+            labels[index] = resolveDownloadQualityLabel(qualities[index]);
+            if (qualities[index] == currentQuality) {
+                checkedIndex = index;
+            }
+        }
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.settings_download_quality)
+                .setSingleChoiceItems(labels, checkedIndex, (dialog, which) -> {
+                    DownloadQuality selectedQuality = qualities[which];
+                    if (selectedQuality != currentQuality) {
+                        downloadRepository.setPreferredQuality(selectedQuality);
+                        downloadQualityValue.setText(labels[which]);
+                    }
                     dialog.dismiss();
                 })
+                .show();
+    }
+
+    private void showStoragePathDialog() {
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.settings_storage_path)
+                .setMessage(resolveStoragePathMessage())
+                .setPositiveButton(R.string.confirm, null)
                 .show();
     }
 
@@ -277,6 +325,35 @@ public class SettingsFragment extends Fragment {
             return getString(R.string.settings_cache_size_empty);
         }
         return getString(R.string.settings_cache_size_value, Formatter.formatShortFileSize(appContext, cacheBytes));
+    }
+
+    @NonNull
+    private String resolveDownloadQualityLabel(@NonNull DownloadQuality quality) {
+        switch (quality) {
+            case LOW:
+                return getString(R.string.settings_quality_low);
+            case MEDIUM:
+                return getString(R.string.settings_quality_medium);
+            case HIGH:
+            default:
+                return getString(R.string.settings_quality_high);
+        }
+    }
+
+    @NonNull
+    private String resolveStoragePathSummary() {
+        try {
+            return downloadRepository.getDownloadDirectory().getAbsolutePath();
+        } catch (Exception exception) {
+            return getString(R.string.settings_storage_path_value);
+        }
+    }
+
+    @NonNull
+    private String resolveStoragePathMessage() {
+        String summary = resolveStoragePathSummary();
+        storagePathValue.setText(summary);
+        return summary;
     }
 
     private void showPlaceholder(View root) {

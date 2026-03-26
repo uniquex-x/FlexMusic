@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.22.1)
 project(flexmusic_player)
 
 set(MODULE_AUDIO_PROCESS_PATH ${CMAKE_CURRENT_SOURCE_DIR}/audioProcess)
+set(MODULE_DOWNLOAD_PATH ${CMAKE_CURRENT_SOURCE_DIR}/download)
 set(MODULE_IO_PATH ${CMAKE_CURRENT_SOURCE_DIR}/io)
 set(MODULE_JNI_PATH ${CMAKE_CURRENT_SOURCE_DIR}/jni)
 set(MODULE_MEDIA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/media)
@@ -52,8 +53,11 @@ add_library(
         ${MODULE_UTILS_PATH}/logger/logger.cpp
         # JNI源文件
         ${MODULE_JNI_PATH}/JNILoader.cpp
+        ${MODULE_JNI_PATH}/bridge/DownloadBridge.cpp
         ${MODULE_JNI_PATH}/bridge/PlayerBridge.cpp
         ${MODULE_JNI_PATH}/bridge/TranscodeBridge.cpp
+        # 下载源文件
+        ${MODULE_DOWNLOAD_PATH}/NativeDownloader.cpp
         # 媒体处理核心源文件
         ${MODULE_MEDIA_PATH}/render/OpenSlAudioRenderer.cpp
         ${MODULE_MEDIA_PATH}/source/AvioDataSource.cpp
@@ -95,6 +99,8 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soundtouch/source/SoundTouch
         # 音频处理
         ${MODULE_AUDIO_PROCESS_PATH}/pitchShifter
+        # 下载
+        ${MODULE_DOWNLOAD_PATH}
         # IO
         ${MODULE_IO_PATH}
         # JNI

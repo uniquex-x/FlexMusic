@@ -3,6 +3,7 @@
 #include <android/log.h>
 #include <cstdlib>
 
+#include "DownloadBridge.h"
 #include "PlayerBridge.h"
 #include "TranscodeBridge.h"
 
@@ -38,6 +39,9 @@ void configureOpenSslArmCapabilities() {
 }
 
 bool registerAllJni(JNIEnv* env) {
+    if (!flexmusic::jni::register_DownloadBridgeJNI(env)) {
+        return false;
+    }
     if (!flexmusic::jni::register_PlayerBridgeJNI(env)) {
         return false;
     }

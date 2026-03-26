@@ -104,4 +104,5 @@ dependencies {
     implementation project(":feature_player")
     implementation project(":feature_transcode")
     implementation project(":feature_search")
+    implementation project(":feature_download")
 }

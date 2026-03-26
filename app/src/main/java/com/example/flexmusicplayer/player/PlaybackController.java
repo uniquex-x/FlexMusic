@@ -31,6 +31,8 @@ import com.example.core_domain.search.SearchScope;
 import com.example.core_domain.search.SearchTrack;
 import com.example.core_domain.search.SearchUseCase;
 import com.example.core_network.stream.NetworkPlaybackSourceResolver;
+import com.example.feature_download.DownloadRecord;
+import com.example.feature_download.DownloadRepository;
 import com.example.feature_player.player.FeaturePlayerFactory;
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
@@ -81,6 +83,7 @@ public final class PlaybackController {
     private final PlayerKernel playerKernel;
     private final PlaybackSourceResolver playbackSourceResolver;
     private final IPlaybackWarmupEngine playbackWarmupEngine;
+    private final DownloadRepository downloadRepository;
     private final SearchUseCase searchUseCase = new SearchUseCase(new OnlineSearchRepository());
     private final PlayTrackFromSearchUseCase playTrackFromSearchUseCase =
             new PlayTrackFromSearchUseCase(new TrackPlaybackRepository());
@@ -133,6 +136,7 @@ public final class PlaybackController {
         NetworkPlaybackSourceResolver networkPlaybackSourceResolver = new NetworkPlaybackSourceResolver();
         playbackSourceResolver = networkPlaybackSourceResolver;
         playbackWarmupEngine = networkPlaybackSourceResolver;
+        downloadRepository = new DownloadRepository(appContext);
         playerKernel.addListener(this::handleKernelSnapshotChanged);
     }
 
@@ -475,6 +479,26 @@ public final class PlaybackController {
         return resolveDemoStream(song);
     }
 
+    @NonNull
+    private PlaybackRequest preferDownloadedSource(@NonNull PlaybackRequest request) {
+        if (request.isLiveStream()) {
+            return request;
+        }
+        DownloadRecord downloadRecord = downloadRepository.findRecord(
+                request.getSourceId(),
+                request.getOriginalUrl());
+        if (downloadRecord == null) {
+            return request;
+        }
+        File downloadedFile = new File(downloadRecord.getLocalPath());
+        if (!downloadedFile.exists()) {
+            return request;
+        }
+        Log.d(TAG, "prefer downloaded source sourceId=" + request.getSourceId()
+                + " path=" + downloadedFile.getAbsolutePath());
+        return new PlaybackRequest(request.getSourceId(), downloadedFile.getAbsolutePath(), false);
+    }
+
     private String resolveDemoStream(@NonNull Song song) {
         int index = (int) (Math.abs(song.getId()) % DEMO_STREAMS.length);
         return DEMO_STREAMS[index];
@@ -510,7 +534,10 @@ public final class PlaybackController {
                 synchronized (this) {
                     updateSearchSongFromRequestLocked(song, cachedRequest);
                 }
-                return new PlaybackRequest(searchKey, cachedRequest.getOriginalUrl(), cachedRequest.isLiveStream());
+                return preferDownloadedSource(new PlaybackRequest(
+                        searchKey,
+                        cachedRequest.getOriginalUrl(),
+                        cachedRequest.isLiveStream()));
             }
             if (searchTrack != null) {
                 PlaybackRequest resolvedRequest = playTrackFromSearchUseCase.execute(searchTrack);
@@ -518,7 +545,10 @@ public final class PlaybackController {
                     PlaybackRequest sessionRequest = resolveCachedSearchRequestLocked(searchKey);
                     if (sessionRequest != null) {
                         updateSearchSongFromRequestLocked(song, sessionRequest);
-                        return new PlaybackRequest(searchKey, sessionRequest.getOriginalUrl(), sessionRequest.isLiveStream());
+                        return preferDownloadedSource(new PlaybackRequest(
+                                searchKey,
+                                sessionRequest.getOriginalUrl(),
+                                sessionRequest.isLiveStream()));
                     }
                     if (searchQueueSession != null) {
                         searchQueueSession.putResolvedRequest(searchKey, resolvedRequest);
@@ -527,11 +557,14 @@ public final class PlaybackController {
                 }
                 Log.d(TAG, "resolved search queue track sourceId=" + searchKey
                         + " url=" + resolvedRequest.getOriginalUrl());
-                return new PlaybackRequest(searchKey, resolvedRequest.getOriginalUrl(), resolvedRequest.isLiveStream());
+                return preferDownloadedSource(new PlaybackRequest(
+                        searchKey,
+                        resolvedRequest.getOriginalUrl(),
+                        resolvedRequest.isLiveStream()));
             }
         }
         String source = resolvePlayableSource(song);
-        return new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
+        return preferDownloadedSource(new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream()));
     }
 
     private synchronized void onSourceResolved(long generation, @NonNull ResolvedPlayableSource resolvedSource) {
@@ -1160,7 +1193,7 @@ public final class PlaybackController {
         if (TextUtils.isEmpty(source)) {
             return null;
         }
-        return new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream());
+        return preferDownloadedSource(new PlaybackRequest(resolveSourceId(song), source, song.isRadioStream()));
     }
 
     private void scheduleSearchQueueExpansionIfNeededLocked() {

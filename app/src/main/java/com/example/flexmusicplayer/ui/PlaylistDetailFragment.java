@@ -1,6 +1,7 @@
 package com.example.flexmusicplayer.ui;
 
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -15,14 +16,18 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
+import com.example.flexmusicplayer.download.SongDownloadManager;
 import com.example.flexmusicplayer.model.Playlist;
+import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.player.PlaybackController;
 import com.example.flexmusicplayer.storage.PlaylistStore;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -31,7 +36,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PlaylistDetailFragment extends Fragment {
+public class PlaylistDetailFragment extends Fragment implements PlaybackController.Listener {
 
     private static final String ARG_PLAYLIST_ID = "playlist_id";
     private static final int[] ART_COLORS = {
@@ -52,6 +57,8 @@ public class PlaylistDetailFragment extends Fragment {
 
     private long playlistId;
     private PlaylistStore playlistStore;
+    private SongDownloadManager downloadManager;
+    private PlaybackController playbackController;
     private Playlist currentPlaylist;
     private TextView playlistNameView;
     private TextView playlistDescriptionView;
@@ -59,6 +66,7 @@ public class PlaylistDetailFragment extends Fragment {
     private RecyclerView songsRecycler;
     private TextView emptySongsView;
     private SongAdapter songAdapter;
+    private String currentPlayingSongKey = "";
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -72,6 +80,8 @@ public class PlaylistDetailFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_playlist_detail, container, false);
         playlistStore = new PlaylistStore(requireContext());
+        downloadManager = SongDownloadManager.getInstance(requireContext());
+        playbackController = PlaybackController.getInstance(requireContext());
         initViews(view);
         setupRecycler();
         setupListeners(view);
@@ -83,6 +93,19 @@ public class PlaylistDetailFragment extends Fragment {
     public void onResume() {
         super.onResume();
         loadPlaylist();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        playbackController.addListener(this);
+        syncCurrentPlayingSong(playbackController.getPlayerState());
+    }
+
+    @Override
+    public void onStop() {
+        playbackController.removeListener(this);
+        super.onStop();
     }
 
     private void initViews(@NonNull View view) {
@@ -128,7 +151,9 @@ public class PlaylistDetailFragment extends Fragment {
         List<Song> songs = currentPlaylist.getSongs() == null
                 ? new ArrayList<>()
                 : new ArrayList<>(currentPlaylist.getSongs());
+        downloadManager.refreshDownloadStates(songs);
         songAdapter.setSongs(songs);
+        syncCurrentPlayingSong(playbackController.getPlayerState());
         boolean isEmpty = songs.isEmpty();
         songsRecycler.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
         emptySongsView.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
@@ -221,6 +246,7 @@ public class PlaylistDetailFragment extends Fragment {
     private void showSongOptions(@NonNull Song song) {
         String[] options = {
                 getString(R.string.playlist_detail_add_to_other_playlist),
+                getString(song.isDownloaded() ? R.string.downloaded : R.string.download),
                 getString(R.string.playlist_detail_remove_song),
                 getString(R.string.player_menu_share)
         };
@@ -230,12 +256,57 @@ public class PlaylistDetailFragment extends Fragment {
                     if (which == 0) {
                         showAddToOtherPlaylistDialog(song);
                     } else if (which == 1) {
-                        removeSongFromCurrentPlaylist(song);
+                        requestSongDownload(song);
                     } else if (which == 2) {
+                        removeSongFromCurrentPlaylist(song);
+                    } else if (which == 3) {
                         shareSong(song);
                     }
                 })
                 .show();
+    }
+
+    private void requestSongDownload(@NonNull Song song) {
+        downloadManager.requestDownload(song, new SongDownloadManager.DownloadCallbacks() {
+            @Override
+            public void onDownloadStateChanged(@NonNull Song targetSong) {
+                songAdapter.notifyDataSetChanged();
+            }
+
+            @Override
+            public void onDownloadSucceeded(@NonNull Song targetSong, boolean alreadyDownloaded) {
+                songAdapter.notifyDataSetChanged();
+                if (!isAdded()) {
+                    return;
+                }
+                Toast.makeText(
+                                requireContext(),
+                                alreadyDownloaded ? R.string.download_already_exists_message : R.string.download_success_message,
+                                Toast.LENGTH_SHORT)
+                        .show();
+            }
+
+            @Override
+            public void onDownloadFailed(@NonNull Song targetSong, @NonNull String message) {
+                songAdapter.notifyDataSetChanged();
+                if (!isAdded()) {
+                    return;
+                }
+                Toast.makeText(
+                                requireContext(),
+                                message,
+                                Toast.LENGTH_SHORT)
+                        .show();
+            }
+        });
+    }
+
+    @Override
+    public void onPlaybackStateChanged(@NonNull PlayerState state) {
+        if (!isAdded()) {
+            return;
+        }
+        syncCurrentPlayingSong(state);
     }
 
     private void showAddToOtherPlaylistDialog(@NonNull Song song) {
@@ -292,6 +363,37 @@ public class PlaylistDetailFragment extends Fragment {
         startActivity(Intent.createChooser(shareIntent, getString(R.string.player_share_chooser)));
     }
 
+    private void syncCurrentPlayingSong(@NonNull PlayerState state) {
+        String nextSongKey = buildSongKey(state.getCurrentSong());
+        if (TextUtils.equals(currentPlayingSongKey, nextSongKey)) {
+            return;
+        }
+        String previousSongKey = currentPlayingSongKey;
+        currentPlayingSongKey = nextSongKey;
+        int previousIndex = songAdapter.findSongIndex(previousSongKey);
+        int nextIndex = songAdapter.findSongIndex(nextSongKey);
+        if (previousIndex >= 0) {
+            songAdapter.notifyItemChanged(previousIndex);
+        }
+        if (nextIndex >= 0 && nextIndex != previousIndex) {
+            songAdapter.notifyItemChanged(nextIndex);
+        }
+    }
+
+    @NonNull
+    private String buildSongKey(@Nullable Song song) {
+        if (song == null) {
+            return "";
+        }
+        if (!TextUtils.isEmpty(song.getSourceId())) {
+            return song.getSourceId();
+        }
+        if (!TextUtils.isEmpty(song.getAudioUrl())) {
+            return song.getAudioUrl();
+        }
+        return song.getTitle() + "|" + song.getArtist() + "|" + song.getAlbum();
+    }
+
     private class SongAdapter extends RecyclerView.Adapter<SongAdapter.ViewHolder> {
         private final List<Song> songs = new ArrayList<>();
 
@@ -299,6 +401,18 @@ public class PlaylistDetailFragment extends Fragment {
             songs.clear();
             songs.addAll(updatedSongs);
             notifyDataSetChanged();
+        }
+
+        int findSongIndex(@Nullable String songKey) {
+            if (TextUtils.isEmpty(songKey)) {
+                return -1;
+            }
+            for (int index = 0; index < songs.size(); index++) {
+                if (songKey.equals(buildSongKey(songs.get(index)))) {
+                    return index;
+                }
+            }
+            return -1;
         }
 
         @NonNull
@@ -320,6 +434,7 @@ public class PlaylistDetailFragment extends Fragment {
         }
 
         class ViewHolder extends RecyclerView.ViewHolder {
+            private final View itemRoot;
             private final MaterialCardView albumArtCard;
             private final TextView songTitle;
             private final TextView artistName;
@@ -328,6 +443,7 @@ public class PlaylistDetailFragment extends Fragment {
 
             ViewHolder(@NonNull View itemView) {
                 super(itemView);
+                itemRoot = itemView.findViewById(R.id.song_item_root);
                 albumArtCard = itemView.findViewById(R.id.album_art_card);
                 songTitle = itemView.findViewById(R.id.song_title);
                 artistName = itemView.findViewById(R.id.artist_name);
@@ -342,6 +458,7 @@ public class PlaylistDetailFragment extends Fragment {
                         : song.getArtist());
                 durationView.setText(song.getFormattedDuration());
                 albumArtCard.setCardBackgroundColor(ART_COLORS[position % ART_COLORS.length]);
+                updatePlayingHighlight(song);
                 itemView.setOnClickListener(v -> {
                     if (getActivity() instanceof MainActivity) {
                         ((MainActivity) getActivity()).onSongPlaybackRequested(song, songs, position);
@@ -349,6 +466,31 @@ public class PlaylistDetailFragment extends Fragment {
                 });
                 moreButton.setOnClickListener(v -> showSongOptions(song));
             }
+
+            private void updatePlayingHighlight(@NonNull Song song) {
+                boolean isCurrentSong = buildSongKey(song).equals(currentPlayingSongKey);
+                int primaryColor = ContextCompat.getColor(
+                        itemView.getContext(),
+                        isCurrentSong ? R.color.player_bar_background : R.color.gray_900);
+                int secondaryColor = ContextCompat.getColor(
+                        itemView.getContext(),
+                        isCurrentSong ? R.color.player_bar_background : R.color.gray_500);
+                itemRoot.setBackgroundResource(isCurrentSong
+                        ? R.drawable.bg_playlist_detail_song_active
+                        : android.R.color.transparent);
+                albumArtCard.setStrokeWidth(isCurrentSong ? dpToPx(1) : 0);
+                albumArtCard.setStrokeColor(isCurrentSong
+                        ? ColorStateList.valueOf(ContextCompat.getColor(itemView.getContext(), R.color.player_bar_background))
+                        : ColorStateList.valueOf(Color.TRANSPARENT));
+                songTitle.setTextColor(primaryColor);
+                artistName.setTextColor(secondaryColor);
+                durationView.setTextColor(secondaryColor);
+                moreButton.setImageTintList(ColorStateList.valueOf(secondaryColor));
+            }
         }
+    }
+
+    private int dpToPx(int valueDp) {
+        return Math.round(valueDp * requireContext().getResources().getDisplayMetrics().density);
     }
 }

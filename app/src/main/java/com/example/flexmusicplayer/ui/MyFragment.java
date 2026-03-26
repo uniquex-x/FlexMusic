@@ -38,6 +38,7 @@ import com.example.core_domain.auth.UserSignUpResult;
 import com.example.flexmusicplayer.AuthActivity;
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
+import com.example.flexmusicplayer.auth.AuthProcessSessionState;
 import com.example.flexmusicplayer.config.AppConfig;
 import com.example.flexmusicplayer.model.Playlist;
 import com.example.flexmusicplayer.storage.PlaylistStore;
@@ -554,12 +555,14 @@ public class MyFragment extends Fragment {
         accountExecutor.execute(() -> {
             try {
                 userAccountRepository.signOut();
+                AuthProcessSessionState.markUnauthenticated();
                 mainHandler.post(() -> {
                     dialog.dismiss();
                     showToast(R.string.account_sign_out_success);
                     openAuthScreen();
                 });
             } catch (IOException ioException) {
+                AuthProcessSessionState.markUnauthenticated();
                 android.util.Log.e(TAG, "performSignOut failed", ioException);
                 mainHandler.post(() -> {
                     dialog.dismiss();

@@ -2,12 +2,16 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/song_item_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
     android:gravity="center_vertical"
     android:minHeight="74dp"
     android:orientation="horizontal"
+    android:paddingStart="12dp"
     android:paddingTop="6dp"
+    android:paddingEnd="12dp"
     android:paddingBottom="6dp">
 
     <com.google.android.material.card.MaterialCardView

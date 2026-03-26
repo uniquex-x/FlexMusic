@@ -114,7 +114,16 @@ int64_t FfmpegStreamFileIo::read(uint8_t* buffer, int64_t bufferSize) {
     if (ioContext_ == nullptr || buffer == nullptr || bufferSize <= 0) {
         return -1;
     }
-    return avio_read(ioContext_, buffer, static_cast<int>(bufferSize));
+    const int result = avio_read(ioContext_, buffer, static_cast<int>(bufferSize));
+    if (result >= 0) {
+        return result;
+    }
+    if (result == AVERROR_EOF || avio_feof(ioContext_) != 0) {
+        return 0;
+    }
+    const auto log = flexmusic::utils::levelLog("FfmpegStreamIo");
+    log.w("read failed error=%d message=%s", result, avErrorToString(result).c_str());
+    return result;
 }
 
 int64_t FfmpegStreamFileIo::seek(int64_t offset, int whence) {

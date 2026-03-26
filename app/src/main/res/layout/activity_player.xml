@@ -206,6 +206,7 @@
                     android:padding="8dp">
 
                     <ImageView
+                        android:id="@+id/player_action_save_icon"
                         android:layout_width="22dp"
                         android:layout_height="22dp"
                         android:contentDescription="@string/player_action_save"
@@ -213,6 +214,7 @@
                         app:tint="#A7B3C7" />
 
                     <TextView
+                        android:id="@+id/player_action_save_text"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"

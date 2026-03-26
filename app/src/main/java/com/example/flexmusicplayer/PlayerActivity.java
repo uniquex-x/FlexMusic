@@ -31,6 +31,7 @@ import com.example.core_domain.lyrics.ILyricsRepository;
 import com.example.core_domain.lyrics.LyricsLineData;
 import com.example.core_domain.lyrics.LyricsQuery;
 import com.example.core_domain.lyrics.LyricsResult;
+import com.example.flexmusicplayer.download.SongDownloadManager;
 import com.example.flexmusicplayer.databinding.ActivityPlayerBinding;
 import com.example.flexmusicplayer.model.Playlist;
 import com.example.flexmusicplayer.model.PlayerState;
@@ -75,6 +76,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     private FavoriteSongsStore favoriteSongsStore;
     private FavoriteRadioStore favoriteRadioStore;
     private PlaylistStore playlistStore;
+    private SongDownloadManager downloadManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,6 +89,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         favoriteSongsStore = new FavoriteSongsStore(this);
         favoriteRadioStore = new FavoriteRadioStore(this);
         playlistStore = new PlaylistStore(this);
+        downloadManager = SongDownloadManager.getInstance(this);
         mainHandler = new Handler(Looper.getMainLooper());
         lyricsExecutorService = Executors.newSingleThreadExecutor();
         lyricsRepository = new OnlineLyricsRepository();
@@ -105,7 +108,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         binding.btnMoreLyrics.setOnClickListener(this::showPlayerOptionsMenu);
 
         binding.actionLike.setOnClickListener(v -> toggleFavorite());
-        binding.actionSave.setOnClickListener(v -> showToast(getString(R.string.player_save_placeholder)));
+        binding.actionSave.setOnClickListener(v -> requestCurrentSongDownload());
         binding.actionLyrics.setOnClickListener(v -> togglePlayerSurface());
         binding.albumDisc.setOnClickListener(v -> showLyricsScreen());
         binding.lyricsContent.setOnClickListener(v -> showNowPlayingScreen());
@@ -204,6 +207,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                     ? favoriteRadioStore.isFavorite(currentSong)
                     : favoriteSongsStore.isFavorite(currentSong));
         }
+        downloadManager.refreshDownloadState(currentSong);
 
         String artist = !TextUtils.isEmpty(currentSong.getArtist())
                 ? currentSong.getArtist()
@@ -247,6 +251,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         boolean isRadio = currentSong.isRadioStream();
         binding.actionSave.setVisibility(isRadio ? android.view.View.GONE : android.view.View.VISIBLE);
         binding.actionLyrics.setVisibility(isRadio ? android.view.View.GONE : android.view.View.VISIBLE);
+        updateSaveAction(currentSong);
         binding.playerSeekBar.setEnabled(!isRadio);
         binding.playerSeekBar.setAlpha(isRadio ? 0.4f : 1f);
         binding.playerElapsedTime.setVisibility(isRadio ? android.view.View.INVISIBLE : android.view.View.VISIBLE);
@@ -452,6 +457,46 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         currentFavoriteSongKey = buildSongKey(currentSong);
         onPlaybackStateChanged(playbackController.getPlayerState());
         showToast(getString(isFavorite ? R.string.added_to_favorites : R.string.removed_from_favorites));
+    }
+
+    private void requestCurrentSongDownload() {
+        Song currentSong = playbackController.getPlayerState().getCurrentSong();
+        if (currentSong == null) {
+            return;
+        }
+        downloadManager.requestDownload(currentSong, new SongDownloadManager.DownloadCallbacks() {
+            @Override
+            public void onDownloadStateChanged(@NonNull Song song) {
+                if (binding == null || !isCurrentPlayerSong(song)) {
+                    return;
+                }
+                updateSaveAction(song);
+            }
+
+            @Override
+            public void onDownloadSucceeded(@NonNull Song song, boolean alreadyDownloaded) {
+                if (binding != null && isCurrentPlayerSong(song)) {
+                    updateSaveAction(song);
+                }
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                showToast(getString(alreadyDownloaded
+                        ? R.string.download_already_exists_message
+                        : R.string.download_success_message));
+            }
+
+            @Override
+            public void onDownloadFailed(@NonNull Song song, @NonNull String message) {
+                if (binding != null && isCurrentPlayerSong(song)) {
+                    updateSaveAction(song);
+                }
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                showToast(message);
+            }
+        });
     }
 
     private void showPlaybackQueueDialog() {
@@ -799,6 +844,22 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
+    private void updateSaveAction(@NonNull Song song) {
+        boolean inFlight = downloadManager != null && downloadManager.isDownloadInFlight(song);
+        int tintColor = ContextCompat.getColor(
+                this,
+                song.isDownloaded() ? R.color.player_bar_background : R.color.gray_400);
+        if (inFlight) {
+            tintColor = ContextCompat.getColor(this, R.color.player_bar_background);
+        }
+        binding.playerActionSaveIcon.setImageResource(song.isDownloaded() ? R.drawable.ic_check_small : R.drawable.ic_download);
+        binding.playerActionSaveIcon.setImageTintList(android.content.res.ColorStateList.valueOf(tintColor));
+        binding.playerActionSaveText.setText(inFlight
+                ? R.string.downloading
+                : (song.isDownloaded() ? R.string.downloaded : R.string.player_action_save));
+        binding.playerActionSaveText.setTextColor(tintColor);
+    }
+
     private String formatDuration(int durationMs) {
         int seconds = Math.max(durationMs, 0) / 1000;
         int minutes = seconds / 60;
@@ -813,6 +874,11 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
             return song.getAudioUrl();
         }
         return song.getTitle() + "|" + song.getArtist() + "|" + song.getAlbum();
+    }
+
+    private boolean isCurrentPlayerSong(@NonNull Song song) {
+        Song currentSong = playbackController.getPlayerState().getCurrentSong();
+        return currentSong != null && buildSongKey(currentSong).equals(buildSongKey(song));
     }
 
     private static class LyricsAdapter extends RecyclerView.Adapter<LyricsAdapter.ViewHolder> {

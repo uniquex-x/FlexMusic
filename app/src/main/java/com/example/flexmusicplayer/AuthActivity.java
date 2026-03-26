@@ -19,6 +19,7 @@ import com.example.core_data.auth.SupabaseUserAccountRepository;
 import com.example.core_domain.auth.IUserAccountRepository;
 import com.example.core_domain.auth.UserRegistrationRequest;
 import com.example.core_domain.auth.UserSignUpResult;
+import com.example.flexmusicplayer.auth.AuthProcessSessionState;
 import com.example.flexmusicplayer.config.AppConfig;
 import com.example.flexmusicplayer.databinding.ActivityAuthBinding;
 import com.example.flexmusicplayer.settings.AppLocaleManager;
@@ -79,12 +80,15 @@ public class AuthActivity extends AppCompatActivity {
         accountExecutor.execute(() -> {
             try {
                 if (userAccountRepository.loadCurrentProfile() != null) {
+                    AuthProcessSessionState.markAuthenticated();
                     Log.d(TAG, "restoreSessionOrShowAuth restored active session");
                     runOnMainIfActive(this::openMain);
                     return;
                 }
+                AuthProcessSessionState.markUnauthenticated();
                 Log.d(TAG, "restoreSessionOrShowAuth no active session");
             } catch (IOException ioException) {
+                AuthProcessSessionState.markUnauthenticated();
                 Log.w(TAG, "restoreSessionOrShowAuth failed, showing auth UI", ioException);
             }
             runOnMainIfActive(() -> setLoading(false));
@@ -110,9 +114,11 @@ public class AuthActivity extends AppCompatActivity {
                     return;
                 }
                 userAccountRepository.signIn(resolvedEmail, password);
+                AuthProcessSessionState.markAuthenticated();
                 Log.d(TAG, "attemptSignIn success identifier=" + identifier);
                 runOnMainIfActive(this::openMain);
             } catch (IOException ioException) {
+                AuthProcessSessionState.markUnauthenticated();
                 Log.w(TAG, "attemptSignIn failed identifier=" + identifier, ioException);
                 runOnMainIfActive(() -> {
                     setLoading(false);
@@ -139,6 +145,11 @@ public class AuthActivity extends AppCompatActivity {
             try {
                 UserSignUpResult result = userAccountRepository.signUp(
                         new UserRegistrationRequest(email, password, userId));
+                if (result.hasActiveSession()) {
+                    AuthProcessSessionState.markAuthenticated();
+                } else {
+                    AuthProcessSessionState.markUnauthenticated();
+                }
                 Log.d(TAG, "attemptRegister success email=" + email + " userId=" + userId);
                 runOnMainIfActive(() -> {
                     setLoading(false);
@@ -152,6 +163,7 @@ public class AuthActivity extends AppCompatActivity {
                     }
                 });
             } catch (IOException ioException) {
+                AuthProcessSessionState.markUnauthenticated();
                 Log.w(TAG, "attemptRegister failed email=" + email + " userId=" + userId, ioException);
                 runOnMainIfActive(() -> {
                     setLoading(false);

@@ -211,6 +211,13 @@
     <string name="download">下载</string>
     <string name="downloaded">已下载</string>
     <string name="downloading">下载中…</string>
+    <string name="download_missing_source">当前歌曲还没有可下载的音源。</string>
+    <string name="download_live_stream_not_supported">暂不支持下载直播电台。</string>
+    <string name="download_in_progress_message">这首歌曲正在下载中。</string>
+    <string name="download_success_message">已保存为离线可播放文件。</string>
+    <string name="download_already_exists_message">这首歌曲已经下载过了。</string>
+    <string name="download_failed_generic">下载失败。</string>
+    <string name="download_failed_message">下载失败：%1$s</string>
     <string name="delete">删除</string>
     <string name="edit">编辑</string>
     <string name="save">保存</string>

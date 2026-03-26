@@ -36,6 +36,7 @@ import com.example.core_domain.auth.IUserAccountRepository;
 import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.search.SearchResultPage;
 import com.example.core_domain.search.SearchTrack;
+import com.example.flexmusicplayer.auth.AuthProcessSessionState;
 import com.example.flexmusicplayer.config.AppConfig;
 import com.example.flexmusicplayer.settings.AppLocaleManager;
 
@@ -70,12 +71,17 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         super.onCreate(savedInstanceState);
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-        binding.getRoot().setVisibility(View.INVISIBLE);
         if (!AppConfig.Features.isAuthEnabled()) {
             Log.d(TAG, "onCreate auth disabled, skip startup authentication");
             initializeUi(savedInstanceState);
             return;
         }
+        if (AuthProcessSessionState.isAuthenticatedInProcess()) {
+            Log.d(TAG, "onCreate auth fast path, skip session restore");
+            initializeUi(savedInstanceState);
+            return;
+        }
+        binding.getRoot().setVisibility(View.INVISIBLE);
         userAccountRepository = new SupabaseUserAccountRepository(this);
         ensureAuthenticatedThenInit(savedInstanceState);
     }
@@ -84,13 +90,16 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
         authExecutor.execute(() -> {
             try {
                 if (userAccountRepository.loadCurrentProfile() == null) {
+                    AuthProcessSessionState.markUnauthenticated();
                     Log.d(TAG, "ensureAuthenticatedThenInit no active session, redirecting");
                     runOnMainIfActive(this::openAuthGate);
                     return;
                 }
+                AuthProcessSessionState.markAuthenticated();
                 Log.d(TAG, "ensureAuthenticatedThenInit session restored");
                 runOnMainIfActive(() -> initializeUi(savedInstanceState));
             } catch (IOException ioException) {
+                AuthProcessSessionState.markUnauthenticated();
                 Log.w(TAG, "ensureAuthenticatedThenInit failed, redirecting", ioException);
                 runOnMainIfActive(this::openAuthGate);
             }
@@ -124,6 +133,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
             initializeUi(null);
             return;
         }
+        AuthProcessSessionState.markUnauthenticated();
         if (isFinishing() || isDestroyed()) {
             return;
         }
@@ -135,10 +145,11 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     private void applySavedTheme() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, 0);
         String theme = prefs.getString("theme", "light");
-        if ("dark".equals(theme)) {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-        } else {
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        int targetNightMode = "dark".equals(theme)
+                ? AppCompatDelegate.MODE_NIGHT_YES
+                : AppCompatDelegate.MODE_NIGHT_NO;
+        if (AppCompatDelegate.getDefaultNightMode() != targetNightMode) {
+            AppCompatDelegate.setDefaultNightMode(targetNightMode);
         }
     }
 
