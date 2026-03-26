@@ -37,6 +37,7 @@ import com.example.core_domain.player.PlaybackRequest;
 import com.example.core_domain.search.SearchResultPage;
 import com.example.core_domain.search.SearchTrack;
 import com.example.flexmusicplayer.config.AppConfig;
+import com.example.flexmusicplayer.settings.AppLocaleManager;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
@@ -63,6 +64,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppLocaleManager.applyStoredLocale(this);
         applySavedTheme();
 
         super.onCreate(savedInstanceState);

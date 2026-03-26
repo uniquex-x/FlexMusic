@@ -21,6 +21,7 @@ import com.example.core_domain.auth.UserRegistrationRequest;
 import com.example.core_domain.auth.UserSignUpResult;
 import com.example.flexmusicplayer.config.AppConfig;
 import com.example.flexmusicplayer.databinding.ActivityAuthBinding;
+import com.example.flexmusicplayer.settings.AppLocaleManager;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
@@ -46,6 +47,7 @@ public class AuthActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
+        AppLocaleManager.applyStoredLocale(this);
         super.onCreate(savedInstanceState);
         if (!AppConfig.Features.isAuthEnabled()) {
             Log.d(TAG, "onCreate auth disabled, returning to main");

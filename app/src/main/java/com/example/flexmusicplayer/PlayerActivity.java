@@ -37,6 +37,7 @@ import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.player.LyricsLine;
 import com.example.flexmusicplayer.player.PlaybackController;
+import com.example.flexmusicplayer.settings.AppLocaleManager;
 import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 import com.example.flexmusicplayer.storage.PlaylistStore;
@@ -77,6 +78,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppLocaleManager.applyStoredLocale(this);
         super.onCreate(savedInstanceState);
         binding = ActivityPlayerBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());

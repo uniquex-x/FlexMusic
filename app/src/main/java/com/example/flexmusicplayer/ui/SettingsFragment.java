@@ -16,10 +16,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
-import androidx.core.os.LocaleListCompat;
 import androidx.fragment.app.Fragment;
 
 import com.example.flexmusicplayer.R;
+import com.example.flexmusicplayer.settings.AppLocaleManager;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.snackbar.Snackbar;
@@ -32,11 +32,8 @@ public class SettingsFragment extends Fragment {
 
     private static final String PREFS_NAME = "FlexMusicPrefs";
     private static final String KEY_THEME = "theme";
-    private static final String KEY_LANGUAGE = "language";
     private static final String THEME_LIGHT = "light";
     private static final String THEME_DARK = "dark";
-    private static final String LANG_EN = "en";
-    private static final String LANG_ZH = "zh";
     private static final String SLEEP_AUDIO_CACHE_DIRECTORY = "sleep_audio_cache";
 
     private SwitchCompat darkModeSwitch;
@@ -76,8 +73,8 @@ public class SettingsFragment extends Fragment {
     private void loadSettings() {
         boolean isDark = THEME_DARK.equals(prefs.getString(KEY_THEME, THEME_LIGHT));
         darkModeSwitch.setChecked(isDark);
-        languageValue.setText(LANG_ZH.equals(prefs.getString(KEY_LANGUAGE, LANG_EN))
-                ? R.string.settings_language_chinese : R.string.settings_language_english);
+        languageValue.setText(AppLocaleManager.getLanguageSummaryResId(
+                AppLocaleManager.getLanguageSetting(appContext)));
         cacheSizeValue.setText(R.string.loading);
         refreshCacheSizeAsync();
         streamingQualityGroup.check(R.id.quality_high_btn);
@@ -111,20 +108,45 @@ public class SettingsFragment extends Fragment {
     }
 
     private void showLanguageDialog() {
-        String[] languages = {getString(R.string.settings_language_english), getString(R.string.settings_language_chinese)};
-        int checked = LANG_ZH.equals(prefs.getString(KEY_LANGUAGE, LANG_EN)) ? 1 : 0;
+        String[] languages = {
+                getString(R.string.settings_language_system),
+                getString(R.string.settings_language_english),
+                getString(R.string.settings_language_chinese)
+        };
+        String currentLanguage = AppLocaleManager.getLanguageSetting(appContext);
+        int checked = resolveLanguageCheckedIndex(currentLanguage);
         new AlertDialog.Builder(requireContext())
                 .setTitle(R.string.settings_language)
                 .setSingleChoiceItems(languages, checked, (dialog, which) -> {
-                    String lang = which == 1 ? LANG_ZH : LANG_EN;
-                    prefs.edit().putString(KEY_LANGUAGE, lang).apply();
-                    AppCompatDelegate.setApplicationLocales(LANG_ZH.equals(lang)
-                            ? LocaleListCompat.forLanguageTags("zh-CN")
-                            : LocaleListCompat.forLanguageTags("en"));
+                    String selectedLanguage = resolveLanguageSetting(which);
+                    AppLocaleManager.updateLanguageSetting(appContext, selectedLanguage);
                     languageValue.setText(languages[which]);
                     dialog.dismiss();
                 })
                 .show();
+    }
+
+    private int resolveLanguageCheckedIndex(@NonNull String languageSetting) {
+        switch (languageSetting) {
+            case AppLocaleManager.LANGUAGE_ENGLISH:
+                return 1;
+            case AppLocaleManager.LANGUAGE_CHINESE:
+                return 2;
+            default:
+                return 0;
+        }
+    }
+
+    @NonNull
+    private String resolveLanguageSetting(int selectedIndex) {
+        switch (selectedIndex) {
+            case 1:
+                return AppLocaleManager.LANGUAGE_ENGLISH;
+            case 2:
+                return AppLocaleManager.LANGUAGE_CHINESE;
+            default:
+                return AppLocaleManager.LANGUAGE_SYSTEM;
+        }
     }
 
     private void showClearCacheDialog() {
