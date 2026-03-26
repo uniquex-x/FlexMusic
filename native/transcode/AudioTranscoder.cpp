@@ -674,7 +674,10 @@ bool AudioTranscoder::transcode(const TranscodeRequest& request, std::string* er
     bool wroteAnyFrame = false;
     while (true) {
         flexmusic::media::EncodedPacket encodedPacket;
-        if (!demuxer.readPacket(&encodedPacket, &stageError)) {
+        const flexmusic::media::demux::ReadPacketStatus readStatus =
+                demuxer.readPacket(&encodedPacket, &stageError);
+        if (readStatus == flexmusic::media::demux::ReadPacketStatus::FATAL_ERROR
+                || readStatus == flexmusic::media::demux::ReadPacketStatus::RETRYABLE_ERROR) {
             if (errorMessage != nullptr) {
                 *errorMessage = stageError.empty() ? "Read packet failed" : stageError;
             }
@@ -689,7 +692,9 @@ bool AudioTranscoder::transcode(const TranscodeRequest& request, std::string* er
         if (encodedPacket.endOfStream) {
             decodeOk = decoder.flush(&decodedFrames, &stageError);
         } else {
-            decodeOk = decoder.decodePacket(encodedPacket, &decodedFrames, &stageError);
+            const flexmusic::media::codec::DecodePacketStatus decodeStatus =
+                    decoder.decodePacket(encodedPacket, &decodedFrames, &stageError);
+            decodeOk = decodeStatus == flexmusic::media::codec::DecodePacketStatus::OK;
         }
         releasePacket(&encodedPacket.packet);
         if (!decodeOk) {

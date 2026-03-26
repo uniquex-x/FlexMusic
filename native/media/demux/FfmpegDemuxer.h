@@ -17,6 +17,13 @@ class AvioDataSource;
 }
 namespace demux {
 
+enum class ReadPacketStatus {
+    OK,
+    END_OF_STREAM,
+    RETRYABLE_ERROR,
+    FATAL_ERROR
+};
+
 struct AudioStreamInfo {
     AVCodecParameters* codecParameters = nullptr;
     int streamIndex = -1;
@@ -32,7 +39,7 @@ public:
     ~FfmpegDemuxer();
 
     bool open(source::AvioDataSource* dataSource, std::string* errorMessage);
-    bool readPacket(flexmusic::media::EncodedPacket* outputPacket, std::string* errorMessage);
+    ReadPacketStatus readPacket(flexmusic::media::EncodedPacket* outputPacket, std::string* errorMessage);
     bool seekTo(int64_t positionMs, std::string* errorMessage);
     void close();
 

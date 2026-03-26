@@ -51,6 +51,7 @@ private:
         SEEK,
         SET_VOLUME,
         SET_PLAYBACK_SPEED,
+        RECOVER,
         RELEASE
     };
 
@@ -61,6 +62,8 @@ private:
         int64_t positionMs = 0;
         float volume = 1.0f;
         float playbackSpeed = 1.0f;
+        bool autoStart = true;
+        std::string reason;
     };
 
     void enqueueCommand(Command command);
@@ -74,6 +77,7 @@ private:
     void handleSeekCommand(int64_t positionMs);
     void handleSetVolumeCommand(float volume);
     void handleSetPlaybackSpeedCommand(float playbackSpeed);
+    void handleRecoverCommand(int64_t positionMs, bool autoStart, const std::string& reason);
     void startPipelineLocked(int64_t startPositionMs, bool autoStart);
     void beginStopLocked();
     void detachThreadsLocked(std::unique_ptr<std::thread>* prepareThread,
@@ -93,6 +97,7 @@ private:
                                       std::string* errorMessage);
     bool flushTempoProcessor(std::vector<flexmusic::media::PcmFrame>* outputFrames,
                              std::string* errorMessage);
+    void requestStreamRecovery(int64_t positionMs, bool autoStart, const std::string& reason);
 
     int64_t elapsedSincePipelineStartMs() const;
     void setStateLocked(PlayerState state);
@@ -118,7 +123,10 @@ private:
     bool firstDecodedFrameLogged_ = false;
     bool firstRendererSubmitLogged_ = false;
     bool pendingPositionRebase_ = false;
+    bool recoveryPending_ = false;
     int queueSerial_ = 1;
+    int consecutiveReadFailureCount_ = 0;
+    int consecutiveInvalidPacketCount_ = 0;
     int activePositionSerial_ = 0;
     int pendingPositionRebaseSerial_ = 0;
     int64_t pendingSeekPositionMs_ = 0;

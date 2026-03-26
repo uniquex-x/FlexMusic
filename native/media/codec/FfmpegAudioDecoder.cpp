@@ -36,6 +36,10 @@ int64_t packetToPositionMs(const AVFrame* frame, const AVRational* timeBase) {
     return av_rescale_q(frame->best_effort_timestamp, *timeBase, AVRational{1, 1000});
 }
 
+bool isInvalidPacketError(int errorCode) {
+    return errorCode == AVERROR_INVALIDDATA;
+}
+
 } // namespace
 
 FfmpegAudioDecoder::FfmpegAudioDecoder() = default;
@@ -147,14 +151,14 @@ bool FfmpegAudioDecoder::open(const demux::AudioStreamInfo& streamInfo, std::str
     return true;
 }
 
-bool FfmpegAudioDecoder::decodePacket(const EncodedPacket& encodedPacket,
-                                      std::vector<PcmFrame>* outputFrames,
-                                      std::string* errorMessage) {
+DecodePacketStatus FfmpegAudioDecoder::decodePacket(const EncodedPacket& encodedPacket,
+                                                    std::vector<PcmFrame>* outputFrames,
+                                                    std::string* errorMessage) {
     if (codecContext_ == nullptr || outputFrames == nullptr) {
         if (errorMessage != nullptr) {
             *errorMessage = "Decoder is not ready";
         }
-        return false;
+        return DecodePacketStatus::FATAL_ERROR;
     }
 
     int result = avcodec_send_packet(codecContext_, encodedPacket.packet);
@@ -162,9 +166,16 @@ bool FfmpegAudioDecoder::decodePacket(const EncodedPacket& encodedPacket,
         if (errorMessage != nullptr) {
             *errorMessage = avErrorToString(result);
         }
-        flexmusic::utils::levelLog(kDecoderTag).e("send packet failed error=%s",
-                                                 errorMessage != nullptr ? errorMessage->c_str() : "");
-        return false;
+        if (isInvalidPacketError(result)) {
+            flexmusic::utils::levelLog(kDecoderTag).w("invalid packet dropped errorCode=%d error=%s",
+                                                      result,
+                                                      errorMessage != nullptr ? errorMessage->c_str() : "");
+            return DecodePacketStatus::INVALID_PACKET;
+        }
+        flexmusic::utils::levelLog(kDecoderTag).e("send packet failed errorCode=%d error=%s",
+                                                  result,
+                                                  errorMessage != nullptr ? errorMessage->c_str() : "");
+        return DecodePacketStatus::FATAL_ERROR;
     }
     return drainFrames(outputFrames, errorMessage);
 }
@@ -185,7 +196,7 @@ bool FfmpegAudioDecoder::flush(std::vector<PcmFrame>* outputFrames, std::string*
                                                  errorMessage != nullptr ? errorMessage->c_str() : "");
         return false;
     }
-    return drainFrames(outputFrames, errorMessage);
+    return drainFrames(outputFrames, errorMessage) == DecodePacketStatus::OK;
 }
 
 bool FfmpegAudioDecoder::reset(std::string* errorMessage) {
@@ -217,22 +228,29 @@ bool FfmpegAudioDecoder::reset(std::string* errorMessage) {
     return true;
 }
 
-bool FfmpegAudioDecoder::drainFrames(std::vector<PcmFrame>* outputFrames, std::string* errorMessage) {
+DecodePacketStatus FfmpegAudioDecoder::drainFrames(std::vector<PcmFrame>* outputFrames, std::string* errorMessage) {
     while (true) {
         const int result = avcodec_receive_frame(codecContext_, frame_);
         if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) {
             if (errorMessage != nullptr) {
                 errorMessage->clear();
             }
-            return true;
+            return DecodePacketStatus::OK;
         }
         if (result < 0) {
             if (errorMessage != nullptr) {
                 *errorMessage = avErrorToString(result);
             }
-            flexmusic::utils::levelLog(kDecoderTag).e("receive frame failed error=%s",
-                                                     errorMessage != nullptr ? errorMessage->c_str() : "");
-            return false;
+            if (isInvalidPacketError(result)) {
+                flexmusic::utils::levelLog(kDecoderTag).w("receive invalid frame errorCode=%d error=%s",
+                                                          result,
+                                                          errorMessage != nullptr ? errorMessage->c_str() : "");
+                return DecodePacketStatus::INVALID_PACKET;
+            }
+            flexmusic::utils::levelLog(kDecoderTag).e("receive frame failed errorCode=%d error=%s",
+                                                      result,
+                                                      errorMessage != nullptr ? errorMessage->c_str() : "");
+            return DecodePacketStatus::FATAL_ERROR;
         }
 
         const int outputSamples = av_rescale_rnd(
@@ -262,7 +280,7 @@ bool FfmpegAudioDecoder::drainFrames(std::vector<PcmFrame>* outputFrames, std::s
             }
             flexmusic::utils::levelLog(kDecoderTag).e("convert samples failed error=%s",
                                                      errorMessage != nullptr ? errorMessage->c_str() : "");
-            return false;
+            return DecodePacketStatus::FATAL_ERROR;
         }
 
         pcmFrame.data.resize(static_cast<std::size_t>(convertedSamples) * outputChannelCount_ * sizeof(int16_t));

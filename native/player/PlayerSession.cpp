@@ -20,6 +20,8 @@ namespace {
 
 constexpr std::size_t kPacketQueueSize = 96;
 constexpr std::size_t kPcmQueueSize = 48;
+constexpr int kReadFailureRetryLimit = 3;
+constexpr int kInvalidPacketRecoveryThreshold = 3;
 constexpr char kPlayerSessionTag[] = "PlayerSession";
 
 void releasePacket(AVPacket* packet) {
@@ -144,6 +146,9 @@ void PlayerSession::enqueueCommand(Command command) {
             case CommandType::SET_PLAYBACK_SPEED:
                 removePendingCommands(CommandType::SET_PLAYBACK_SPEED);
                 break;
+            case CommandType::RECOVER:
+                removePendingCommands(CommandType::RECOVER);
+                break;
             case CommandType::STOP:
                 commandQueue_.clear();
                 break;
@@ -195,6 +200,9 @@ void PlayerSession::controlLoop() {
                 break;
             case CommandType::SET_PLAYBACK_SPEED:
                 handleSetPlaybackSpeedCommand(command.playbackSpeed);
+                break;
+            case CommandType::RECOVER:
+                handleRecoverCommand(command.positionMs, command.autoStart, command.reason);
                 break;
             case CommandType::RELEASE:
                 handleStopCommand(true);
@@ -414,6 +422,64 @@ void PlayerSession::handleSetPlaybackSpeedCommand(float playbackSpeed) {
             safePlaybackSpeed);
 }
 
+void PlayerSession::handleRecoverCommand(int64_t positionMs, bool autoStart, const std::string& reason) {
+    std::unique_ptr<std::thread> prepareThread;
+    std::unique_ptr<std::thread> demuxThread;
+    std::unique_ptr<std::thread> decodeThread;
+    std::unique_ptr<std::thread> renderThread;
+    std::string sourceId;
+    std::string backendName;
+    std::string resolvedUrl;
+    bool liveStream = false;
+    bool seekable = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        recoveryPending_ = false;
+        if (!hasDataSource_) {
+            return;
+        }
+        sourceId = dataSourceSpec_.sourceId;
+        backendName = snapshot_.backendName;
+        resolvedUrl = dataSourceSpec_.resolvedUrl;
+        liveStream = dataSourceSpec_.liveStream;
+        seekable = snapshot_.seekable;
+        flexmusic::utils::levelLog(kPlayerSessionTag).w(
+                "recover start sourceId=%s url=%s backend=%s live=%d seekable=%d positionMs=%lld autoStart=%d reason=%s",
+                sourceId.c_str(),
+                resolvedUrl.c_str(),
+                backendName.c_str(),
+                liveStream ? 1 : 0,
+                seekable ? 1 : 0,
+                static_cast<long long>(positionMs),
+                autoStart ? 1 : 0,
+                reason.c_str());
+        beginStopLocked();
+        detachThreadsLocked(&prepareThread, &demuxThread, &decodeThread, &renderThread);
+    }
+    joinThread(&prepareThread);
+    joinThread(&demuxThread);
+    joinThread(&decodeThread);
+    joinThread(&renderThread);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!hasDataSource_) {
+            return;
+        }
+        finalizeStopLocked(false);
+        startPipelineLocked(positionMs, autoStart);
+    }
+    flexmusic::utils::levelLog(kPlayerSessionTag).w(
+            "recover scheduled sourceId=%s url=%s backend=%s live=%d seekable=%d positionMs=%lld autoStart=%d reason=%s",
+            sourceId.c_str(),
+            resolvedUrl.c_str(),
+            backendName.c_str(),
+            liveStream ? 1 : 0,
+            seekable ? 1 : 0,
+            static_cast<long long>(positionMs),
+            autoStart ? 1 : 0,
+            reason.c_str());
+}
+
 void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart) {
     packetQueue_ = std::make_unique<flexmusic::utils::BlockingQueue<flexmusic::media::EncodedPacket>>(kPacketQueueSize);
     pcmQueue_ = std::make_unique<flexmusic::utils::BlockingQueue<flexmusic::media::PcmFrame>>(kPcmQueueSize);
@@ -423,6 +489,9 @@ void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart)
     firstPacketLogged_ = false;
     firstDecodedFrameLogged_ = false;
     firstRendererSubmitLogged_ = false;
+    consecutiveReadFailureCount_ = 0;
+    consecutiveInvalidPacketCount_ = 0;
+    recoveryPending_ = false;
     autoStartOnReady_ = autoStart;
     queueSerial_++;
     pendingPositionRebase_ = false;
@@ -446,6 +515,49 @@ void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart)
             autoStart ? 1 : 0);
 
     prepareThread_ = std::make_unique<std::thread>(&PlayerSession::prepareLoop, this, startPositionMs);
+}
+
+void PlayerSession::requestStreamRecovery(int64_t positionMs, bool autoStart, const std::string& reason) {
+    bool shouldEnqueue = false;
+    std::string sourceId;
+    std::string backendName;
+    std::string resolvedUrl;
+    bool liveStream = false;
+    bool seekable = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stopRequested_ || !hasDataSource_ || recoveryPending_) {
+            return;
+        }
+        recoveryPending_ = true;
+        consecutiveReadFailureCount_ = 0;
+        consecutiveInvalidPacketCount_ = 0;
+        sourceId = dataSourceSpec_.sourceId;
+        backendName = snapshot_.backendName;
+        resolvedUrl = dataSourceSpec_.resolvedUrl;
+        liveStream = dataSourceSpec_.liveStream;
+        seekable = snapshot_.seekable;
+        shouldEnqueue = true;
+    }
+    if (!shouldEnqueue) {
+        return;
+    }
+    flexmusic::utils::levelLog(kPlayerSessionTag).w(
+            "recover requested sourceId=%s url=%s backend=%s live=%d seekable=%d positionMs=%lld autoStart=%d reason=%s",
+            sourceId.c_str(),
+            resolvedUrl.c_str(),
+            backendName.c_str(),
+            liveStream ? 1 : 0,
+            seekable ? 1 : 0,
+            static_cast<long long>(positionMs),
+            autoStart ? 1 : 0,
+            reason.c_str());
+    Command command;
+    command.type = CommandType::RECOVER;
+    command.positionMs = positionMs;
+    command.autoStart = autoStart;
+    command.reason = reason;
+    enqueueCommand(std::move(command));
 }
 
 void PlayerSession::beginStopLocked() {
@@ -489,6 +601,9 @@ void PlayerSession::finalizeStopLocked(bool clearDataSource) {
     pcmQueue_.reset();
     firstFrameRendered_ = false;
     pendingPositionRebase_ = false;
+    recoveryPending_ = false;
+    consecutiveReadFailureCount_ = 0;
+    consecutiveInvalidPacketCount_ = 0;
     activePositionSerial_ = 0;
     activePositionOffsetMs_ = 0;
     pendingPositionRebaseSerial_ = 0;
@@ -630,10 +745,13 @@ void PlayerSession::prepareLoop(int64_t startPositionMs) {
         setErrorLocked(errorMessage.empty() ? "Create FileIo failed" : errorMessage);
         return;
     }
-    log.i("prepareLoop sourceId=%s url=%s local=%d fd=%d backend=%s",
+    log.i("prepareLoop sourceId=%s url=%s contentType=%s local=%d live=%d seekable=%d fd=%d backend=%s",
           dataSourceSpec.sourceId.c_str(),
           dataSourceSpec.resolvedUrl.c_str(),
+          dataSourceSpec.contentType.c_str(),
           dataSourceSpec.localSource ? 1 : 0,
+          dataSourceSpec.liveStream ? 1 : 0,
+          dataSourceSpec.seekable ? 1 : 0,
           dataSourceSpec.detachedFd,
           fileIo->implementationName());
 
@@ -645,8 +763,10 @@ void PlayerSession::prepareLoop(int64_t startPositionMs) {
         setErrorLocked(errorMessage.empty() ? "Open data source failed" : errorMessage);
         return;
     }
-    log.i("prepare stage=avio-open sourceId=%s elapsedMs=%lld",
+    log.i("prepare stage=avio-open sourceId=%s live=%d seekable=%d elapsedMs=%lld",
           dataSourceSpec.sourceId.c_str(),
+          dataSourceSpec.liveStream ? 1 : 0,
+          dataSourceSpec.seekable ? 1 : 0,
           static_cast<long long>(elapsedSincePipelineStartMs()));
     if (!demuxer_.open(&avioDataSource_, &errorMessage)) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -656,8 +776,9 @@ void PlayerSession::prepareLoop(int64_t startPositionMs) {
         setErrorLocked(errorMessage.empty() ? "Open demuxer failed" : errorMessage);
         return;
     }
-    log.i("prepare stage=demux-open sourceId=%s elapsedMs=%lld durationMs=%lld seekable=%d",
+    log.i("prepare stage=demux-open sourceId=%s live=%d elapsedMs=%lld durationMs=%lld seekable=%d",
           dataSourceSpec.sourceId.c_str(),
+          dataSourceSpec.liveStream ? 1 : 0,
           static_cast<long long>(elapsedSincePipelineStartMs()),
           static_cast<long long>(demuxer_.durationMs()),
           demuxer_.isSeekable() ? 1 : 0);
@@ -717,7 +838,44 @@ void PlayerSession::demuxLoop() {
 
         flexmusic::media::EncodedPacket encodedPacket;
         std::string errorMessage;
-        if (!demuxer_.readPacket(&encodedPacket, &errorMessage)) {
+        const flexmusic::media::demux::ReadPacketStatus readStatus =
+                demuxer_.readPacket(&encodedPacket, &errorMessage);
+        if (readStatus == flexmusic::media::demux::ReadPacketStatus::RETRYABLE_ERROR) {
+            int failureCount = 0;
+            int64_t recoverPositionMs = 0;
+            bool autoStart = false;
+            std::string backendName;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    return;
+                }
+                consecutiveReadFailureCount_++;
+                failureCount = consecutiveReadFailureCount_;
+                recoverPositionMs = snapshot_.seekable ? snapshot_.currentPositionMs : 0;
+                autoStart = autoStartOnReady_;
+                backendName = snapshot_.backendName;
+            }
+            log.w("retryable demux read failure sourceId=%s url=%s backend=%s live=%d seekable=%d failure=%d/%d recoverPositionMs=%lld error=%s",
+                  dataSourceSpec_.sourceId.c_str(),
+                  dataSourceSpec_.resolvedUrl.c_str(),
+                  backendName.c_str(),
+                  dataSourceSpec_.liveStream ? 1 : 0,
+                  dataSourceSpec_.seekable ? 1 : 0,
+                  failureCount,
+                  kReadFailureRetryLimit,
+                  static_cast<long long>(recoverPositionMs),
+                  errorMessage.c_str());
+            if (failureCount < kReadFailureRetryLimit) {
+                continue;
+            }
+            requestStreamRecovery(
+                    recoverPositionMs,
+                    autoStart,
+                    "retryable demux read failure threshold reached");
+            return;
+        }
+        if (readStatus == flexmusic::media::demux::ReadPacketStatus::FATAL_ERROR) {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopRequested_) {
                 return;
@@ -727,6 +885,10 @@ void PlayerSession::demuxLoop() {
                 packetQueue_->close();
             }
             return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            consecutiveReadFailureCount_ = 0;
         }
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -753,7 +915,7 @@ void PlayerSession::demuxLoop() {
                   packetForLog->size,
                   static_cast<long long>(packetForLog->pts));
         }
-        if (encodedPacket.endOfStream) {
+        if (readStatus == flexmusic::media::demux::ReadPacketStatus::END_OF_STREAM) {
             return;
         }
     }
@@ -847,12 +1009,76 @@ void PlayerSession::decodeLoop() {
             return;
         }
 
-        bool decodeOk = false;
+        flexmusic::media::codec::DecodePacketStatus decodeStatus =
+                flexmusic::media::codec::DecodePacketStatus::FATAL_ERROR;
         {
             std::lock_guard<std::mutex> decoderLock(decoderMutex_);
-            decodeOk = decoder_.decodePacket(encodedPacket, &decodedFrames, &errorMessage);
+            decodeStatus = decoder_.decodePacket(encodedPacket, &decodedFrames, &errorMessage);
         }
-        if (!decodeOk) {
+        if (decodeStatus == flexmusic::media::codec::DecodePacketStatus::INVALID_PACKET) {
+            if (!dataSourceSpec_.liveStream) {
+                releasePacket(encodedPacket.packet);
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    return;
+                }
+                setErrorLocked(errorMessage.empty() ? "Decode packet failed" : errorMessage);
+                if (pcmQueue_ != nullptr) {
+                    pcmQueue_->close();
+                }
+                return;
+            }
+            int invalidPacketCount = 0;
+            int64_t recoverPositionMs = 0;
+            bool autoStart = false;
+            std::string backendName;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    releasePacket(encodedPacket.packet);
+                    return;
+                }
+                backendName = snapshot_.backendName;
+            }
+            log.w("invalid packet dropped sourceId=%s url=%s backend=%s live=%d size=%d pts=%lld dts=%lld serial=%d error=%s",
+                  dataSourceSpec_.sourceId.c_str(),
+                  dataSourceSpec_.resolvedUrl.c_str(),
+                  backendName.c_str(),
+                  dataSourceSpec_.liveStream ? 1 : 0,
+                  encodedPacket.packet != nullptr ? encodedPacket.packet->size : 0,
+                  static_cast<long long>(encodedPacket.packet != nullptr ? encodedPacket.packet->pts : AV_NOPTS_VALUE),
+                  static_cast<long long>(encodedPacket.packet != nullptr ? encodedPacket.packet->dts : AV_NOPTS_VALUE),
+                  encodedPacket.serial,
+                  errorMessage.c_str());
+            releasePacket(encodedPacket.packet);
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (stopRequested_) {
+                    return;
+                }
+                consecutiveInvalidPacketCount_++;
+                invalidPacketCount = consecutiveInvalidPacketCount_;
+                recoverPositionMs = snapshot_.seekable ? snapshot_.currentPositionMs : 0;
+                autoStart = autoStartOnReady_;
+                backendName = snapshot_.backendName;
+            }
+            log.w("invalid packet streak sourceId=%s backend=%s live=%d failure=%d/%d recoverPositionMs=%lld",
+                  dataSourceSpec_.sourceId.c_str(),
+                  backendName.c_str(),
+                  dataSourceSpec_.liveStream ? 1 : 0,
+                  invalidPacketCount,
+                  kInvalidPacketRecoveryThreshold,
+                  static_cast<long long>(recoverPositionMs));
+            if (invalidPacketCount >= kInvalidPacketRecoveryThreshold) {
+                requestStreamRecovery(
+                        recoverPositionMs,
+                        autoStart,
+                        "invalid packet threshold reached");
+                return;
+            }
+            continue;
+        }
+        if (decodeStatus != flexmusic::media::codec::DecodePacketStatus::OK) {
             releasePacket(encodedPacket.packet);
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopRequested_) {
@@ -870,6 +1096,7 @@ void PlayerSession::decodeLoop() {
             if (stopRequested_) {
                 return;
             }
+            consecutiveInvalidPacketCount_ = 0;
             if (encodedPacket.serial != queueSerial_) {
                 continue;
             }

@@ -17,21 +17,27 @@ namespace flexmusic {
 namespace media {
 namespace codec {
 
+enum class DecodePacketStatus {
+    OK,
+    INVALID_PACKET,
+    FATAL_ERROR
+};
+
 class FfmpegAudioDecoder final {
 public:
     FfmpegAudioDecoder();
     ~FfmpegAudioDecoder();
 
     bool open(const demux::AudioStreamInfo& streamInfo, std::string* errorMessage);
-    bool decodePacket(const EncodedPacket& encodedPacket,
-                      std::vector<PcmFrame>* outputFrames,
-                      std::string* errorMessage);
+    DecodePacketStatus decodePacket(const EncodedPacket& encodedPacket,
+                                    std::vector<PcmFrame>* outputFrames,
+                                    std::string* errorMessage);
     bool flush(std::vector<PcmFrame>* outputFrames, std::string* errorMessage);
     bool reset(std::string* errorMessage);
     void close();
 
 private:
-    bool drainFrames(std::vector<PcmFrame>* outputFrames, std::string* errorMessage);
+    DecodePacketStatus drainFrames(std::vector<PcmFrame>* outputFrames, std::string* errorMessage);
 
     AVCodecContext* codecContext_ = nullptr;
     AVFrame* frame_ = nullptr;

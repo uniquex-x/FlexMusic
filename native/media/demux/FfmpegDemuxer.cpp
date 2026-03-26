@@ -3,6 +3,7 @@
 #include "logger.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <chrono>
 #include <memory>
@@ -108,6 +109,14 @@ bool isProgressiveAudioLowLatencyCandidate(const flexmusic::io::DataSourceSpec& 
     return hasProgressiveAudioHint(resolvedUrl, contentType);
 }
 
+bool isRetryableReadError(int errorCode) {
+    return errorCode == AVERROR(EIO)
+            || errorCode == AVERROR(ETIMEDOUT)
+            || errorCode == AVERROR(ECONNRESET)
+            || errorCode == AVERROR(ECONNABORTED)
+            || errorCode == AVERROR(EPIPE);
+}
+
 } // namespace
 
 FfmpegDemuxer::FfmpegDemuxer() = default;
@@ -153,9 +162,12 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
     }
     av_dict_set(&options, "fflags", "nobuffer", 0);
     av_dict_set(&options, "flush_packets", "1", 0);
-    log.i("open tuning sourceId=%s customIo=1 hintUrl=%s lowLatency=%d formatHint=%s",
+    log.i("open tuning sourceId=%s customIo=1 hintUrl=%s contentType=%s live=%d seekable=%d lowLatency=%d formatHint=%s",
           dataSource->spec().sourceId.c_str(),
           dataSource->spec().resolvedUrl.c_str(),
+          dataSource->spec().contentType.c_str(),
+          dataSource->spec().liveStream ? 1 : 0,
+          dataSource->spec().seekable ? 1 : 0,
           lowLatencyOpen ? 1 : 0,
           inputFormatHintName.empty() ? "none" : inputFormatHintName.c_str());
 
@@ -247,9 +259,11 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
     seekable_ = (formatContext_->pb != nullptr && (formatContext_->pb->seekable & AVIO_SEEKABLE_NORMAL) != 0);
     const auto totalElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startedAt).count();
-    log.i("opened sourceId=%s customIo=1 hintUrl=%s streamIndex=%d sampleRate=%d channels=%d durationMs=%lld seekable=%d openInputMs=%lld streamInfoMs=%lld totalMs=%lld",
+    log.i("opened sourceId=%s customIo=1 hintUrl=%s contentType=%s live=%d streamIndex=%d sampleRate=%d channels=%d durationMs=%lld seekable=%d openInputMs=%lld streamInfoMs=%lld totalMs=%lld",
           dataSource->spec().sourceId.c_str(),
           dataSource->spec().resolvedUrl.c_str(),
+          dataSource->spec().contentType.c_str(),
+          dataSource->spec().liveStream ? 1 : 0,
           streamInfo_.streamIndex,
           streamInfo_.sampleRate,
           streamInfo_.channelCount,
@@ -265,13 +279,13 @@ bool FfmpegDemuxer::open(source::AvioDataSource* dataSource, std::string* errorM
     return true;
 }
 
-bool FfmpegDemuxer::readPacket(flexmusic::media::EncodedPacket* outputPacket, std::string* errorMessage) {
+ReadPacketStatus FfmpegDemuxer::readPacket(flexmusic::media::EncodedPacket* outputPacket, std::string* errorMessage) {
     const auto log = flexmusic::utils::levelLog(kDemuxerTag);
     if (outputPacket == nullptr || formatContext_ == nullptr || streamInfo_.streamIndex < 0) {
         if (errorMessage != nullptr) {
             *errorMessage = "Demuxer is not opened";
         }
-        return false;
+        return ReadPacketStatus::FATAL_ERROR;
     }
 
     outputPacket->endOfStream = false;
@@ -283,7 +297,7 @@ bool FfmpegDemuxer::readPacket(flexmusic::media::EncodedPacket* outputPacket, st
             if (errorMessage != nullptr) {
                 *errorMessage = "Allocate packet failed";
             }
-            return false;
+            return ReadPacketStatus::FATAL_ERROR;
         }
 
         int result = av_read_frame(formatContext_, packet);
@@ -293,17 +307,20 @@ bool FfmpegDemuxer::readPacket(flexmusic::media::EncodedPacket* outputPacket, st
             if (errorMessage != nullptr) {
                 errorMessage->clear();
             }
-            return true;
+            return ReadPacketStatus::END_OF_STREAM;
         }
         if (result < 0) {
             av_packet_free(&packet);
             if (errorMessage != nullptr) {
                 *errorMessage = avErrorToString(result);
             }
-            log.e("read frame failed streamIndex=%d error=%s",
+            const bool retryable = isRetryableReadError(result);
+            log.e("read frame failed streamIndex=%d retryable=%d errorCode=%d error=%s",
                   streamInfo_.streamIndex,
+                  retryable ? 1 : 0,
+                  result,
                   errorMessage != nullptr ? errorMessage->c_str() : "");
-            return false;
+            return retryable ? ReadPacketStatus::RETRYABLE_ERROR : ReadPacketStatus::FATAL_ERROR;
         }
         if (packet->stream_index != streamInfo_.streamIndex) {
             av_packet_free(&packet);
@@ -314,7 +331,7 @@ bool FfmpegDemuxer::readPacket(flexmusic::media::EncodedPacket* outputPacket, st
         if (errorMessage != nullptr) {
             errorMessage->clear();
         }
-        return true;
+        return ReadPacketStatus::OK;
     }
 }
 
