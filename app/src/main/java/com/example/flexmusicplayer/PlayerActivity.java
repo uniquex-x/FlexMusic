@@ -65,7 +65,6 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     private ILyricsRepository lyricsRepository;
     private boolean showingLyrics = false;
     private boolean userSeeking = false;
-    private boolean playRequested = false;
     private boolean showSeekBufferingMessage = false;
     private final List<LyricsLine> currentLyrics = new ArrayList<>();
     private String currentLyricsSongKey = "";
@@ -90,8 +89,6 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         lyricsExecutorService = Executors.newSingleThreadExecutor();
         lyricsRepository = new OnlineLyricsRepository();
         lyricsAdapter = new LyricsAdapter(this::showNowPlayingScreen);
-        playRequested = playbackController.getPlayerState().isPlaying()
-                || playbackController.getPlayerState().isLoading();
 
         binding.lyricsRecycler.setLayoutManager(new LinearLayoutManager(this));
         binding.lyricsRecycler.setAdapter(lyricsAdapter);
@@ -116,13 +113,11 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         binding.btnShuffle.setOnClickListener(this::showPlaybackModeMenu);
         binding.btnPreviousLarge.setOnClickListener(v -> playbackController.skipPrevious());
         binding.btnPlayPauseLarge.setOnClickListener(v -> {
-            PlayerState state = playbackController.getPlayerState();
-            boolean shouldPause = state.isPlaying() || (state.isLoading() && playRequested);
-            playRequested = !shouldPause;
             showSeekBufferingMessage = false;
             playbackController.togglePlayPause();
-            updatePlayPauseButton(state);
-            updateBufferStatus(state);
+            PlayerState updatedState = playbackController.getPlayerState();
+            updatePlayPauseButton(updatedState);
+            updateBufferStatus(updatedState);
         });
         binding.btnNextLarge.setOnClickListener(v -> playbackController.skipNext());
         binding.btnSecondaryAction.setOnClickListener(v -> showPlaybackQueueDialog());
@@ -145,7 +140,7 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 userSeeking = false;
                 PlayerState state = playbackController.getPlayerState();
                 int target = (int) ((seekBar.getProgress() / 1000f) * Math.max(state.getDuration(), 1));
-                showSeekBufferingMessage = state.isPlaying() || (state.isLoading() && playRequested);
+                showSeekBufferingMessage = state.isPlayWhenReadyRequested();
                 playbackController.seekTo(target);
                 updateBufferStatus(playbackController.getPlayerState());
             }
@@ -228,10 +223,8 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
         }
 
         if (state.isPlaying()) {
-            playRequested = true;
             showSeekBufferingMessage = false;
         } else if (state.isPaused() || state.isStopped() || state.getState() == PlayerState.State.ERROR) {
-            playRequested = false;
             showSeekBufferingMessage = false;
         }
 
@@ -757,18 +750,27 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
     }
 
     private void updatePlayPauseButton(@NonNull PlayerState state) {
-        boolean showPause = playRequested
+        boolean showPause = state.isPlayWhenReadyRequested()
                 && state.getCurrentSong() != null
                 && state.getState() != PlayerState.State.ERROR;
         binding.btnPlayPauseLarge.setImageResource(showPause ? R.drawable.ic_pause : R.drawable.ic_play);
-        binding.btnPlayPauseLarge.setContentDescription(getString(showPause ? R.string.player_pause : R.string.player_play));
+        int contentDescriptionResId = showPause && state.isLoading()
+                ? R.string.player_stop
+                : (showPause ? R.string.player_pause : R.string.player_play);
+        binding.btnPlayPauseLarge.setContentDescription(getString(contentDescriptionResId));
     }
 
     private void updateBufferStatus(@NonNull PlayerState state) {
-        boolean showBuffer = state.isLoading() && showSeekBufferingMessage;
+        boolean showSeekBuffer = state.isLoading() && showSeekBufferingMessage;
+        boolean showInitialLoading = state.isLoading()
+                && state.isPlayWhenReadyRequested()
+                && !showSeekBuffer;
+        boolean showBuffer = showSeekBuffer || showInitialLoading;
         binding.playerBufferStatus.setVisibility(showBuffer ? android.view.View.VISIBLE : android.view.View.GONE);
         if (showBuffer) {
-            binding.playerBufferStatus.setText(R.string.player_buffering_after_seek);
+            binding.playerBufferStatus.setText(showSeekBuffer
+                    ? R.string.player_buffering_after_seek
+                    : R.string.player_loading_status);
         }
     }
 

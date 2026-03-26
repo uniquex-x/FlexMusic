@@ -36,6 +36,7 @@ public class PlayerState implements Serializable {
     private int remainingSingleLoopCount;
     private float volume;
     private float playbackSpeed;
+    private boolean playWhenReadyRequested;
 
     public PlayerState() {
         this.state = State.IDLE;
@@ -48,6 +49,7 @@ public class PlayerState implements Serializable {
         this.remainingSingleLoopCount = 2;
         this.volume = 1.0f;
         this.playbackSpeed = 1.0f;
+        this.playWhenReadyRequested = false;
     }
 
     // Getters and Setters
@@ -169,6 +171,14 @@ public class PlayerState implements Serializable {
 
     public void setPlaybackSpeed(float playbackSpeed) {
         this.playbackSpeed = playbackSpeed;
+    }
+
+    public boolean isPlayWhenReadyRequested() {
+        return playWhenReadyRequested;
+    }
+
+    public void setPlayWhenReadyRequested(boolean playWhenReadyRequested) {
+        this.playWhenReadyRequested = playWhenReadyRequested;
     }
 
     public boolean isPlaying() {

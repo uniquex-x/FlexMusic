@@ -163,6 +163,7 @@
     <string name="player_title">正在播放</string>
     <string name="player_play">播放</string>
     <string name="player_pause">暂停</string>
+    <string name="player_stop">停止</string>
     <string name="player_play_mode">播放模式</string>
     <string name="player_next">下一首</string>
     <string name="player_previous">上一首</string>
@@ -177,6 +178,7 @@
     <string name="player_lyrics">歌词</string>
     <string name="player_no_lyrics">暂未找到这首歌的同步歌词</string>
     <string name="player_loading_lyrics">正在加载歌词…</string>
+    <string name="player_loading_status">loading...</string>
     <string name="player_buffering_after_seek">正在缓存中，请稍后</string>
     <string name="player_menu_add_to_playlist">添加到歌单</string>
     <string name="player_menu_share">分享</string>

@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     private final androidx.fragment.app.FragmentManager.OnBackStackChangedListener backStackChangedListener = () ->
             updateChromeForFragment(getSupportFragmentManager().findFragmentById(R.id.fragment_container));
     private String lastMiniPlayerSongKey = "";
-    private boolean lastMiniPlayerPlaying = false;
+    private boolean lastMiniPlayerShowingActiveControl = false;
     private boolean lastMiniPlayerHasSong = false;
     private int lastBottomNavigationVisibility = View.VISIBLE;
     private int lastMiniBarVisibility = View.GONE;
@@ -161,7 +161,10 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
 
     private void setupMiniPlayer() {
         renderMiniPlayer(playbackController.getPlayerState());
-        binding.playerPlayPause.setOnClickListener(v -> playbackController.togglePlayPause());
+        binding.playerPlayPause.setOnClickListener(v -> {
+            playbackController.togglePlayPause();
+            renderMiniPlayer(playbackController.getPlayerState());
+        });
         binding.playerPrevious.setOnClickListener(v -> playbackController.skipPrevious());
         binding.playerNext.setOnClickListener(v -> playbackController.skipNext());
         binding.playerMiniBar.setOnClickListener(v -> openPlayerScreen());
@@ -194,11 +197,16 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
             lastMiniPlayerSongKey = songKey;
             lastMiniPlayerHasSong = hasSong;
         }
-        if (state.isPlaying() != lastMiniPlayerPlaying || hasSong != lastMiniPlayerHasSong) {
-            binding.playerPlayPause.setImageResource(state.isPlaying() ? R.drawable.ic_pause : R.drawable.ic_play);
-            binding.playerPlayPause.setContentDescription(getString(
-                    state.isPlaying() ? R.string.player_pause : R.string.player_play));
-            lastMiniPlayerPlaying = state.isPlaying();
+        boolean showPause = state.isPlayWhenReadyRequested()
+                && hasSong
+                && state.getState() != PlayerState.State.ERROR;
+        if (showPause != lastMiniPlayerShowingActiveControl || hasSong != lastMiniPlayerHasSong) {
+            binding.playerPlayPause.setImageResource(showPause ? R.drawable.ic_pause : R.drawable.ic_play);
+            int contentDescriptionResId = showPause && state.isLoading()
+                    ? R.string.player_stop
+                    : (showPause ? R.string.player_pause : R.string.player_play);
+            binding.playerPlayPause.setContentDescription(getString(contentDescriptionResId));
+            lastMiniPlayerShowingActiveControl = showPause;
         }
         Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
         updateChromeForFragment(currentFragment);

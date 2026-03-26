@@ -1,104 +1,118 @@
-## introduction
-FlexMusic is a free music player, and support:
-- online music play
-- online music search、play、download(only support free audio)
-- Audio Transcoding
-    - Lossy: mp3,vorbis
-    - Lossless: flac
+# FlexMusic
 
-## Architecture
-Architecture diagrams are under `doc/architecture/`:
+FlexMusic 是一个以 Android 为主的音频应用工程，当前已经落地的主能力包括：
+
+- 本地与在线统一播放
+- 在线搜索、搜索结果播放、加入下一首、加入队列
+- 睡眠白噪声 / 氛围音 / 电台
+- 音频转码
+- Supabase 登录、资料编辑、头像上传
+
+项目仍在持续迭代中，仓库文档以“当前已完成实现”为准，不把规划功能写成已支持。
+
+## 当前模块
+
+```text
+app/                应用壳、页面、播放器 UI、睡眠 UI、轻量存储
+feature_player/     Java PlayerKernel 与 JNI 桥接
+feature_search/     搜索页 UI 与播放协作
+feature_transcode/  Java 侧转码编排与 JNI 调用
+feature_download/   预留模块壳，当前未完成
+core_domain/        领域模型、抽象接口、use case
+core_data/          业务编排、仓储、缓存、历史、会话管理
+core_network/       搜索 provider、播放解析、在线流与 Supabase 接入
+core_database/      预留模块壳，当前未完成
+native/             播放与转码 native 实现
+doc/                架构与功能说明
+```
+
+## 当前主要功能
+
+### 播放
+
+- 迷你播放器 + 全屏播放器
+- 播放队列
+- 顺序 / 随机 / 单曲循环 / 单曲循环次数
+- 倍速
+- seek
+- 最近播放记录
+- 本地源与在线源统一接入 native 播放链路
+
+### 搜索
+
+- 多 scope 搜索
+- 搜索建议、历史记录、热搜入口
+- 搜索结果分页
+- 直接播放、播放全部、加入下一首、加入队列
+- 当前默认 provider 为 `Jamendo`
+
+### 睡眠
+
+- 默认白噪声 / 氛围音
+- 本地缓存后离线复用
+- 电台精选与关键词搜索
+- 定时关闭与 30 秒淡出
+
+### 转码
+
+- 单文件转码
+- `MP3 / FLAC / OGG / WAV` 输出入口
+- 输出自动导入本地音乐库
+
+### 用户系统
+
+- 邮箱注册
+- 邮箱或用户名登录
+- 会话恢复
+- 头像上传
+- 资料编辑
+
+## 关键文档
+
+- [播放器说明](doc/player.md)
+- [网络模块说明](doc/network.md)
+- [搜索模块说明](doc/search.md)
+- [睡眠模块说明](doc/sleep.md)
+- [转码模块说明](doc/transcode.md)
+- [产品范围与路线图](doc/productRequirement.md)
+
+架构图位于：
 
 - `doc/architecture/flexmusic_arch_overview.svg`
 - `doc/architecture/flexmusic_native_internals.svg`
 
-Supporting design notes:
+## 配置
 
-- `doc/network.md`
-- `doc/player.md`
-- `doc/search.md`
-- `doc/sleep.md`
+### 在线搜索
 
- ### File Directory
- - Android / Java layer：
-```
-Android modules
-├── app/                                   // 当前应用壳与主要页面实现
-│   ├── MainActivity.java                  // 底部导航、迷你播放器容器
-│   ├── PlayerActivity.java                // 全屏播放器
-│   ├── ui/                                // Home / Recent / Favorites / Sleep / Settings 等页面
-│   ├── player/                            // app 层播放 facade、歌词仓库
-│   ├── sleep/                             // sleep 场景控制、白噪音/电台状态模型
-│   ├── storage/                           // 本地歌曲、收藏、最近播放等内存/轻量存储
-│   └── model/                             // Song / PlayerState / Playlist 等 UI 侧模型
-│
-├── feature_player/                        // 播放内核实现模块
-│   ├── coreplayer/                        // PlayerJNI，Java ↔ native 播放桥接
-│   └── player/                            // SoLibraryLoader、PlayerKernel 实现工厂
-│
-├── feature_search/                        // 预留搜索 feature 模块壳
-├── feature_download/                      // 预留下载 feature 模块壳
-├── feature_transcode/                     // 预留转码 feature 模块壳
-│
-├── core_domain/                           // 核心抽象层
-│   ├── player/                            // PlaybackRequest / PlayerKernel / ResolvedPlayableSource
-│   └── radio/                             // RadioStation 领域模型
-│
-├── core_data/                             // 数据编排层
-│   └── radio/                             // RadioRepository，负责搜索增强、去重、排序、点击上报
-│
-├── core_network/                          // 联网基础设施
-│   ├── http/                              // NetworkClient / RequestPolicy
-│   ├── radio/                             // RadioBrowserService / endpoint resolver
-│   └── stream/                            // AudioStreamProbeApi / NetworkPlaybackSourceResolver
-│
-└── core_database/                         // 预留数据库模块壳
-```
-- native layer：
-```
-native/
-├── CMakeLists.txt                         // native 构建入口，当前生成 flexmusic_player
-├── jni/                                   // JNI 边界层
-│   ├── JNILoader.cpp                      // 所有 JNI 动态注册统一入口
-│   ├── bridge/
-│   │   ├── PlayerBridge.cpp               // PlayerJNI 的方法表与参数转换
-│   │   └── PlayerBridge.h                 // NativePlayerContext / bridge 声明
-│   └── version/
-│       └── native_version.h               // native 版本头
-│
-├── player/
-│   └── state/
-│       └── player_state.h                 // native 播放状态枚举与事件定义
-│
-├── media/
-│   ├── codec/
-│   │   └── codec_interface.h              // 编解码接口占位
-│   └── packet/
-│       └── audio_packet.h                 // 音频包结构占位
-│
-├── io/
-│   ├── DataSourceSpec.h                   // 数据源描述，统一 URL / contentType / seekable 等输入
-│   ├── IFileIo.h                          // 文件 IO 抽象
-│   ├── IFileIoFactory.h                   // IO 实现工厂抽象
-│   ├── FileIoRegistry.cpp/.h              // 按协议选择 IO 实现，支持后续扩展
-│   ├── FfmpegStreamFileIo.cpp/.h          // http / https 当前走 FFmpeg AVIO
-│   └── PassthroughFileIo.cpp/.h           // 本地/占位源的透传实现
-│
-├── core/
-│   ├── error/
-│   │   └── error_code.h                   // native 错误码
-│   ├── logger/
-│   │   └── logger.h                       // 日志接口声明
-│   └── thread/
-│       └── thread_pool.h                  // 线程池头文件
-│
-└── third_party/                           // 已 vendor 的三方音频库
-    ├── ffmpeg/
-    ├── flac/
-    ├── mp3lame/
-    └── oggvorbis/
-```
+`core_network` 当前会读取：
 
-## Dependency Library
-- ffmpeg8.0
-- 
+- `jamendo.clientId`
+- `jamendoClientId`
+- `JAMENDO_CLIENT_ID`
+
+### Supabase
+
+- `supabase.url`
+- `supabase.publishableKey`
+- `supabaseUrl`
+- `supabasePublishableKey`
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+
+### Release 签名
+
+- `release.storeFile`
+- `release.storePassword`
+- `release.keyAlias`
+- `release.keyPassword`
+
+推荐都放在本地 `local.properties`，不要提交到仓库。
+
+## 当前已知缺口
+
+- `feature_download` 仍未实现
+- `core_database` 仍是模块壳
+- 搜索仍是单 provider
+- 还没有后台播放通知 / 锁屏控制
+- 转码还没有任务队列和历史列表

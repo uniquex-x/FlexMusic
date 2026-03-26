@@ -162,6 +162,7 @@
     <string name="player_title">Now Playing</string>
     <string name="player_play">Play</string>
     <string name="player_pause">Pause</string>
+    <string name="player_stop">Stop</string>
     <string name="player_play_mode">Playback Mode</string>
     <string name="player_next">Next</string>
     <string name="player_previous">Previous</string>
@@ -186,6 +187,7 @@
     <string name="player_playback_error">Unable to play this source right now.</string>
     <string name="player_no_lyrics">No synced lyrics available for this song.</string>
     <string name="player_loading_lyrics">Loading lyrics…</string>
+    <string name="player_loading_status">loading...</string>
     <string name="player_buffering_after_seek">Buffering, please wait.</string>
     <string name="player_menu_add_to_playlist">Add to Playlist</string>
     <string name="player_menu_share">Share</string>
