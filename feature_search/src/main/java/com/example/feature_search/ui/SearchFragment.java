@@ -55,6 +55,7 @@ import java.util.concurrent.Executors;
 
 public class SearchFragment extends Fragment {
 
+    private static final String ARG_SPOTIFY_SEARCH_ENABLED = "spotify_search_enabled";
     private static final int MENU_ACTION_PLAY_NEXT = 1;
     private static final int MENU_ACTION_ADD_TO_QUEUE = 2;
     private static final long SUGGESTION_DEBOUNCE_MS = 220L;
@@ -96,6 +97,15 @@ public class SearchFragment extends Fragment {
     @Nullable
     private Runnable suggestionDebounceRunnable;
 
+    @NonNull
+    public static SearchFragment newInstance(boolean spotifySearchEnabled) {
+        SearchFragment fragment = new SearchFragment();
+        Bundle args = new Bundle();
+        args.putBoolean(ARG_SPOTIFY_SEARCH_ENABLED, spotifySearchEnabled);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
@@ -114,7 +124,7 @@ public class SearchFragment extends Fragment {
         suggestionExecutorService = Executors.newSingleThreadExecutor();
         mainHandler = new Handler(Looper.getMainLooper());
         searchViewModel = new SearchViewModel(
-                new SearchUseCase(new OnlineSearchRepository()),
+                new SearchUseCase(new OnlineSearchRepository(isSpotifySearchEnabled())),
                 new GetSearchSuggestionsUseCase(
                         new SearchSuggestionRepository(new SearchHistoryStore(requireContext()))));
         searchPlaybackCoordinator = new SearchPlaybackCoordinator(
@@ -705,7 +715,7 @@ public class SearchFragment extends Fragment {
                 if (!isAdded()) {
                     return;
                 }
-                showStatus(getString(R.string.feature_search_status_playing));
+                showStatus(resolvePlaybackStatus(resolvedTrack, R.string.feature_search_status_playing));
                 searchHost.onSearchPlaybackRequested(playbackPage, startIndex, playbackRequest);
             }
 
@@ -734,7 +744,7 @@ public class SearchFragment extends Fragment {
                 if (!isAdded()) {
                     return;
                 }
-                showStatus(getString(R.string.feature_search_status_queue_playing));
+                showStatus(resolvePlaybackStatus(resolvedTrack, R.string.feature_search_status_queue_playing));
                 searchHost.onSearchQueuePlaybackRequested(playbackPage, 0, playbackRequest);
             }
 
@@ -872,12 +882,25 @@ public class SearchFragment extends Fragment {
         return TextUtils.isEmpty(getCurrentInputKeyword());
     }
 
+    private boolean isSpotifySearchEnabled() {
+        Bundle arguments = getArguments();
+        return arguments != null && arguments.getBoolean(ARG_SPOTIFY_SEARCH_ENABLED, false);
+    }
+
     private void showStatus(@NonNull String message) {
         if (statusView == null) {
             return;
         }
         statusView.setVisibility(View.VISIBLE);
         statusView.setText(message);
+    }
+
+    @NonNull
+    private String resolvePlaybackStatus(@NonNull SearchTrack track, int fallbackResId) {
+        if (track.isPreviewPlayback() && !TextUtils.isEmpty(track.getPlaybackNotice())) {
+            return track.getPlaybackNotice();
+        }
+        return getString(fallbackResId);
     }
 
     private void hideStatus() {

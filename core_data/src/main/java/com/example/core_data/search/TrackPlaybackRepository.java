@@ -47,7 +47,8 @@ public class TrackPlaybackRepository implements ITrackPlaybackResolver {
                 playbackIntent.getProviderId(),
                 playbackIntent.getTrackId(),
                 playbackIntent.getCandidateToken(),
-                playbackIntent.getPreferredQuality());
+                playbackIntent.getPreferredQuality(),
+                playbackIntent.getDirectStreamUrl());
         List<TrackPlaybackCandidate> candidates = mapCandidates(candidateDtos);
         Collections.sort(candidates, Comparator.comparingInt(TrackPlaybackCandidate::getConfidence).reversed());
         long expiresAtMs = resolveCacheExpiry(candidates);

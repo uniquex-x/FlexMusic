@@ -24,6 +24,8 @@ public final class MusicSearchTrackDto {
     private final boolean requiresResolve;
     private final String candidateToken;
     private final String streamUrl;
+    private final boolean previewPlayback;
+    private final String playbackNotice;
 
     public MusicSearchTrackDto(@NonNull String trackId,
                                @NonNull String providerId,
@@ -39,7 +41,9 @@ public final class MusicSearchTrackDto {
                                @NonNull String preferredQuality,
                                boolean requiresResolve,
                                @Nullable String candidateToken,
-                               @Nullable String streamUrl) {
+                               @Nullable String streamUrl,
+                               boolean previewPlayback,
+                               @Nullable String playbackNotice) {
         this.trackId = trackId;
         this.providerId = providerId;
         this.albumId = albumId == null ? "" : albumId;
@@ -55,6 +59,8 @@ public final class MusicSearchTrackDto {
         this.requiresResolve = requiresResolve;
         this.candidateToken = candidateToken == null ? "" : candidateToken;
         this.streamUrl = streamUrl == null ? "" : streamUrl;
+        this.previewPlayback = previewPlayback;
+        this.playbackNotice = playbackNotice == null ? "" : playbackNotice;
     }
 
     @NonNull
@@ -128,5 +134,14 @@ public final class MusicSearchTrackDto {
     @NonNull
     public String getStreamUrl() {
         return streamUrl;
+    }
+
+    public boolean isPreviewPlayback() {
+        return previewPlayback;
+    }
+
+    @NonNull
+    public String getPlaybackNotice() {
+        return playbackNotice;
     }
 }

@@ -27,6 +27,7 @@ public final class AppConfig {
         private static final boolean DOWNLOAD_ENABLED = true;   // 下载模块开关，未实际部署
         private static final boolean TRANSCODE_ENABLED = true;    // 转码模块开关，未实际部署
         private static final boolean ONLINE_SEARCH_ENABLED = true;      // 在线搜索模块开关，未实际部署
+        private static final boolean SPOTIFY_SEARCH_ENABLED = false;    // Spotify搜索开关，受开发者配额/订阅策略影响
         private static final boolean SLEEP_RADIO_ENABLED = true;    // sleep模块开关，未实际部署
 
         private Features() {
@@ -46,6 +47,10 @@ public final class AppConfig {
 
         public static boolean isOnlineSearchEnabled() {
             return ONLINE_SEARCH_ENABLED;
+        }
+
+        public static boolean isSpotifySearchEnabled() {
+            return SPOTIFY_SEARCH_ENABLED;
         }
 
         public static boolean isSleepRadioEnabled() {

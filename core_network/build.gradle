@@ -31,6 +31,21 @@ android {
                     ?: System.getenv("JAMENDO_CLIENT_ID")
                     ?: ""
     ).toString()
+    def spotifyClientId = resolveNetworkConfig(
+            "spotify.clientId",
+            "spotifyClientId",
+            "SPOTIFY_CLIENT_ID",
+            "")
+    def spotifyClientSecret = resolveNetworkConfig(
+            "spotify.clientSecret",
+            "spotifyClientSecret",
+            "SPOTIFY_CLIENT_SECRET",
+            "")
+    def spotifyDefaultMarket = resolveNetworkConfig(
+            "spotify.defaultMarket",
+            "spotifyDefaultMarket",
+            "SPOTIFY_DEFAULT_MARKET",
+            "US")
     def supabaseUrl = resolveNetworkConfig(
             "supabase.url",
             "supabaseUrl",
@@ -48,6 +63,9 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
         buildConfigField "String", "JAMENDO_CLIENT_ID", "\"${jamendoClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "SPOTIFY_CLIENT_ID", "\"${spotifyClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "SPOTIFY_CLIENT_SECRET", "\"${spotifyClientSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "SPOTIFY_DEFAULT_MARKET", "\"${spotifyDefaultMarket.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "String", "SUPABASE_PUBLISHABLE_KEY", "\"${supabasePublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
     }

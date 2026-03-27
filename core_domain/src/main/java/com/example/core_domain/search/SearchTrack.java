@@ -19,6 +19,8 @@ public final class SearchTrack {
     private final SearchAvailability availability;
     private final String qualitySummary;
     private final TrackPlaybackIntent playbackIntent;
+    private final boolean previewPlayback;
+    private final String playbackNotice;
 
     public SearchTrack(@NonNull String trackId,
                        @NonNull String providerId,
@@ -30,7 +32,9 @@ public final class SearchTrack {
                        @NonNull String coverUrl,
                        @NonNull SearchAvailability availability,
                        @NonNull String qualitySummary,
-                       @NonNull TrackPlaybackIntent playbackIntent) {
+                       @NonNull TrackPlaybackIntent playbackIntent,
+                       boolean previewPlayback,
+                       @NonNull String playbackNotice) {
         this.trackId = trackId;
         this.providerId = providerId;
         this.title = title;
@@ -42,6 +46,8 @@ public final class SearchTrack {
         this.availability = availability;
         this.qualitySummary = qualitySummary;
         this.playbackIntent = playbackIntent;
+        this.previewPlayback = previewPlayback;
+        this.playbackNotice = playbackNotice;
     }
 
     @NonNull
@@ -96,5 +102,14 @@ public final class SearchTrack {
     @NonNull
     public TrackPlaybackIntent getPlaybackIntent() {
         return playbackIntent;
+    }
+
+    public boolean isPreviewPlayback() {
+        return previewPlayback;
+    }
+
+    @NonNull
+    public String getPlaybackNotice() {
+        return playbackNotice;
     }
 }

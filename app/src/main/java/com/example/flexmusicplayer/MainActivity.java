@@ -294,7 +294,8 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
     }
 
     public void openSearch() {
-        SearchFragment fragment = new SearchFragment();
+        SearchFragment fragment = SearchFragment.newInstance(
+                AppConfig.Features.isSpotifySearchEnabled());
         FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
         transaction.replace(R.id.fragment_container, fragment);
         transaction.addToBackStack("search");

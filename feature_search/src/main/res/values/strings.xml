@@ -46,4 +46,6 @@
     <string name="feature_search_track_action_next">Play Next</string>
     <string name="feature_search_track_action_queue">Add To Queue</string>
     <string name="feature_search_track_art">封面占位图</string>
+    <string name="feature_search_track_quality_preview">30S DEMO</string>
+    <string name="feature_search_track_meta_preview">Spotify试听</string>
 </resources>

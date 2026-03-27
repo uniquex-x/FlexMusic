@@ -30,11 +30,13 @@ public final class SearchResultAdapter extends BaseAdapter {
     }
 
     private final LayoutInflater layoutInflater;
+    private final Context context;
     private final List<SearchTrack> tracks = new ArrayList<>();
     @Nullable
     private ITrackActionListener trackActionListener;
 
     public SearchResultAdapter(@NonNull Context context) {
+        this.context = context;
         this.layoutInflater = LayoutInflater.from(context);
     }
 
@@ -85,8 +87,8 @@ public final class SearchResultAdapter extends BaseAdapter {
         private void bind(@NonNull SearchTrack track, int position) {
             titleView.setText(track.getTitle());
             subtitleView.setText(track.getSubtitle());
-            qualityView.setText(resolveQualityLabel(track.getQualitySummary()));
-            metaView.setText(track.getDurationMs() > 0L ? formatDuration(track.getDurationMs()) : "");
+            qualityView.setText(resolveQualityLabel(track));
+            metaView.setText(resolveMetaLabel(track));
             bindArtwork(position);
             moreButton.setOnClickListener(v -> {
                 if (trackActionListener != null) {
@@ -105,7 +107,11 @@ public final class SearchResultAdapter extends BaseAdapter {
         }
 
         @NonNull
-        private String resolveQualityLabel(@NonNull String qualitySummary) {
+        private String resolveQualityLabel(@NonNull SearchTrack track) {
+            if (track.isPreviewPlayback()) {
+                return context.getString(R.string.feature_search_track_quality_preview);
+            }
+            String qualitySummary = track.getQualitySummary();
             if (TextUtils.isEmpty(qualitySummary)) {
                 return "ONLINE";
             }
@@ -123,6 +129,18 @@ public final class SearchResultAdapter extends BaseAdapter {
                 return "MP3 320";
             }
             return qualitySummary.toUpperCase(Locale.ROOT);
+        }
+
+        @NonNull
+        private String resolveMetaLabel(@NonNull SearchTrack track) {
+            List<String> parts = new ArrayList<>();
+            if (track.getDurationMs() > 0L) {
+                parts.add(formatDuration(track.getDurationMs()));
+            }
+            if (track.isPreviewPlayback()) {
+                parts.add(context.getString(R.string.feature_search_track_meta_preview));
+            }
+            return TextUtils.join(" · ", parts);
         }
 
         private void bindArtwork(int position) {

@@ -11,19 +11,22 @@ public final class TrackPlaybackIntent {
     private final String preferredQuality;
     private final boolean requiresResolve;
     private final String candidateToken;
+    private final String directStreamUrl;
 
     public TrackPlaybackIntent(@NonNull String trackId,
                                @NonNull String providerId,
                                @Nullable String albumId,
                                @Nullable String preferredQuality,
                                boolean requiresResolve,
-                               @Nullable String candidateToken) {
+                               @Nullable String candidateToken,
+                               @Nullable String directStreamUrl) {
         this.trackId = trackId;
         this.providerId = providerId;
         this.albumId = albumId == null ? "" : albumId;
         this.preferredQuality = preferredQuality == null ? "" : preferredQuality;
         this.requiresResolve = requiresResolve;
         this.candidateToken = candidateToken == null ? "" : candidateToken;
+        this.directStreamUrl = directStreamUrl == null ? "" : directStreamUrl;
     }
 
     @NonNull
@@ -53,5 +56,10 @@ public final class TrackPlaybackIntent {
     @NonNull
     public String getCandidateToken() {
         return candidateToken;
+    }
+
+    @NonNull
+    public String getDirectStreamUrl() {
+        return directStreamUrl;
     }
 }

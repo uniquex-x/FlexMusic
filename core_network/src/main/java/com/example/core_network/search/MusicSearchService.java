@@ -418,7 +418,9 @@ public class MusicSearchService {
                 "mp32",
                 true,
                 trackId,
-                audioUrl);
+                audioUrl,
+                false,
+                "");
     }
 
     @NonNull

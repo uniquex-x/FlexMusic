@@ -34,6 +34,7 @@ import com.example.core_network.stream.NetworkPlaybackSourceResolver;
 import com.example.feature_download.DownloadRecord;
 import com.example.feature_download.DownloadRepository;
 import com.example.feature_player.player.FeaturePlayerFactory;
+import com.example.flexmusicplayer.config.AppConfig;
 import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
 import com.example.flexmusicplayer.storage.RecentPlaybackStore;
@@ -84,7 +85,8 @@ public final class PlaybackController {
     private final PlaybackSourceResolver playbackSourceResolver;
     private final IPlaybackWarmupEngine playbackWarmupEngine;
     private final DownloadRepository downloadRepository;
-    private final SearchUseCase searchUseCase = new SearchUseCase(new OnlineSearchRepository());
+    private final SearchUseCase searchUseCase = new SearchUseCase(
+            new OnlineSearchRepository(AppConfig.Features.isSpotifySearchEnabled()));
     private final PlayTrackFromSearchUseCase playTrackFromSearchUseCase =
             new PlayTrackFromSearchUseCase(new TrackPlaybackRepository());
     private final PlaybackWarmupCoordinator playbackWarmupCoordinator = new PlaybackWarmupCoordinator();

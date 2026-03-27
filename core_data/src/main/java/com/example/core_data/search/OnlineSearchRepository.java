@@ -15,6 +15,7 @@ import com.example.core_domain.search.SearchScope;
 import com.example.core_domain.search.SearchTrack;
 import com.example.core_domain.search.TrackPlaybackIntent;
 import com.example.core_network.search.MusicSearchService;
+import com.example.core_network.search.SpotifySearchService;
 import com.example.core_network.search.dto.MusicSearchAlbumDto;
 import com.example.core_network.search.dto.MusicSearchArtistDto;
 import com.example.core_network.search.dto.MusicSearchPageDto;
@@ -31,21 +32,31 @@ public class OnlineSearchRepository implements ISearchRepository {
     private static final String TAG = "OnlineSearchRepo";
     private static final int ALL_SCOPE_SECONDARY_PAGE_SIZE = 6;
 
+    private final boolean spotifySearchEnabled;
     private final MusicSearchService musicSearchService;
+    private final SpotifySearchService spotifySearchService;
     private final SearchCacheStore searchCacheStore;
     private final SearchResultDeduplicator searchResultDeduplicator;
     private final SearchResultRanker searchResultRanker;
 
     public OnlineSearchRepository() {
-        this(new MusicSearchService(), new SearchCacheStore(),
+        this(true);
+    }
+
+    public OnlineSearchRepository(boolean spotifySearchEnabled) {
+        this(spotifySearchEnabled, new MusicSearchService(), new SpotifySearchService(), new SearchCacheStore(),
                 new SearchResultDeduplicator(), new SearchResultRanker());
     }
 
-    public OnlineSearchRepository(@NonNull MusicSearchService musicSearchService,
+    public OnlineSearchRepository(boolean spotifySearchEnabled,
+                                  @NonNull MusicSearchService musicSearchService,
+                                  @NonNull SpotifySearchService spotifySearchService,
                                   @NonNull SearchCacheStore searchCacheStore,
                                   @NonNull SearchResultDeduplicator searchResultDeduplicator,
                                   @NonNull SearchResultRanker searchResultRanker) {
+        this.spotifySearchEnabled = spotifySearchEnabled;
         this.musicSearchService = musicSearchService;
+        this.spotifySearchService = spotifySearchService;
         this.searchCacheStore = searchCacheStore;
         this.searchResultDeduplicator = searchResultDeduplicator;
         this.searchResultRanker = searchResultRanker;
@@ -92,10 +103,7 @@ public class OnlineSearchRepository implements ISearchRepository {
                 break;
             case TRACKS:
             default:
-                resultPage = mapTrackPage(query, musicSearchService.searchTracks(
-                        query.getKeyword(),
-                        query.getFilter().getPage(),
-                        query.getFilter().getPageSize()));
+                resultPage = mapTrackPage(query, loadTrackPage(query));
                 break;
         }
         searchCacheStore.put(query, resultPage);
@@ -114,7 +122,7 @@ public class OnlineSearchRepository implements ISearchRepository {
         int page = query.getFilter().getPage();
         int trackPageSize = query.getFilter().getPageSize();
         int secondaryPageSize = Math.max(1, Math.min(ALL_SCOPE_SECONDARY_PAGE_SIZE, trackPageSize));
-        MusicSearchPageDto trackPageDto = musicSearchService.searchTracks(query.getKeyword(), page, trackPageSize);
+        MusicSearchPageDto trackPageDto = loadTrackPage(query);
         MusicSearchPageDto albumPageDto = musicSearchService.searchAlbums(query.getKeyword(), page, secondaryPageSize);
         MusicSearchPageDto artistPageDto = musicSearchService.searchArtists(query.getKeyword(), page, secondaryPageSize);
         MusicSearchPageDto playlistPageDto = musicSearchService.searchPlaylists(query.getKeyword(), page, secondaryPageSize);
@@ -140,6 +148,65 @@ public class OnlineSearchRepository implements ISearchRepository {
                 albums,
                 artists,
                 playlists);
+    }
+
+    @NonNull
+    private MusicSearchPageDto loadTrackPage(@NonNull SearchQuery query) throws IOException {
+        IOException spotifyError = null;
+        IOException jamendoError = null;
+        MusicSearchPageDto spotifyPageDto = emptyTrackPage(query);
+        MusicSearchPageDto jamendoPageDto = emptyTrackPage(query);
+        if (spotifySearchEnabled) {
+            try {
+                spotifyPageDto = spotifySearchService.searchTracks(
+                        query.getKeyword(),
+                        query.getFilter().getPage(),
+                        query.getFilter().getPageSize());
+            } catch (IOException ioException) {
+                spotifyError = ioException;
+                Log.w(TAG, "loadTrackPage spotify search failed keyword=" + query.getKeyword(), ioException);
+            }
+        } else {
+            Log.d(TAG, "loadTrackPage spotify disabled keyword=" + query.getKeyword());
+        }
+        try {
+            jamendoPageDto = musicSearchService.searchTracks(
+                    query.getKeyword(),
+                    query.getFilter().getPage(),
+                    query.getFilter().getPageSize());
+        } catch (IOException ioException) {
+            jamendoError = ioException;
+            Log.w(TAG, "loadTrackPage jamendo search failed keyword=" + query.getKeyword(), ioException);
+        }
+        if (spotifyError != null && jamendoError != null) {
+            throw jamendoError;
+        }
+        List<MusicSearchTrackDto> mergedTracks = new ArrayList<>(spotifyPageDto.getTracks().size()
+                + jamendoPageDto.getTracks().size());
+        mergedTracks.addAll(spotifyPageDto.getTracks());
+        mergedTracks.addAll(jamendoPageDto.getTracks());
+        return new MusicSearchPageDto(
+                query.getFilter().getPage(),
+                Math.max(spotifyPageDto.getPageSize(), jamendoPageDto.getPageSize()),
+                spotifyPageDto.isHasMore() || jamendoPageDto.isHasMore(),
+                spotifyPageDto.getTotalCount() + jamendoPageDto.getTotalCount(),
+                mergedTracks,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList());
+    }
+
+    @NonNull
+    private MusicSearchPageDto emptyTrackPage(@NonNull SearchQuery query) {
+        return new MusicSearchPageDto(
+                query.getFilter().getPage(),
+                query.getFilter().getPageSize(),
+                false,
+                0,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList());
     }
 
     @NonNull
@@ -252,7 +319,10 @@ public class OnlineSearchRepository implements ISearchRepository {
                             trackDto.getAlbumId(),
                             trackDto.getPreferredQuality(),
                             trackDto.isRequiresResolve(),
-                            trackDto.getCandidateToken())));
+                            trackDto.getCandidateToken(),
+                            trackDto.getStreamUrl()),
+                    trackDto.isPreviewPlayback(),
+                    trackDto.getPlaybackNotice()));
         }
         return tracks;
     }
