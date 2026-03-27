@@ -1,7 +1,9 @@
 package com.example.flexmusicplayer.ui;
 
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,7 +21,9 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.flexmusicplayer.MainActivity;
 import com.example.flexmusicplayer.R;
 import com.example.flexmusicplayer.download.SongDownloadManager;
+import com.example.flexmusicplayer.model.PlayerState;
 import com.example.flexmusicplayer.model.Song;
+import com.example.flexmusicplayer.player.PlaybackController;
 import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -29,7 +33,7 @@ import com.google.android.material.card.MaterialCardView;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FavoritesFragment extends Fragment {
+public class FavoritesFragment extends Fragment implements PlaybackController.Listener {
 
     private enum FavoriteTab {
         SONGS,
@@ -52,6 +56,7 @@ public class FavoritesFragment extends Fragment {
     private FavoriteSongsStore favoriteSongsStore;
     private FavoriteRadioStore favoriteRadioStore;
     private SongDownloadManager downloadManager;
+    private PlaybackController playbackController;
     private TextView emptyTitle;
     private TextView emptyDescription;
     private View songsTab;
@@ -61,6 +66,7 @@ public class FavoritesFragment extends Fragment {
     private View songsTabIndicator;
     private View radiosTabIndicator;
     private FavoriteTab selectedTab = FavoriteTab.SONGS;
+    private String currentPlayingSongKey = "";
 
     @Nullable
     @Override
@@ -92,6 +98,7 @@ public class FavoritesFragment extends Fragment {
         favoriteSongsStore = new FavoriteSongsStore(requireContext());
         favoriteRadioStore = new FavoriteRadioStore(requireContext());
         downloadManager = SongDownloadManager.getInstance(requireContext());
+        playbackController = PlaybackController.getInstance(requireContext());
 
         LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
         favoritesRecycler.setLayoutManager(layoutManager);
@@ -138,6 +145,7 @@ public class FavoritesFragment extends Fragment {
             favoritesRecycler.setVisibility(View.VISIBLE);
             emptyState.setVisibility(View.GONE);
             favoritesAdapter.setSongs(favorites, selectedTab);
+            syncCurrentPlayingSong(playbackController.getPlayerState());
         }
     }
 
@@ -160,13 +168,69 @@ public class FavoritesFragment extends Fragment {
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        playbackController.addListener(this);
+        syncCurrentPlayingSong(playbackController.getPlayerState());
+    }
+
+    @Override
+    public void onStop() {
+        playbackController.removeListener(this);
+        super.onStop();
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         loadFavorites();
     }
 
+    @Override
+    public void onPlaybackStateChanged(@NonNull PlayerState state) {
+        if (!isAdded()) {
+            return;
+        }
+        syncCurrentPlayingSong(state);
+    }
+
     public void refreshFavorites() {
         loadFavorites();
+    }
+
+    private void syncCurrentPlayingSong(@NonNull PlayerState state) {
+        String nextSongKey = buildSongKey(state.getCurrentSong());
+        if (TextUtils.equals(currentPlayingSongKey, nextSongKey)) {
+            return;
+        }
+        String previousSongKey = currentPlayingSongKey;
+        currentPlayingSongKey = nextSongKey;
+        int previousIndex = favoritesAdapter.findSongIndex(previousSongKey);
+        int nextIndex = favoritesAdapter.findSongIndex(nextSongKey);
+        if (previousIndex >= 0) {
+            favoritesAdapter.notifyItemChanged(previousIndex);
+        }
+        if (nextIndex >= 0 && nextIndex != previousIndex) {
+            favoritesAdapter.notifyItemChanged(nextIndex);
+        }
+    }
+
+    @NonNull
+    private String buildSongKey(@Nullable Song song) {
+        if (song == null) {
+            return "";
+        }
+        if (!TextUtils.isEmpty(song.getSourceId())) {
+            return song.getSourceId();
+        }
+        if (!TextUtils.isEmpty(song.getAudioUrl())) {
+            return song.getAudioUrl();
+        }
+        return song.getTitle() + "|" + song.getArtist() + "|" + song.getAlbum();
+    }
+
+    private int dpToPx(int valueDp) {
+        return Math.round(valueDp * requireContext().getResources().getDisplayMetrics().density);
     }
 
     private class SongVerticalAdapter extends RecyclerView.Adapter<SongVerticalAdapter.ViewHolder> {
@@ -181,6 +245,18 @@ public class FavoritesFragment extends Fragment {
             this.songs = songs;
             this.tab = tab;
             notifyDataSetChanged();
+        }
+
+        int findSongIndex(@Nullable String songKey) {
+            if (TextUtils.isEmpty(songKey)) {
+                return -1;
+            }
+            for (int index = 0; index < songs.size(); index++) {
+                if (songKey.equals(buildSongKey(songs.get(index)))) {
+                    return index;
+                }
+            }
+            return -1;
         }
 
         @NonNull
@@ -220,12 +296,13 @@ public class FavoritesFragment extends Fragment {
 
             void bind(Song song, int position, @NonNull FavoriteTab tab) {
                 songTitle.setText(song.getTitle());
-                artistName.setText(song.getArtist());
+                artistName.setText(TextUtils.isEmpty(song.getArtist())
+                        ? getString(R.string.player_unknown_artist)
+                        : song.getArtist());
                 albumArtCard.setCardBackgroundColor(ART_COLORS[position % ART_COLORS.length]);
                 updateDownload(song, tab);
-                favoriteButton.setImageTintList(ContextCompat.getColorStateList(
-                        itemView.getContext(),
-                        song.isFavorite() ? R.color.player_bar_background : R.color.gray_400));
+                updatePlayingHighlight(song);
+                updateFavorite(song);
 
                 itemView.setOnClickListener(v -> {
                     if (itemView.getContext() instanceof MainActivity) {
@@ -238,9 +315,8 @@ public class FavoritesFragment extends Fragment {
                     boolean isFavorite = tab == FavoriteTab.SONGS
                             ? favoriteSongsStore.toggleFavorite(song)
                             : favoriteRadioStore.toggleFavorite(song);
-                    favoriteButton.setImageTintList(ContextCompat.getColorStateList(
-                            itemView.getContext(),
-                            isFavorite ? R.color.player_bar_background : R.color.gray_400));
+                    song.setFavorite(isFavorite);
+                    updateFavorite(song);
                     if (!isFavorite) {
                         int adapterPosition = getAdapterPosition();
                         if (adapterPosition != RecyclerView.NO_POSITION) {
@@ -255,6 +331,31 @@ public class FavoritesFragment extends Fragment {
                 });
             }
 
+            private void updatePlayingHighlight(@NonNull Song song) {
+                boolean isCurrentSong = buildSongKey(song).equals(currentPlayingSongKey);
+                int primaryColor = ContextCompat.getColor(
+                        itemView.getContext(),
+                        isCurrentSong ? R.color.player_bar_background : R.color.gray_900);
+                int secondaryColor = ContextCompat.getColor(
+                        itemView.getContext(),
+                        isCurrentSong ? R.color.player_bar_background : R.color.gray_500);
+                itemView.setBackgroundResource(isCurrentSong
+                        ? R.drawable.bg_playlist_detail_song_active
+                        : android.R.color.transparent);
+                albumArtCard.setStrokeWidth(isCurrentSong ? dpToPx(1) : 0);
+                albumArtCard.setStrokeColor(isCurrentSong
+                        ? ColorStateList.valueOf(ContextCompat.getColor(itemView.getContext(), R.color.player_bar_background))
+                        : ColorStateList.valueOf(Color.TRANSPARENT));
+                songTitle.setTextColor(primaryColor);
+                artistName.setTextColor(secondaryColor);
+            }
+
+            private void updateFavorite(@NonNull Song song) {
+                int tint = ContextCompat.getColor(itemView.getContext(),
+                        song.isFavorite() ? R.color.player_bar_background : R.color.gray_400);
+                favoriteButton.setImageTintList(ColorStateList.valueOf(tint));
+            }
+
             private void updateDownload(@NonNull Song song, @NonNull FavoriteTab tab) {
                 if (tab != FavoriteTab.SONGS) {
                     downloadButton.setVisibility(View.GONE);
@@ -263,9 +364,9 @@ public class FavoritesFragment extends Fragment {
                 downloadButton.setVisibility(View.VISIBLE);
                 boolean inFlight = downloadManager.isDownloadInFlight(song);
                 downloadButton.setImageResource(song.isDownloaded() ? R.drawable.ic_check_small : R.drawable.ic_download);
-                downloadButton.setImageTintList(ContextCompat.getColorStateList(
-                        itemView.getContext(),
-                        song.isDownloaded() || inFlight ? R.color.gray_500 : R.color.gray_300));
+                int tint = ContextCompat.getColor(itemView.getContext(),
+                        song.isDownloaded() || inFlight ? R.color.gray_500 : R.color.gray_300);
+                downloadButton.setImageTintList(ColorStateList.valueOf(tint));
                 downloadButton.setEnabled(!inFlight);
             }
 
