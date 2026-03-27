@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 
 import com.example.core_data.player.PlaybackWarmupCoordinator;
 import com.example.core_data.search.OnlineSearchRepository;
+import com.example.core_domain.player.AudioEffectProfile;
 import com.example.core_data.search.TrackPlaybackRepository;
 import com.example.core_domain.player.IPlaybackWarmupEngine;
 import com.example.core_domain.player.PlaybackRequest;
@@ -135,6 +136,7 @@ public final class PlaybackController {
     private PlaybackController(@NonNull Context context) {
         appContext = context.getApplicationContext();
         playerKernel = FeaturePlayerFactory.create(appContext);
+        playerState.setAudioEffectProfile(playerKernel.getCurrentAudioEffectProfile());
         NetworkPlaybackSourceResolver networkPlaybackSourceResolver = new NetworkPlaybackSourceResolver();
         playbackSourceResolver = networkPlaybackSourceResolver;
         playbackWarmupEngine = networkPlaybackSourceResolver;
@@ -325,6 +327,20 @@ public final class PlaybackController {
         playerState.setPlaybackSpeed(safeSpeed);
         playerKernel.setPlaybackSpeed(safeSpeed);
         Log.d(TAG, "setPlaybackSpeed speed=" + safeSpeed
+                + " sourceId=" + resolveCurrentSourceIdLocked());
+        dispatchState();
+    }
+
+    @NonNull
+    public synchronized List<AudioEffectProfile> getAvailableAudioEffectProfiles() {
+        return playerKernel.getAvailableAudioEffectProfiles();
+    }
+
+    public synchronized void setAudioEffectProfile(@NonNull AudioEffectProfile profile) {
+        AudioEffectProfile safeProfile = profile == null ? AudioEffectProfile.OFF : profile;
+        playerState.setAudioEffectProfile(safeProfile);
+        playerKernel.setAudioEffectProfile(safeProfile);
+        Log.d(TAG, "setAudioEffectProfile profile=" + safeProfile.getStableId()
                 + " sourceId=" + resolveCurrentSourceIdLocked());
         dispatchState();
     }
@@ -912,6 +928,7 @@ public final class PlaybackController {
         snapshot.setRemainingSingleLoopCount(playerState.getRemainingSingleLoopCount());
         snapshot.setVolume(playerState.getVolume());
         snapshot.setPlaybackSpeed(playerState.getPlaybackSpeed());
+        snapshot.setAudioEffectProfile(playerState.getAudioEffectProfile());
         snapshot.setPlayWhenReadyRequested(playerState.isPlayWhenReadyRequested());
         return snapshot;
     }

@@ -18,9 +18,11 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.Fragment;
 
+import com.example.core_domain.player.AudioEffectProfile;
 import com.example.feature_download.DownloadQuality;
 import com.example.feature_download.DownloadRepository;
 import com.example.flexmusicplayer.R;
+import com.example.flexmusicplayer.player.PlaybackController;
 import com.example.flexmusicplayer.settings.AppLocaleManager;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
@@ -43,11 +45,13 @@ public class SettingsFragment extends Fragment {
     private TextView cacheSizeValue;
     private TextView downloadQualityValue;
     private TextView storagePathValue;
+    private TextView equalizerValue;
     private MaterialButtonToggleGroup streamingQualityGroup;
     private MaterialButtonToggleGroup playbackModeGroup;
     private SharedPreferences prefs;
     private Context appContext;
     private DownloadRepository downloadRepository;
+    private PlaybackController playbackController;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor();
     private boolean cacheOperationInFlight;
@@ -60,6 +64,7 @@ public class SettingsFragment extends Fragment {
         appContext = requireContext().getApplicationContext();
         prefs = appContext.getSharedPreferences(PREFS_NAME, 0);
         downloadRepository = new DownloadRepository(appContext);
+        playbackController = PlaybackController.getInstance(appContext);
 
         initViews(view);
         loadSettings();
@@ -74,6 +79,7 @@ public class SettingsFragment extends Fragment {
         cacheSizeValue = view.findViewById(R.id.cache_size_value);
         downloadQualityValue = view.findViewById(R.id.download_quality_value);
         storagePathValue = view.findViewById(R.id.storage_path_value);
+        equalizerValue = view.findViewById(R.id.equalizer_value);
         streamingQualityGroup = view.findViewById(R.id.streaming_quality_group);
         playbackModeGroup = view.findViewById(R.id.playback_mode_group);
     }
@@ -86,6 +92,7 @@ public class SettingsFragment extends Fragment {
         cacheSizeValue.setText(R.string.loading);
         downloadQualityValue.setText(resolveDownloadQualityLabel(downloadRepository.getPreferredQuality()));
         storagePathValue.setText(resolveStoragePathSummary());
+        refreshEqualizerSummary();
         refreshCacheSizeAsync();
         streamingQualityGroup.check(R.id.quality_high_btn);
         playbackModeGroup.check(R.id.playback_sequential_btn);
@@ -95,7 +102,7 @@ public class SettingsFragment extends Fragment {
         root.findViewById(R.id.back_button).setOnClickListener(v -> requireActivity().onBackPressed());
         root.findViewById(R.id.language_item).setOnClickListener(v -> showLanguageDialog());
         root.findViewById(R.id.clear_cache_item).setOnClickListener(v -> showClearCacheDialog());
-        root.findViewById(R.id.equalizer_item).setOnClickListener(v -> showPlaceholder(root));
+        root.findViewById(R.id.equalizer_item).setOnClickListener(v -> showEqualizerDialog());
         root.findViewById(R.id.download_quality_item).setOnClickListener(v -> showDownloadQualityDialog());
         root.findViewById(R.id.storage_path_item).setOnClickListener(v -> showStoragePathDialog());
         root.findViewById(R.id.privacy_policy_item).setOnClickListener(v -> showPlaceholder(root));
@@ -140,6 +147,23 @@ public class SettingsFragment extends Fragment {
                     languageValue.setText(languages[which]);
                 })
                 .show();
+    }
+
+    private void showEqualizerDialog() {
+        AudioEffectDialogHelper.showDialog(requireContext(), playbackController, selectedProfile -> {
+            refreshEqualizerSummary();
+            View fragmentView = getView();
+            if (fragmentView == null) {
+                return;
+            }
+            Snackbar.make(
+                            fragmentView,
+                            getString(
+                                    R.string.player_audio_effect_applied,
+                                    AudioEffectDialogHelper.resolveLabel(requireContext(), selectedProfile)),
+                            Snackbar.LENGTH_SHORT)
+                    .show();
+        });
     }
 
     private void showDownloadQualityDialog() {
@@ -356,6 +380,14 @@ public class SettingsFragment extends Fragment {
         return summary;
     }
 
+    private void refreshEqualizerSummary() {
+        if (equalizerValue == null || playbackController == null) {
+            return;
+        }
+        AudioEffectProfile currentProfile = playbackController.getPlayerState().getAudioEffectProfile();
+        equalizerValue.setText(AudioEffectDialogHelper.resolveLabel(requireContext(), currentProfile));
+    }
+
     private void showPlaceholder(View root) {
         Snackbar.make(root, R.string.settings_placeholder_message, Snackbar.LENGTH_SHORT).show();
     }
@@ -364,5 +396,11 @@ public class SettingsFragment extends Fragment {
     public void onDestroy() {
         cacheExecutor.shutdownNow();
         super.onDestroy();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        refreshEqualizerSummary();
     }
 }

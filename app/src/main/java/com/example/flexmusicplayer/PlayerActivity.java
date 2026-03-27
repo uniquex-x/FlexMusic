@@ -42,6 +42,7 @@ import com.example.flexmusicplayer.settings.AppLocaleManager;
 import com.example.flexmusicplayer.storage.FavoriteRadioStore;
 import com.example.flexmusicplayer.storage.FavoriteSongsStore;
 import com.example.flexmusicplayer.storage.PlaylistStore;
+import com.example.flexmusicplayer.ui.AudioEffectDialogHelper;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.io.IOException;
@@ -533,6 +534,12 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 .setTitle(getString(
                         R.string.player_menu_speed,
                         formatSpeed(playbackController.getPlayerState().getPlaybackSpeed())));
+        popupMenu.getMenu()
+                .findItem(R.id.action_audio_effect)
+                .setTitle(getString(
+                        R.string.player_menu_audio_effect,
+                        AudioEffectDialogHelper.resolveLabel(this,
+                                playbackController.getPlayerState().getAudioEffectProfile())));
         popupMenu.setOnMenuItemClickListener(item -> {
             int itemId = item.getItemId();
             if (itemId == R.id.action_add_to_playlist) {
@@ -545,6 +552,10 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
             }
             if (itemId == R.id.action_playback_speed) {
                 showPlaybackSpeedDialog();
+                return true;
+            }
+            if (itemId == R.id.action_audio_effect) {
+                showAudioEffectDialog();
                 return true;
             }
             return false;
@@ -651,6 +662,12 @@ public class PlayerActivity extends AppCompatActivity implements PlaybackControl
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    private void showAudioEffectDialog() {
+        AudioEffectDialogHelper.showDialog(this, playbackController, selectedProfile -> showToast(getString(
+                R.string.player_audio_effect_applied,
+                AudioEffectDialogHelper.resolveLabel(this, selectedProfile))));
     }
 
     @NonNull

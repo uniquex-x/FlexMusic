@@ -1,5 +1,7 @@
 package com.example.flexmusicplayer.model;
 
+import com.example.core_domain.player.AudioEffectProfile;
+
 import java.io.Serializable;
 
 public class PlayerState implements Serializable {
@@ -36,6 +38,7 @@ public class PlayerState implements Serializable {
     private int remainingSingleLoopCount;
     private float volume;
     private float playbackSpeed;
+    private AudioEffectProfile audioEffectProfile;
     private boolean playWhenReadyRequested;
 
     public PlayerState() {
@@ -49,6 +52,7 @@ public class PlayerState implements Serializable {
         this.remainingSingleLoopCount = 2;
         this.volume = 1.0f;
         this.playbackSpeed = 1.0f;
+        this.audioEffectProfile = AudioEffectProfile.OFF;
         this.playWhenReadyRequested = false;
     }
 
@@ -171,6 +175,14 @@ public class PlayerState implements Serializable {
 
     public void setPlaybackSpeed(float playbackSpeed) {
         this.playbackSpeed = playbackSpeed;
+    }
+
+    public AudioEffectProfile getAudioEffectProfile() {
+        return audioEffectProfile;
+    }
+
+    public void setAudioEffectProfile(AudioEffectProfile audioEffectProfile) {
+        this.audioEffectProfile = audioEffectProfile == null ? AudioEffectProfile.OFF : audioEffectProfile;
     }
 
     public boolean isPlayWhenReadyRequested() {

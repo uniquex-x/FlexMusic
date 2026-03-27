@@ -106,6 +106,12 @@ public final class PlayerJNI {
         }
     }
 
+    public void setAudioEffectProfile(int audioEffectProfileId) {
+        if (nativeHandle != 0L) {
+            nativeSetAudioEffectProfile(nativeHandle, audioEffectProfileId);
+        }
+    }
+
     public int getState() {
         return nativeHandle == 0L ? STATE_IDLE : nativeGetState(nativeHandle);
     }
@@ -161,6 +167,8 @@ public final class PlayerJNI {
     private static native void nativeSetVolume(long nativeHandle, float volume);
 
     private static native void nativeSetPlaybackSpeed(long nativeHandle, float playbackSpeed);
+
+    private static native void nativeSetAudioEffectProfile(long nativeHandle, int audioEffectProfileId);
 
     private static native void nativeRelease(long nativeHandle);
 

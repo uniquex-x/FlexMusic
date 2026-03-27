@@ -10,6 +10,7 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
+import com.example.core_domain.player.AudioEffectProfile;
 import com.example.core_domain.player.PlayerKernel;
 import com.example.core_domain.player.PlayerKernelListener;
 import com.example.core_domain.player.PlayerKernelSnapshot;
@@ -18,6 +19,7 @@ import com.example.core_domain.player.ResolvedPlayableSource;
 import com.example.feature_player.coreplayer.PlayerJNI;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -55,6 +57,8 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
     private ResolvedPlayableSource currentSource;
     private float volume = 1f;
     private float playbackSpeed = 1f;
+    @NonNull
+    private AudioEffectProfile audioEffectProfile = AudioEffectProfile.OFF;
     private boolean released;
     private boolean polling;
     private boolean currentHttpsUsingPipeFallback;
@@ -118,6 +122,7 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
                 nativeSourceDescriptor.length);
         playerJni.setVolume(volume);
         playerJni.setPlaybackSpeed(playbackSpeed);
+        playerJni.setAudioEffectProfile(audioEffectProfile.getNativeValue());
         updateSnapshotLocked(
                 PlayerKernelState.PREPARING,
                 0L,
@@ -197,6 +202,28 @@ final class NativeBackedPlayerKernel implements PlayerKernel {
         if (!released) {
             playerJni.setPlaybackSpeed(this.playbackSpeed);
             Log.d(TAG, "setPlaybackSpeed speed=" + this.playbackSpeed
+                    + " sourceId=" + (currentSource != null ? currentSource.getSourceId() : "null"));
+        }
+    }
+
+    @NonNull
+    @Override
+    public synchronized List<AudioEffectProfile> getAvailableAudioEffectProfiles() {
+        return AudioEffectProfile.getAvailableProfiles();
+    }
+
+    @NonNull
+    @Override
+    public synchronized AudioEffectProfile getCurrentAudioEffectProfile() {
+        return audioEffectProfile;
+    }
+
+    @Override
+    public synchronized void setAudioEffectProfile(@NonNull AudioEffectProfile profile) {
+        audioEffectProfile = Objects.requireNonNull(profile);
+        if (!released) {
+            playerJni.setAudioEffectProfile(audioEffectProfile.getNativeValue());
+            Log.d(TAG, "setAudioEffectProfile profile=" + audioEffectProfile.getStableId()
                     + " sourceId=" + (currentSource != null ? currentSource.getSourceId() : "null"));
         }
     }

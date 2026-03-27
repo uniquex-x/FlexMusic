@@ -12,6 +12,7 @@
 
 #include "OpenSlAudioRenderer.h"
 #include "SoundTouchTempoProcessor.h"
+#include "SoxAudioEffectProcessor.h"
 #include "BlockingQueue.h"
 #include "DataSourceSpec.h"
 #include "FfmpegAudioDecoder.h"
@@ -39,6 +40,7 @@ public:
     void seekTo(int64_t positionMs);
     void setVolume(float volume);
     void setPlaybackSpeed(float playbackSpeed);
+    void setAudioEffectProfile(int audioEffectProfileId);
     PlayerRuntimeSnapshot snapshot() const;
 
 private:
@@ -51,6 +53,7 @@ private:
         SEEK,
         SET_VOLUME,
         SET_PLAYBACK_SPEED,
+        SET_AUDIO_EFFECT_PROFILE,
         RECOVER,
         RELEASE
     };
@@ -62,6 +65,7 @@ private:
         int64_t positionMs = 0;
         float volume = 1.0f;
         float playbackSpeed = 1.0f;
+        int audioEffectProfileId = 0;
         bool autoStart = true;
         std::string reason;
     };
@@ -77,6 +81,7 @@ private:
     void handleSeekCommand(int64_t positionMs);
     void handleSetVolumeCommand(float volume);
     void handleSetPlaybackSpeedCommand(float playbackSpeed);
+    void handleSetAudioEffectProfileCommand(int audioEffectProfileId);
     void handleRecoverCommand(int64_t positionMs, bool autoStart, const std::string& reason);
     void startPipelineLocked(int64_t startPositionMs, bool autoStart);
     void beginStopLocked();
@@ -97,6 +102,10 @@ private:
                                       std::string* errorMessage);
     bool flushTempoProcessor(std::vector<flexmusic::media::PcmFrame>* outputFrames,
                              std::string* errorMessage);
+    void clearAudioEffectProcessor();
+    bool processFrameWithAudioEffects(const flexmusic::media::PcmFrame& frame,
+                                      flexmusic::media::PcmFrame* outputFrame,
+                                      std::string* errorMessage);
     void requestStreamRecovery(int64_t positionMs, bool autoStart, const std::string& reason);
 
     int64_t elapsedSincePipelineStartMs() const;
@@ -108,6 +117,7 @@ private:
     mutable std::mutex mutex_;
     mutable std::mutex decoderMutex_;
     mutable std::mutex tempoProcessorMutex_;
+    mutable std::mutex audioEffectProcessorMutex_;
     std::mutex commandMutex_;
     std::condition_variable commandCondition_;
     std::deque<Command> commandQueue_;
@@ -129,6 +139,7 @@ private:
     int consecutiveInvalidPacketCount_ = 0;
     int activePositionSerial_ = 0;
     int pendingPositionRebaseSerial_ = 0;
+    int audioEffectProfileId_ = 0;
     int64_t pendingSeekPositionMs_ = 0;
     int64_t activePositionOffsetMs_ = 0;
     int64_t pendingPositionRebaseTargetMs_ = 0;
@@ -144,6 +155,7 @@ private:
     flexmusic::media::demux::FfmpegDemuxer demuxer_;
     flexmusic::media::codec::FfmpegAudioDecoder decoder_;
     flexmusic::audio::SoundTouchTempoProcessor tempoProcessor_;
+    flexmusic::audio::SoxAudioEffectProcessor audioEffectProcessor_;
     flexmusic::audio::OpenSlAudioRenderer renderer_;
 };
 

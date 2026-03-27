@@ -67,6 +67,8 @@ add_library(
         ${MODULE_MEDIA_PATH}/codec/FfmpegAudioDecoder.cpp
         # 音频处理源文件
         ${MODULE_AUDIO_PROCESS_PATH}/pitchShifter/SoundTouchTempoProcessor.cpp
+        ${MODULE_AUDIO_PROCESS_PATH}/sox/SoxBiquadFilter.cpp
+        ${MODULE_AUDIO_PROCESS_PATH}/sox/SoxAudioEffectProcessor.cpp
         # 文件IO源文件
         ${MODULE_IO_PATH}/FdFileIo.cpp
         ${MODULE_IO_PATH}/FileIoRegistry.cpp
@@ -103,6 +105,7 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soundtouch/source/SoundTouch
         # 音频处理
         ${MODULE_AUDIO_PROCESS_PATH}/pitchShifter
+        ${MODULE_AUDIO_PROCESS_PATH}/sox
         # 下载
         ${MODULE_DOWNLOAD_PATH}
         # IO

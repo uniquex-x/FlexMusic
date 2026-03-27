@@ -153,6 +153,14 @@ static void JNICALL NativeSetPlaybackSpeed(JNIEnv* env, jclass clazz, jlong nati
     }
 }
 
+static void JNICALL NativeSetAudioEffectProfile(JNIEnv* env, jclass clazz, jlong nativeHandle, jint audioEffectProfileId) {
+    (void) clazz;
+    NativePlayerContext* context = requireContext(env, nativeHandle);
+    if (context != nullptr) {
+        PlayerBridge::setAudioEffectProfile(context, static_cast<int>(audioEffectProfileId));
+    }
+}
+
 static void JNICALL NativeRelease(JNIEnv* env, jclass clazz, jlong nativeHandle) {
     (void) clazz;
     NativePlayerContext* context = requireContext(env, nativeHandle);
@@ -209,6 +217,9 @@ const JNINativeMethod kPlayerBridgeMethods[] = {
         {const_cast<char*>("nativeSetPlaybackSpeed"),
          const_cast<char*>("(JF)V"),
          reinterpret_cast<void*>(NativeSetPlaybackSpeed)},
+        {const_cast<char*>("nativeSetAudioEffectProfile"),
+         const_cast<char*>("(JI)V"),
+         reinterpret_cast<void*>(NativeSetAudioEffectProfile)},
         {const_cast<char*>("nativeRelease"), const_cast<char*>("(J)V"), reinterpret_cast<void*>(NativeRelease)},
         {const_cast<char*>("nativeIsReady"), const_cast<char*>("(J)Z"), reinterpret_cast<void*>(NativeIsReady)},
         {const_cast<char*>("nativeGetState"), const_cast<char*>("(J)I"), reinterpret_cast<void*>(NativeGetState)},
@@ -361,6 +372,17 @@ void PlayerBridge::setPlaybackSpeed(NativePlayerContext* context, float playback
                 "setPlaybackSpeed speed=%.2f",
                 playbackSpeed);
         context->playerSession->setPlaybackSpeed(playbackSpeed);
+    }
+}
+
+void PlayerBridge::setAudioEffectProfile(NativePlayerContext* context, int audioEffectProfileId) {
+    if (context != nullptr && context->playerSession != nullptr) {
+        __android_log_print(
+                ANDROID_LOG_DEBUG,
+                kPlayerBridgeTag,
+                "setAudioEffectProfile profileId=%d",
+                audioEffectProfileId);
+        context->playerSession->setAudioEffectProfile(audioEffectProfileId);
     }
 }
 

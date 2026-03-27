@@ -97,6 +97,11 @@ public:
         return queue_.empty();
     }
 
+    std::size_t size() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.size();
+    }
+
 private:
     const std::size_t maxSize_;
     mutable std::mutex mutex_;

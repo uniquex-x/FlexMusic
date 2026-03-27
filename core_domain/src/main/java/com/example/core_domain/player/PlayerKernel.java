@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 import java.io.IOException;
 
-public interface PlayerKernel {
+public interface PlayerKernel extends IAudioEffectController {
 
     void addListener(@NonNull PlayerKernelListener listener);
 

@@ -110,6 +110,13 @@ void PlayerSession::setPlaybackSpeed(float playbackSpeed) {
     enqueueCommand(std::move(command));
 }
 
+void PlayerSession::setAudioEffectProfile(int audioEffectProfileId) {
+    Command command;
+    command.type = CommandType::SET_AUDIO_EFFECT_PROFILE;
+    command.audioEffectProfileId = audioEffectProfileId;
+    enqueueCommand(std::move(command));
+}
+
 PlayerRuntimeSnapshot PlayerSession::snapshot() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return snapshot_;
@@ -145,6 +152,9 @@ void PlayerSession::enqueueCommand(Command command) {
                 break;
             case CommandType::SET_PLAYBACK_SPEED:
                 removePendingCommands(CommandType::SET_PLAYBACK_SPEED);
+                break;
+            case CommandType::SET_AUDIO_EFFECT_PROFILE:
+                removePendingCommands(CommandType::SET_AUDIO_EFFECT_PROFILE);
                 break;
             case CommandType::RECOVER:
                 removePendingCommands(CommandType::RECOVER);
@@ -201,6 +211,9 @@ void PlayerSession::controlLoop() {
             case CommandType::SET_PLAYBACK_SPEED:
                 handleSetPlaybackSpeedCommand(command.playbackSpeed);
                 break;
+            case CommandType::SET_AUDIO_EFFECT_PROFILE:
+                handleSetAudioEffectProfileCommand(command.audioEffectProfileId);
+                break;
             case CommandType::RECOVER:
                 handleRecoverCommand(command.positionMs, command.autoStart, command.reason);
                 break;
@@ -233,6 +246,7 @@ void PlayerSession::handleSetDataSourceCommand(const flexmusic::io::DataSourceSp
     joinThread(&decodeThread);
     joinThread(&renderThread);
     clearTempoProcessor();
+    clearAudioEffectProcessor();
     {
         std::lock_guard<std::mutex> lock(mutex_);
         finalizeStopLocked(false);
@@ -395,6 +409,7 @@ void PlayerSession::handleSeekCommand(int64_t positionMs) {
     clearPcmQueue(pcmQueue);
     renderer_.flush();
     clearTempoProcessor();
+    clearAudioEffectProcessor();
 }
 
 void PlayerSession::handleSetVolumeCommand(float volume) {
@@ -420,6 +435,32 @@ void PlayerSession::handleSetPlaybackSpeedCommand(float playbackSpeed) {
             "set playback speed sourceId=%s speed=%.2f",
             sourceId.c_str(),
             safePlaybackSpeed);
+}
+
+void PlayerSession::handleSetAudioEffectProfileCommand(int audioEffectProfileId) {
+    const auto log = flexmusic::utils::levelLog(kPlayerSessionTag);
+    const int safeProfileId = flexmusic::audio::SoxAudioEffectProcessor::sanitizeProfileId(audioEffectProfileId);
+    std::string sourceId;
+    int previousProfileId = 0;
+    std::size_t pendingPcmFrameCount = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        previousProfileId = audioEffectProfileId_;
+        audioEffectProfileId_ = safeProfileId;
+        sourceId = dataSourceSpec_.sourceId;
+        pendingPcmFrameCount = pcmQueue_ != nullptr ? pcmQueue_->size() : 0;
+    }
+    {
+        std::lock_guard<std::mutex> effectLock(audioEffectProcessorMutex_);
+        audioEffectProcessor_.setProfileId(safeProfileId);
+        audioEffectProcessor_.clear();
+    }
+    log.i(
+            "set audio effect sourceId=%s previousProfileId=%d profileId=%d pendingPcmFrames=%zu applyStage=render",
+            sourceId.c_str(),
+            previousProfileId,
+            safeProfileId,
+            pendingPcmFrameCount);
 }
 
 void PlayerSession::handleRecoverCommand(int64_t positionMs, bool autoStart, const std::string& reason) {
@@ -508,11 +549,12 @@ void PlayerSession::startPipelineLocked(int64_t startPositionMs, bool autoStart)
     snapshot_.nativeReady = true;
     setStateLocked(PlayerState::PREPARING);
     flexmusic::utils::levelLog(kPlayerSessionTag).i(
-            "pipeline start sourceId=%s backend=%s startPositionMs=%lld autoStart=%d",
+            "pipeline start sourceId=%s backend=%s startPositionMs=%lld autoStart=%d effectProfileId=%d",
             dataSourceSpec_.sourceId.c_str(),
             snapshot_.backendName.c_str(),
             static_cast<long long>(startPositionMs),
-            autoStart ? 1 : 0);
+            autoStart ? 1 : 0,
+            audioEffectProfileId_);
 
     prepareThread_ = std::make_unique<std::thread>(&PlayerSession::prepareLoop, this, startPositionMs);
 }
@@ -597,6 +639,7 @@ void PlayerSession::finalizeStopLocked(bool clearDataSource) {
     demuxer_.close();
     avioDataSource_.close();
     clearTempoProcessor();
+    clearAudioEffectProcessor();
     packetQueue_.reset();
     pcmQueue_.reset();
     firstFrameRendered_ = false;
@@ -722,6 +765,18 @@ bool PlayerSession::flushTempoProcessor(std::vector<flexmusic::media::PcmFrame>*
                                         std::string* errorMessage) {
     std::lock_guard<std::mutex> lock(tempoProcessorMutex_);
     return tempoProcessor_.flush(outputFrames, errorMessage);
+}
+
+void PlayerSession::clearAudioEffectProcessor() {
+    std::lock_guard<std::mutex> lock(audioEffectProcessorMutex_);
+    audioEffectProcessor_.clear();
+}
+
+bool PlayerSession::processFrameWithAudioEffects(const flexmusic::media::PcmFrame& frame,
+                                                 flexmusic::media::PcmFrame* outputFrame,
+                                                 std::string* errorMessage) {
+    std::lock_guard<std::mutex> lock(audioEffectProcessorMutex_);
+    return audioEffectProcessor_.processFrame(frame, outputFrame, errorMessage);
 }
 
 void PlayerSession::prepareLoop(int64_t startPositionMs) {
@@ -1226,8 +1281,17 @@ void PlayerSession::renderLoop() {
             }
         }
 
+        flexmusic::media::PcmFrame effectedFrame;
         std::string errorMessage;
-        if (!renderer_.enqueueFrame(std::move(pcmFrame), &errorMessage)) {
+        if (!processFrameWithAudioEffects(pcmFrame, &effectedFrame, &errorMessage)) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (stopRequested_) {
+                return;
+            }
+            setErrorLocked(errorMessage.empty() ? "Process SoX frame failed" : errorMessage);
+            return;
+        }
+        if (!renderer_.enqueueFrame(std::move(effectedFrame), &errorMessage)) {
             std::lock_guard<std::mutex> lock(mutex_);
             if (stopRequested_ || errorMessage == "Audio renderer is closed") {
                 return;

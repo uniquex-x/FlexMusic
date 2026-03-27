@@ -13,4 +13,8 @@
         android:id="@+id/action_playback_speed"
         android:title="@string/player_speed_title" />
 
+    <item
+        android:id="@+id/action_audio_effect"
+        android:title="@string/player_audio_effect_title" />
+
 </menu>
