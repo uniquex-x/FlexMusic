@@ -101,6 +101,7 @@ dependencies {
     implementation project(":core_data")
     implementation project(":core_domain")
     implementation project(":core_network")
+    implementation project(":core_recommend")
     implementation project(":feature_player")
     implementation project(":feature_transcode")
     implementation project(":feature_search")

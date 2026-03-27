@@ -1,0 +1,22 @@
+<resources>
+    <string name="recommend_collection_weekly_discovery_title">Weekly Discovery</string>
+    <string name="recommend_collection_weekly_discovery_subtitle">A fresh blend based on your recent taste</string>
+    <string name="recommend_collection_modern_jazz_title">Modern Jazz Essentials</string>
+    <string name="recommend_collection_modern_jazz_subtitle">Contemporary grooves with warm late-night color</string>
+    <string name="recommend_collection_late_night_drive_title">Late Night Drive</string>
+    <string name="recommend_collection_late_night_drive_subtitle">Synth-led tracks built for neon roads</string>
+    <string name="recommend_collection_festival_radar_title">Festival Radar</string>
+    <string name="recommend_collection_festival_radar_subtitle">High-energy selections rising across dance stages</string>
+    <string name="recommend_collection_global_chart_title">Global Chart Pulse</string>
+    <string name="recommend_collection_global_chart_subtitle">Popular singles with broad momentum this week</string>
+    <string name="recommend_collection_indie_breakout_title">Indie Breakout List</string>
+    <string name="recommend_collection_indie_breakout_subtitle">Independent artists building steady heat</string>
+    <string name="recommend_category_pop_title">Pop</string>
+    <string name="recommend_category_pop_subtitle">Polished hooks, upbeat choruses and current favorites</string>
+    <string name="recommend_category_rock_title">Rock</string>
+    <string name="recommend_category_rock_subtitle">Guitars forward, from alternative edges to anthem lifts</string>
+    <string name="recommend_category_electronic_title">Electronic</string>
+    <string name="recommend_category_electronic_subtitle">Club textures, pulse-driven drops and night energy</string>
+    <string name="recommend_category_global_hits_title">Global Hits</string>
+    <string name="recommend_category_global_hits_subtitle">Widely played tracks with cross-market traction</string>
+</resources>

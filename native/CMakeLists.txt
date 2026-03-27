@@ -8,6 +8,7 @@ set(MODULE_IO_PATH ${CMAKE_CURRENT_SOURCE_DIR}/io)
 set(MODULE_JNI_PATH ${CMAKE_CURRENT_SOURCE_DIR}/jni)
 set(MODULE_MEDIA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/media)
 set(MODULE_PLAYER_PATH ${CMAKE_CURRENT_SOURCE_DIR}/player)
+set(MODULE_RECOMMEND_PATH ${CMAKE_CURRENT_SOURCE_DIR}/recommend)
 set(MODULE_TRANSCODE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/transcode)
 set(MODULE_UTILS_PATH ${CMAKE_CURRENT_SOURCE_DIR}/utils)
 
@@ -55,6 +56,7 @@ add_library(
         ${MODULE_JNI_PATH}/JNILoader.cpp
         ${MODULE_JNI_PATH}/bridge/DownloadBridge.cpp
         ${MODULE_JNI_PATH}/bridge/PlayerBridge.cpp
+        ${MODULE_JNI_PATH}/bridge/RecommendBridge.cpp
         ${MODULE_JNI_PATH}/bridge/TranscodeBridge.cpp
         # 下载源文件
         ${MODULE_DOWNLOAD_PATH}/NativeDownloader.cpp
@@ -74,6 +76,8 @@ add_library(
         ${MODULE_TRANSCODE_PATH}/AudioTranscoder.cpp
         # 播放器源文件
         ${MODULE_PLAYER_PATH}/PlayerSession.cpp
+        # 推荐源文件
+        ${MODULE_RECOMMEND_PATH}/RecommendKernel.cpp
         # 三方库源文件
         third_party/soundtouch/source/SoundTouch/AAFilter.cpp
         third_party/soundtouch/source/SoundTouch/FIFOSampleBuffer.cpp
@@ -116,6 +120,8 @@ target_include_directories(
         # 播放器
         ${MODULE_PLAYER_PATH}
         ${MODULE_PLAYER_PATH}/state
+        # 推荐
+        ${MODULE_RECOMMEND_PATH}
         # 转码
         ${MODULE_TRANSCODE_PATH}
         # 通用

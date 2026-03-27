@@ -14,6 +14,7 @@
             <option value="$PROJECT_DIR$/core_database" />
             <option value="$PROJECT_DIR$/core_domain" />
             <option value="$PROJECT_DIR$/core_network" />
+            <option value="$PROJECT_DIR$/core_recommend" />
             <option value="$PROJECT_DIR$/feature_download" />
             <option value="$PROJECT_DIR$/feature_player" />
             <option value="$PROJECT_DIR$/feature_search" />

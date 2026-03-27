@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:clipToPadding="false"
@@ -119,12 +118,14 @@
             android:orientation="horizontal">
 
             <LinearLayout
+                android:id="@+id/tab_daily_recommend_container"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="24dp"
                 android:orientation="vertical">
 
                 <TextView
+                    android:id="@+id/tab_daily_recommend"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/home_daily_recommend_tab"
@@ -133,28 +134,61 @@
                     android:textStyle="bold" />
 
                 <View
+                    android:id="@+id/tab_daily_recommend_indicator"
                     android:layout_width="88dp"
                     android:layout_height="3dp"
                     android:layout_marginTop="6dp"
                     android:background="@color/primary_500" />
             </LinearLayout>
 
-            <TextView
+            <LinearLayout
+                android:id="@+id/tab_trending_container"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="24dp"
-                android:text="@string/home_trending_tab"
-                android:textColor="#8B88A1"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:orientation="vertical">
 
-            <TextView
+                <TextView
+                    android:id="@+id/tab_trending"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/home_trending_tab"
+                    android:textColor="#8B88A1"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:id="@+id/tab_trending_indicator"
+                    android:layout_width="64dp"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@color/primary_500"
+                    android:visibility="invisible" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/tab_top_list_container"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/home_top_list_tab"
-                android:textColor="#8B88A1"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tab_top_list"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/home_top_list_tab"
+                    android:textColor="#8B88A1"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:id="@+id/tab_top_list_indicator"
+                    android:layout_width="58dp"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@color/primary_500"
+                    android:visibility="invisible" />
+            </LinearLayout>
         </LinearLayout>
 
         <HorizontalScrollView
@@ -169,6 +203,7 @@
                 android:orientation="horizontal">
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/primary_recommend_card"
                     android:layout_width="170dp"
                     android:layout_height="220dp"
                     android:layout_marginEnd="12dp"
@@ -180,34 +215,47 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:orientation="vertical"
-                        android:padding="14dp">
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="140dp"
-                            android:background="@drawable/bg_art_wave" />
+                        android:padding="16dp">
 
                         <TextView
+                            android:id="@+id/primary_recommend_label"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="14dp"
-                            android:text="@string/home_weekly_discovery"
-                            android:textColor="?attr/colorOnBackground"
-                            android:textSize="18sp"
+                            android:text="@string/home_daily_recommend_tab"
+                            android:textAllCaps="true"
+                            android:textColor="#8B88A1"
+                            android:textSize="12sp"
                             android:textStyle="bold" />
 
                         <TextView
+                            android:id="@+id/primary_recommend_title"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="28dp"
+                            android:text="@string/home_weekly_discovery"
+                            android:textColor="?attr/colorOnBackground"
+                            android:textSize="22sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/primary_recommend_subtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
                             android:text="@string/home_weekly_discovery_subtitle"
                             android:textColor="#8B88A1"
                             android:textSize="13sp" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
                     </LinearLayout>
 
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/secondary_recommend_card"
                     android:layout_width="170dp"
                     android:layout_height="220dp"
                     app:cardBackgroundColor="#A36A34"
@@ -218,29 +266,41 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:orientation="vertical"
-                        android:padding="14dp">
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="140dp"
-                            android:background="@drawable/bg_art_jazz" />
+                        android:padding="16dp">
 
                         <TextView
+                            android:id="@+id/secondary_recommend_label"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="14dp"
-                            android:text="@string/home_modern_jazz"
-                            android:textColor="@color/white"
-                            android:textSize="18sp"
+                            android:text="@string/home_daily_recommend_tab"
+                            android:textAllCaps="true"
+                            android:textColor="#F6E4D0"
+                            android:textSize="12sp"
                             android:textStyle="bold" />
 
                         <TextView
+                            android:id="@+id/secondary_recommend_title"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="28dp"
+                            android:text="@string/home_modern_jazz"
+                            android:textColor="@color/white"
+                            android:textSize="22sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/secondary_recommend_subtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
                             android:text="@string/home_modern_jazz_subtitle"
                             android:textColor="#F6E4D0"
                             android:textSize="13sp" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
                     </LinearLayout>
 
                 </com.google.android.material.card.MaterialCardView>
@@ -266,6 +326,7 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/browse_view_all"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/home_view_all"
@@ -282,6 +343,7 @@
             android:rowCount="2">
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/browse_category_pop_card"
                 android:layout_width="0dp"
                 android:layout_height="88dp"
                 android:layout_columnWeight="1"
@@ -292,6 +354,7 @@
                 app:cardElevation="0dp">
 
                 <TextView
+                    android:id="@+id/browse_category_pop_title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:gravity="center_vertical"
@@ -303,6 +366,7 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/browse_category_rock_card"
                 android:layout_width="0dp"
                 android:layout_height="88dp"
                 android:layout_columnWeight="1"
@@ -312,6 +376,7 @@
                 app:cardElevation="0dp">
 
                 <TextView
+                    android:id="@+id/browse_category_rock_title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:gravity="center_vertical"
@@ -323,6 +388,7 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/browse_category_electronic_card"
                 android:layout_width="0dp"
                 android:layout_height="88dp"
                 android:layout_columnWeight="1"
@@ -332,6 +398,7 @@
                 app:cardElevation="0dp">
 
                 <TextView
+                    android:id="@+id/browse_category_electronic_title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:gravity="center_vertical"
@@ -343,6 +410,7 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/browse_category_hits_card"
                 android:layout_width="0dp"
                 android:layout_height="88dp"
                 android:layout_columnWeight="1"
@@ -351,6 +419,7 @@
                 app:cardElevation="0dp">
 
                 <TextView
+                    android:id="@+id/browse_category_hits_title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:gravity="center_vertical"

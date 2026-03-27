@@ -24,6 +24,8 @@ import com.example.flexmusicplayer.ui.MainPageFragment;
 import com.example.flexmusicplayer.ui.MyFragment;
 import com.example.flexmusicplayer.ui.PlaylistDetailFragment;
 import com.example.flexmusicplayer.ui.RecentFragment;
+import com.example.flexmusicplayer.ui.RecommendCatalogFragment;
+import com.example.flexmusicplayer.ui.RecommendCollectionFragment;
 import com.example.flexmusicplayer.ui.SettingsFragment;
 import com.example.flexmusicplayer.ui.SleepFragment;
 import com.example.flexmusicplayer.ui.TranscodeFragment;
@@ -268,9 +270,13 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
                 || fragment instanceof LocalFragment
                 || fragment instanceof RecentFragment
                 || fragment instanceof PlaylistDetailFragment
+                || fragment instanceof RecommendCatalogFragment
+                || fragment instanceof RecommendCollectionFragment
                 || fragment instanceof SearchFragment;
         boolean showBottomNavigation = !(fragment instanceof SearchFragment
-                || fragment instanceof PlaylistDetailFragment);
+                || fragment instanceof PlaylistDetailFragment
+                || fragment instanceof RecommendCatalogFragment
+                || fragment instanceof RecommendCollectionFragment);
         boolean hasSong = playbackController.getPlayerState().getCurrentSong() != null;
         int bottomNavigationVisibility = showBottomNavigation ? View.VISIBLE : View.GONE;
         int miniBarVisibility = showMiniPlayer && hasSong ? View.VISIBLE : View.GONE;
@@ -305,6 +311,33 @@ public class MainActivity extends AppCompatActivity implements MyFragment.Naviga
 
     public void openSettings() {
         loadSecondaryFragment(new SettingsFragment());
+    }
+
+    public void openRecommendCollection(@NonNull String collectionId) {
+        RecommendCollectionFragment fragment = RecommendCollectionFragment.newCollection(collectionId);
+        FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+        transaction.replace(R.id.fragment_container, fragment);
+        transaction.addToBackStack("recommend_collection");
+        transaction.commit();
+        updateChromeForFragment(fragment);
+    }
+
+    public void openRecommendCategory(@NonNull String categoryId) {
+        RecommendCollectionFragment fragment = RecommendCollectionFragment.newCategory(categoryId);
+        FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+        transaction.replace(R.id.fragment_container, fragment);
+        transaction.addToBackStack("recommend_category");
+        transaction.commit();
+        updateChromeForFragment(fragment);
+    }
+
+    public void openRecommendCatalog() {
+        RecommendCatalogFragment fragment = RecommendCatalogFragment.newInstance();
+        FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+        transaction.replace(R.id.fragment_container, fragment);
+        transaction.addToBackStack("recommend_catalog");
+        transaction.commit();
+        updateChromeForFragment(fragment);
     }
 
     @Override

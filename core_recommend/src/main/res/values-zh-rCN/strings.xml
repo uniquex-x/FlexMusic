@@ -1,0 +1,22 @@
+<resources>
+    <string name="recommend_collection_weekly_discovery_title">每周发现</string>
+    <string name="recommend_collection_weekly_discovery_subtitle">结合你最近的口味，给你一份新的混合推荐</string>
+    <string name="recommend_collection_modern_jazz_title">现代爵士精选</string>
+    <string name="recommend_collection_modern_jazz_subtitle">带着夜色温度的当代爵士律动</string>
+    <string name="recommend_collection_late_night_drive_title">深夜兜风</string>
+    <string name="recommend_collection_late_night_drive_subtitle">适合霓虹夜路的合成器驱动单曲</string>
+    <string name="recommend_collection_festival_radar_title">电音节雷达</string>
+    <string name="recommend_collection_festival_radar_subtitle">持续升温的高能舞池精选</string>
+    <string name="recommend_collection_global_chart_title">全球榜单脉冲</string>
+    <string name="recommend_collection_global_chart_subtitle">本周热度持续扩散的人气单曲</string>
+    <string name="recommend_collection_indie_breakout_title">独立破圈榜</string>
+    <string name="recommend_collection_indie_breakout_subtitle">热度稳步上升的独立音乐人作品</string>
+    <string name="recommend_category_pop_title">流行</string>
+    <string name="recommend_category_pop_subtitle">上口旋律、明快节奏和当下高频热单</string>
+    <string name="recommend_category_rock_title">摇滚</string>
+    <string name="recommend_category_rock_subtitle">从另类到大合唱，突出吉他能量的选择</string>
+    <string name="recommend_category_electronic_title">电子</string>
+    <string name="recommend_category_electronic_subtitle">夜色脉冲、舞曲推进和俱乐部质感</string>
+    <string name="recommend_category_global_hits_title">全球热歌</string>
+    <string name="recommend_category_global_hits_subtitle">跨地区持续走热的高播放单曲</string>
+</resources>

@@ -5,6 +5,7 @@
 
 #include "DownloadBridge.h"
 #include "PlayerBridge.h"
+#include "RecommendBridge.h"
 #include "TranscodeBridge.h"
 
 namespace {
@@ -43,6 +44,9 @@ bool registerAllJni(JNIEnv* env) {
         return false;
     }
     if (!flexmusic::jni::register_PlayerBridgeJNI(env)) {
+        return false;
+    }
+    if (!flexmusic::jni::register_RecommendBridgeJNI(env)) {
         return false;
     }
     if (!flexmusic::jni::register_TranscodeBridgeJNI(env)) {
